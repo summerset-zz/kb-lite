@@ -39,107 +39,30 @@ func (h *Handler) handleSection(w http.ResponseWriter, r *http.Request, kb *KBIn
 	if !ok {
 		return
 	}
-	q := r.URL.Query()
 
-	target, ok := h.resolveSection(w, e, q)
-	if !ok {
+	query, badParam := ParseSectionQuery(r.URL.Query().Get)
+	if badParam != "" {
+		writeError(w, http.StatusBadRequest, "invalid_param", badParam)
 		return
 	}
 
-	note := ""
-	section := target
-
-	// 空父节 → 换第一个有内容的子节（fallback 默认开，`fallback=0` 关掉）。
-	if section.Chars == 0 && q.Get("fallback") != "0" {
-		child, others, found := firstContentChild(e.Sections, section)
-		if !found {
-			writeJSON(w, http.StatusOK, sectionResponse{
-				OK: true, Title: e.Title, Path: e.RelPath, Rev: e.Rev,
-				Section: section.No, Level: section.Level, SectionTitle: section.Title,
-				SectionPath: section.Path, PathText: section.PathText,
-				Chars: 0, Content: "",
-				Note: NoteSectionEmpty(section, countChildren(e.Sections, section)),
-			})
-			return
-		}
-		note = NoteFallbackChild(section, child, others)
-		section = child
-	}
-
-	total := section.Chars
-	offset := intParam(q.Get("offset"), 0)
-	if offset < 0 {
-		offset = 0
-	}
-	maxChars := clamp(intParam(q.Get("maxChars"), core.DefaultMaxSectionChars), 1, maxSectionCharsC)
-
-	runes := []rune(section.Content)
-	if offset > len(runes) {
-		offset = len(runes)
-	}
-	end := offset + maxChars
-	if end > len(runes) {
-		end = len(runes)
-	}
-	content := string(runes[offset:end])
-	if end < len(runes) {
-		note = joinNotes(note, NoteTruncated(total, offset, end-offset))
-	}
-
-	// rev 回传：内容被别人改过时不静默，而是提醒编号可能已经变了。
-	if rev := q.Get("rev"); rev != "" && rev != e.Rev {
-		note = joinNotes(NoteRevChanged(rev, e.Rev), note)
+	answer := AnswerSection(e, query)
+	if !answer.OK {
+		writeSectionMiss(w, e, answer.Message)
+		return
 	}
 
 	writeJSON(w, http.StatusOK, sectionResponse{
 		OK: true, Title: e.Title, Path: e.RelPath, Rev: e.Rev,
-		Section: section.No, Level: section.Level, SectionTitle: section.Title,
-		SectionPath: section.Path, PathText: section.PathText,
-		Chars: total, Content: content, Note: note,
+		Section:      answer.Section.No,
+		Level:        answer.Section.Level,
+		SectionTitle: answer.Section.Title,
+		SectionPath:  answer.Section.Path,
+		PathText:     answer.Section.PathText,
+		Chars:        answer.Section.Chars,
+		Content:      answer.Content,
+		Note:         answer.Note,
 	})
-}
-
-// resolveSection 按 n / title 定位一节。定位失败时直接写好 200+ok:false 的响应。
-//
-// 「给了 n 就绝不看 title」（docs/04）：两者都给时以 n 为准，不猜调用方的意图。
-func (h *Handler) resolveSection(w http.ResponseWriter, e *core.Entry, q map[string][]string) (core.Section, bool) {
-	get := func(k string) string {
-		if v, ok := q[k]; ok && len(v) > 0 {
-			return v[0]
-		}
-		return ""
-	}
-
-	if rawN := firstNonEmpty(get("n"), get("section")); rawN != "" {
-		n, err := strconv.Atoi(rawN)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_param", "n 必须是整数（0 = 导言）。")
-			return core.Section{}, false
-		}
-		s, found := findSection(e.Sections, n)
-		if !found {
-			writeSectionMiss(w, e, ErrorSectionNotFound(e.Title, n, len(e.Sections)))
-			return core.Section{}, false
-		}
-		return s, true
-	}
-
-	if title := get("title"); title != "" {
-		matches := MatchSectionsByTitle(e.Sections, title)
-		switch len(matches) {
-		case 0:
-			writeSectionMiss(w, e, ErrorTitleNotFound(e.Title, title))
-			return core.Section{}, false
-		case 1:
-			return matches[0], true
-		default:
-			writeSectionMiss(w, e, ErrorDuplicateTitle(title, e.Title, len(matches)))
-			return core.Section{}, false
-		}
-	}
-
-	writeError(w, http.StatusBadRequest, "invalid_param", "要么给 n，要么给 title。")
-	return core.Section{}, false
 }
 
 func writeSectionMiss(w http.ResponseWriter, e *core.Entry, message string) {

@@ -21,23 +21,25 @@ var skillTemplate string
 //  2. skill_template_test.go 把这份模板与 docs/skill-template.md 逐字对齐 ——
 //     改一边不改另一边会直接红。加了参数忘了改 skill，比没有 skill 更糟。
 func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
-	idx := h.mgr.Index()
-
 	base := "http://" + r.Host
 	if r.Host == "" {
 		base = "http://127.0.0.1:" + strconv.Itoa(h.opts.Port)
 	}
-
-	out := renderSkill(skillTemplate, map[string]string{
-		"BASE_URL":  base,
-		"TOKEN":     h.token,
-		"KB_LIST":   kbListText(idx),
-		"KB_SAMPLE": url.PathEscape(sampleKBName(idx)),
-	}, h.opts.Features)
+	out := RenderSkillText(h.mgr.Index(), base, h.token, h.opts.Features)
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(out))
+}
+
+// RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。
+func RenderSkillText(idx *Index, base, token string, features map[string]bool) string {
+	return renderSkill(skillTemplate, map[string]string{
+		"BASE_URL":  base,
+		"TOKEN":     token,
+		"KB_LIST":   kbListText(idx),
+		"KB_SAMPLE": url.PathEscape(sampleKBName(idx)),
+	}, features)
 }
 
 // renderSkill 先处理 `{{#if X}}…{{/if}}`，再替换 `{{KEY}}`。

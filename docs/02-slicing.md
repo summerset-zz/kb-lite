@@ -83,6 +83,21 @@ type ScanOptions = {
 宽松解析也拿不到任何键时，才当真的「解析失败」：正文里那段 `---` 原样保留（不要静默吞掉用户内容）。
 **两种情况都记 `warn`**，措辞不同（「不是合法 YAML，已按行宽松解析」/「解析失败，已当作正文保留」）。
 
+### 整篇跳过
+
+有两种原因，**都必须能在 CLI / UI 里看见**（`kb-lite status` 按原因分组列出，`serve` 启动时汇总报数）：
+
+| 原因 | 判据 |
+|---|---|
+| `frontmatter` | `draft: true` / `publish: false` / `kb_ignore: true` |
+| `empty` | 去掉 frontmatter 之后正文只剩空白 |
+
+> `empty` 这条是实测加的：fontcover-content 的 14 个 `creds/<slug>/meta.md` 只有 frontmatter（`name` / `kinds` / `logo`），
+> 一个字的正文都没有。放进索引只会变成「0 节 0 字、永远排不上用场」的条目，还会稀释搜索结果。
+>
+> 但**绝不能静默丢弃**：用户哪天发现某篇不见了却没有任何提示，比多一条噪音糟得多。
+> 所以跳过要带原因，并且是可观测的。
+
 > **函数边界**：frontmatter 块在切片**之前**整体剥掉 —— `ParseMarkdownSections()` 收到的
 > markdown 不包含它（也可以没有标题行，那就没有 section 0）。跟导言那段 `---` 的“保留”不矛盾：
 > 那是「解析失败」的情况，这时根本没有可剥的 frontmatter。

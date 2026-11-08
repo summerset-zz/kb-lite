@@ -30,6 +30,14 @@ var LowInformationStems = map[string]bool{
 // SummaryLimit 是自动摘要的字数上限。
 const SummaryLimit = 200
 
+// 整篇跳过的原因（docs/02「整篇跳过」）。必须能一路传到 CLI / UI，不准静默丢弃。
+const (
+	// SkipFrontmatter：draft / publish:false / kb_ignore。
+	SkipFrontmatter = "frontmatter"
+	// SkipEmptyBody：去掉 frontmatter 之后正文只剩空白（纯元数据卡片）。
+	SkipEmptyBody = "empty"
+)
+
 // BuildResult 是 BuildEntry 的结果。
 type BuildResult struct {
 	Entry Entry
@@ -53,7 +61,15 @@ func BuildEntry(relPath, src string, opts SliceOptions) BuildResult {
 	}
 	if fm.Skip {
 		res.Skipped = true
-		res.SkipReason = "frontmatter"
+		res.SkipReason = SkipFrontmatter
+		return res
+	}
+
+	// 去掉 frontmatter 之后一个字都没有（`creds/<slug>/meta.md` 那种纯元数据卡片）：
+	// 进索引只会变成 0 节 0 字的噪声条目，还会稀释搜索结果。
+	if strings.TrimSpace(body) == "" {
+		res.Skipped = true
+		res.SkipReason = SkipEmptyBody
 		return res
 	}
 

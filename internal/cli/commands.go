@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -288,25 +289,43 @@ func runTOC(args []string) int {
 		return exitError
 	}
 
-	c, err := newClient()
+	if c, err := newClient(); err == nil {
+		body, err := c.get(kbPath(rest[0], "entry/"+escapeRelPath(rest[1])+"/toc"), nil)
+		if err == nil {
+			var resp struct {
+				TOC      string `json:"toc"`
+				Sections int    `json:"sections"`
+				Rev      string `json:"rev"`
+			}
+			if err := json.Unmarshal(body, &resp); err != nil {
+				fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
+				return exitError
+			}
+			fmt.Printf("%s  （%d 节，rev %s）\n\n%s\n", rest[1], resp.Sections, resp.Rev, resp.TOC)
+			return exitOK
+		}
+		var down daemonDownError
+		if !errors.As(err, &down) {
+			return fail(err)
+		}
+	}
+
+	mgr, err := buildLocalIndex()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
-	body, err := c.get(kbPath(rest[0], "entry/"+escapeRelPath(rest[1])+"/toc"), nil)
-	if err != nil {
-		return fail(err)
+	kb, ok := mgr.KB(rest[0])
+	if !ok {
+		fmt.Fprintf(os.Stderr, "没有这个知识库：%s\n", rest[0])
+		return exitNotFound
 	}
-	var resp struct {
-		TOC      string `json:"toc"`
-		Sections int    `json:"sections"`
-		Rev      string `json:"rev"`
+	e, ok := kb.Entry(rest[1])
+	if !ok {
+		fmt.Fprintf(os.Stderr, "没有这个条目：%s\n", rest[1])
+		return exitNotFound
 	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
-		return exitError
-	}
-	fmt.Printf("%s  （%d 节，rev %s）\n\n%s\n", rest[1], resp.Sections, resp.Rev, resp.TOC)
+	fmt.Printf("%s  （%d 节，rev %s）\n\n%s\n", rest[1], len(e.Sections), e.Rev, daemon.FormatTOC(e.TOC))
 	return exitOK
 }
 
@@ -362,32 +381,83 @@ func runRead(args []string) int {
 		q.Set("maxChars", strconv.Itoa(*maxChars))
 	}
 
-	c, err := newClient()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return exitError
+	if c, err := newClient(); err == nil {
+		body, err := c.get(kbPath(rest[0], "entry/"+escapeRelPath(rest[1])+"/section"), q)
+		if err == nil {
+			var resp sectionRespDTO
+			if err := json.Unmarshal(body, &resp); err != nil {
+				fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
+				return exitError
+			}
+			return printSectionResp(&resp)
+		}
+		var down daemonDownError
+		if !errors.As(err, &down) {
+			return fail(err)
+		}
 	}
-	body, err := c.get(kbPath(rest[0], "entry/"+escapeRelPath(rest[1])+"/section"), q)
-	if err != nil {
-		return fail(err)
-	}
+	return readOffline(rest[0], rest[1], q)
+}
 
-	var resp sectionRespDTO
-	if err := json.Unmarshal(body, &resp); err != nil {
-		fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
-		return exitError
-	}
+func printSectionResp(resp *sectionRespDTO) int {
 	if !resp.OK {
-		printMiss(&resp)
+		printMiss(resp)
 		return exitNotFound
 	}
-
 	fmt.Printf("《%s》第 %d 节「%s」  （%s）  %d 字\n\n%s\n",
 		resp.Title, resp.Section, resp.SectionTitle, resp.PathText, resp.Chars, resp.Content)
 	if resp.Note != "" {
 		fmt.Printf("\n[note] %s\n", resp.Note)
 	}
 	return exitOK
+}
+
+// readOffline 与 HTTP handler 共用 daemon.AnswerSection：
+// 空父节换子节、超长截断、rev 漂移这三件事只写一份。
+func readOffline(name, relPath string, q url.Values) int {
+	mgr, err := buildLocalIndex()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	kb, ok := mgr.KB(name)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "没有这个知识库：%s\n", name)
+		return exitNotFound
+	}
+	e, ok := kb.Entry(relPath)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "没有这个条目：%s\n", relPath)
+		return exitNotFound
+	}
+
+	query, badParam := daemon.ParseSectionQuery(q.Get)
+	if badParam != "" {
+		fmt.Fprintln(os.Stderr, badParam)
+		return exitError
+	}
+	answer := daemon.AnswerSection(e, query)
+	if !answer.OK {
+		printMiss(&sectionRespDTO{
+			Error: answer.Message, Candidates: candidatesOf(e), SectionCount: len(e.Sections),
+		})
+		return exitNotFound
+	}
+
+	return printSectionResp(&sectionRespDTO{
+		OK: true, Title: e.Title, Section: answer.Section.No, Level: answer.Section.Level,
+		SectionTitle: answer.Section.Title, PathText: answer.Section.PathText,
+		Chars: answer.Section.Chars, Content: answer.Content, Note: answer.Note,
+	})
+}
+
+func candidatesOf(e *core.Entry) []candidateDTO {
+	cs := daemon.CandidatesOf(e.Sections)
+	out := make([]candidateDTO, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, candidateDTO{Section: c.Section, SectionTitle: c.SectionTitle, SectionPath: c.SectionPath, Chars: c.Chars})
+	}
+	return out
 }
 
 // printMiss 渲染 200+ok:false 的候选清单（ADR-010）。
@@ -421,19 +491,43 @@ func runSkill(args []string) int {
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError
 	}
-	c, err := newClient()
+	c, cerr := newClient()
+	if cerr == nil {
+		if *base != "" {
+			c.base = strings.TrimRight(*base, "/")
+		}
+		if body, err := c.get("/skill.md", nil); err == nil {
+			fmt.Print(string(body))
+			return exitOK
+		} else {
+			var down daemonDownError
+			if !errors.As(err, &down) {
+				return fail(err)
+			}
+		}
+	}
+
+	// 离线：自己建一遍索引再渲染，与 handler 共用 daemon.RenderSkillText。
+	dir, err := daemon.ConfigDir()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
-	if *base != "" {
-		c.base = strings.TrimRight(*base, "/")
-	}
-	body, err := c.get("/skill.md", nil)
+	cfg, err := daemon.Load(dir)
 	if err != nil {
-		return fail(err)
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
 	}
-	fmt.Print(string(body))
+	mgr, err := buildLocalIndex()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	serviceBase := "http://127.0.0.1:" + strconv.Itoa(cfg.Port)
+	if *base != "" {
+		serviceBase = strings.TrimRight(*base, "/")
+	}
+	fmt.Print(daemon.RenderSkillText(mgr.Index(), serviceBase, readToken(dir), nil))
 	return exitOK
 }
 
@@ -604,6 +698,13 @@ type statusEntryDTO struct {
 	Chars    int      `json:"chars"`
 }
 
+// skippedDTO 是被整篇跳过的条目。它有独立的结构，因为「跳过」与「告警」是两回事：
+// 跳过通常是用户自己的意图（草稿、纯元数据卡片），告警则是意外。
+type skippedDTO struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
 type statusKBDTO struct {
 	Name     string           `json:"name"`
 	ID       string           `json:"id"`
@@ -614,6 +715,7 @@ type statusKBDTO struct {
 	Sections int              `json:"sections"`
 	Bytes    int64            `json:"bytes"`
 	Warnings []string         `json:"warnings,omitempty"`
+	Skipped  []skippedDTO     `json:"skipped,omitempty"`
 	Items    []statusEntryDTO `json:"items,omitempty"`
 }
 
@@ -661,6 +763,9 @@ func runStatus(args []string) int {
 			dto.Sections = kb.Sections
 			dto.Bytes = kb.Bytes
 			dto.Warnings = kb.Warnings
+			for _, s := range kb.Skipped {
+				dto.Skipped = append(dto.Skipped, skippedDTO{Path: s.RelPath, Reason: s.Reason})
+			}
 			if *showEntries > 0 {
 				for i, e := range kb.Entries {
 					if i >= *showEntries {
@@ -702,16 +807,52 @@ func runStatus(args []string) int {
 		for _, w := range kb.Warnings {
 			fmt.Printf("  ⚠ %s\n", w)
 		}
+		if len(kb.Skipped) > 0 {
+			fmt.Printf("  跳过 %d 篇：%s\n", len(kb.Skipped), skipSummary(kb.Skipped))
+			for i, s := range kb.Skipped {
+				if i >= 3 {
+					fmt.Printf("      …\n")
+					break
+				}
+				fmt.Printf("      %s（%s）\n", s.Path, reasonText(s.Reason))
+			}
+		}
 		for _, it := range kb.Items {
 			title := it.Title
 			if title == "" {
 				title = "（无标题）"
 			}
-			fmt.Printf("    %-44s %-22s %3d 节 %7d 字\n", it.Path, title, it.Sections, it.Chars)
+			fmt.Printf("    %s %s %3d 节 %7d 字\n",
+				padRight(it.Path, 44), padRight(title, 24), it.Sections, it.Chars)
 		}
 		fmt.Println()
 	}
 	return exitOK
+}
+
+// skipSummary 按原因汇总被跳过的文件，例如「正文为空 14 / frontmatter 要求跳过 2」。
+func skipSummary(files []skippedDTO) string {
+	counts := map[string]int{}
+	for _, f := range files {
+		counts[f.Reason]++
+	}
+	parts := make([]string, 0, len(counts))
+	for reason, n := range counts {
+		parts = append(parts, fmt.Sprintf("%s %d", reasonText(reason), n))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, " / ")
+}
+
+func reasonText(reason string) string {
+	switch reason {
+	case core.SkipEmptyBody:
+		return "正文为空"
+	case core.SkipFrontmatter:
+		return "frontmatter 要求跳过"
+	default:
+		return reason
+	}
 }
 
 func daemonRunning(port int) bool {

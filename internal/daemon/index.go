@@ -24,8 +24,18 @@ type KBIndex struct {
 	Sections int
 	Bytes    int64
 	// Warnings 是扫描 / 解码阶段记下的问题，UI 里可看（docs/02「限制与告警」）。
-	Warnings  []string
+	Warnings []string
+	// Skipped 是被**整篇跳过**的文件与原因（frontmatter 要求跳过 / 正文为空）。
+	// 跳过的东西必须能看见 —— 静默丢弃比多一条噪音糟得多（docs/02「整篇跳过」）。
+	Skipped   []SkippedFile
 	IndexedAt time.Time
+}
+
+// SkippedFile 是一篇被跳过的文件。
+type SkippedFile struct {
+	RelPath string
+	// Reason 是 core.SkipFrontmatter 或 core.SkipEmptyBody。
+	Reason string
 }
 
 // Entry 按相对路径取一个条目。relPath 必须是 POSIX 形式。
@@ -169,6 +179,7 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 	var (
 		mu       sync.Mutex
 		warnings = append([]string{}, scanned.Warnings...)
+		skipped  []SkippedFile
 		done     int64
 		total    = len(files)
 	)
@@ -199,7 +210,13 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 			defer wg.Done()
 			for i := range jobs {
 				// 每个下标只被一个 worker 写，不需要锁。
-				entries[i] = readEntry(files[i], opts, addWarn)
+				e, skip := readEntry(files[i], opts, addWarn)
+				entries[i] = e
+				if skip != "" {
+					mu.Lock()
+					skipped = append(skipped, SkippedFile{RelPath: files[i].RelPath, Reason: skip})
+					mu.Unlock()
+				}
 				if n := atomic.AddInt64(&done, 1); progress != nil && n%50 == 0 {
 					progress(int(n), total)
 				}
@@ -231,19 +248,23 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 	}
 	sort.Strings(warnings)
 	ki.Warnings = warnings
+	sort.Slice(skipped, func(i, j int) bool { return skipped[i].RelPath < skipped[j].RelPath })
+	ki.Skipped = skipped
 	return ki, nil
 }
 
-func readEntry(f ScannedFile, opts BuildOptions, addWarn func(string)) *core.Entry {
+// readEntry 返回条目与跳过原因（原因为空表示没跳过）。
+// 读不出来 / 解码失败不是「跳过」而是「告警」：它们属于意外，不属于用户的意图。
+func readEntry(f ScannedFile, opts BuildOptions, addWarn func(string)) (*core.Entry, string) {
 	data, err := os.ReadFile(f.AbsPath)
 	if err != nil {
 		addWarn(f.RelPath + ": 读取失败（" + err.Error() + "）")
-		return nil
+		return nil, ""
 	}
 	text, warn := Decode(data)
 	if warn != "" {
 		addWarn(f.RelPath + ": " + warn)
-		return nil
+		return nil, ""
 	}
 
 	res := core.BuildEntry(f.RelPath, text, core.SliceOptions{MaxSectionChars: opts.MaxSectionChars})
@@ -251,12 +272,12 @@ func readEntry(f ScannedFile, opts BuildOptions, addWarn func(string)) *core.Ent
 		addWarn(f.RelPath + ": " + w)
 	}
 	if res.Skipped {
-		return nil // frontmatter 要求整篇跳过
+		return nil, res.SkipReason
 	}
 	e := res.Entry
 	// rev = 内容 sha1 的前 8 位（docs/04「rev 与漂移」）。
 	e.Rev = contentRev(text)
-	return &e
+	return &e, ""
 }
 
 // contentRev 是内容的短指纹。sha1 用在这里是为了「便宜且稳定」，不是安全用途。

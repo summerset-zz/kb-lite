@@ -73,19 +73,38 @@ func mustWrite(t *testing.T, path, content string) {
 }
 
 // capture 截获 stdout，返回输出与退出码。
+//
+// 两个必须这么写的地方：
+//
+//  1. **读端要放在另一个 goroutine 里**。匿名管道的缓冲很小（Windows 上 4 KB），
+//     「等写完再读」的写法只要输出超过缓冲就会死锁 —— 表现为「测试跑几十秒然后超时、
+//     没有任何 FAIL 行」。`/skill.md` 渲染出来正好 4 KB 出头，就是这么挂的。
+//  2. **一定要 defer 还原**。否则被测代码一旦 panic / Goexit，os.Stdout 会一直指向
+//     那个管道，后面所有测试的输出（包括失败摘要）都会消失。
 func capture(t *testing.T, fn func() int) (string, int) {
 	t.Helper()
+
 	old := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	os.Stdout = w
+	defer func() {
+		os.Stdout = old
+		_ = w.Close() // panic 路径上也让读端拿到 EOF，别把 goroutine 挂在那儿
+	}()
+
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+
 	code := fn()
+
 	_ = w.Close()
-	os.Stdout = old
-	out, _ := io.ReadAll(r)
-	return string(out), code
+	return <-done, code
 }
 
 func TestSearchOutput(t *testing.T) {
@@ -183,30 +202,45 @@ func TestSearchFallsBackOffline(t *testing.T) {
 	}
 }
 
-// toc / read / skill 目前仍然需要 daemon（离线降级只接了 search，见下一轮的 TODO）。
-func TestReadWithoutDaemonExitsFour(t *testing.T) {
+// toc / read / skill 与 search 一样，daemon 没在跑时自动降级为离线索引（docs/05）。
+func TestReadTOCSkillFallBackOffline(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(daemon.ConfigDirEnv, dir)
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
+	kbRoot := filepath.Join(dir, "kb")
+	mustWrite(t, filepath.Join(kbRoot, "a.md"),
+		"---\ntitle: 离线读\ntags: [测试]\n---\n\n## 第一节\n\n这里有鲸落两个字。\n")
 
 	cfg := daemon.DefaultConfig(dir)
-	cfg.Port = port
+	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
 	if err := cfg.Save(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, daemon.TokenFileName), []byte(testToken+"\n"), 0o600); err != nil {
-		t.Fatal(err)
+
+	// 刻意不起服务。
+
+	out, code := capture(t, func() int { return Run([]string{"read", "笔记", "a.md", "--section", "1"}) })
+	if code != exitOK {
+		t.Fatalf("离线 read 退出码 = %d：%s", code, out)
+	}
+	if !strings.Contains(out, "鲸落") {
+		t.Errorf("离线 read 内容不对：\n%s", out)
 	}
 
-	_, code := capture(t, func() int { return Run([]string{"read", "笔记", "a.md", "--section", "1"}) })
-	if code != exitDaemonDown {
-		t.Errorf("daemon 没跑时 read 应当退出码 4，实际 %d", code)
+	out, code = capture(t, func() int { return Run([]string{"toc", "笔记", "a.md"}) })
+	if code != exitOK {
+		t.Fatalf("离线 toc 退出码 = %d：%s", code, out)
+	}
+	if !strings.Contains(out, "1 第一节") {
+		t.Errorf("离线 toc 内容不对：\n%s", out)
+	}
+
+	out, code = capture(t, func() int { return Run([]string{"skill"}) })
+	if code != exitOK {
+		t.Fatalf("离线 skill 退出码 = %d：%s", code, out)
+	}
+	if !strings.Contains(out, "- 笔记（1 篇") {
+		t.Errorf("离线 skill 没渲染出 KB 清单：\n%s", out)
 	}
 }
 
