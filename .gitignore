@@ -1,0 +1,30 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Go
+*.exe
+*.test
+
+# web/ 构建产物（go:embed 的输入，由 make 生成）
+internal/daemon/static/*
+!internal/daemon/static/.gitkeep
+
+# 本地运行产物
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.local
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
