@@ -22,10 +22,12 @@ func TestTokenizeQuery(t *testing.T) {
 		{"a A", []string{"a"}}, // 大小写不敏感去重，保留首次写法
 		{"one two three four five six", []string{"one", "two", "three", "four", "five"}},
 		{"-- & ()", nil}, // 不含字母数字的碎片全丢
-		// ⚠️ 按 docs/03 的实现，`Array.map()` 会拆成 ["Array", "map()"]：
-		// 步骤 2 只按空白与 `.` 切，步骤 3 只丢「不含字母数字」的碎片。
-		// 这条已在报告里提出来要求改文档（见 TestTokenizeTrailingParens 的注释）。
-		{"Array.map()", []string{"Array", "map()"}},
+		{"Array.map()", []string{"Array", "map"}},
+		{"（回滚）", []string{"回滚"}},
+		{`"部署"`, []string{"部署"}},
+		// 这些整块都是有信息的，**不能**被剥成 `C` / `C`：
+		{"C++ C# a-b", []string{"C++", "C#", "a-b"}},
+		{"snake_case", []string{"snake_case"}},
 	}
 	for _, c := range cases {
 		got := TokenizeQuery(c.in)

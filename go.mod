@@ -4,4 +4,7 @@ module github.com/summerset-zz/kb-lite
 // 见 docs/08-build-release.md。不要因为本机版本高就往上抬。
 go 1.22.0
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require (
+	golang.org/x/text v0.16.0
+	gopkg.in/yaml.v3 v3.0.1
+)

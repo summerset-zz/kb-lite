@@ -40,7 +40,9 @@ func TokenizeQuery(query string) []string {
 	seen := make(map[string]struct{}, len(fields))
 	out := make([]string, 0, MaxKeywords)
 	for _, f := range fields {
-		f = strings.TrimSpace(f)
+		// 剔掉首尾的括号/引号/逗号类字符：`map()` → `map`。只剔首尾、且只剔这些
+		// 纯语法字符 —— `C++` / `C#` / `a-b` / `v1.2` 整块都是有信息的（docs/03 步骤 3）。
+		f = trimQueryNoise(f)
 		// 不含任何字母或数字的碎片（`()` `--` `&`）对「哪个条目更相关」没有信息量。
 		if f == "" || !hasLetterOrDigit(f) {
 			continue
@@ -56,6 +58,23 @@ func TokenizeQuery(query string) []string {
 		}
 	}
 	return out
+}
+
+// trimQueryNoise 剔掉查询碎片首尾的纯语法字符。
+//
+// 只剔这些，**不剔** `+ # - _ . $ /` —— 否则 `C++` 会变成 `C`、`C#` 变成 `C`，
+// 那比不剔更糟。见 docs/03 步骤 3。
+func trimQueryNoise(s string) string {
+	return strings.TrimFunc(s, func(r rune) bool { return queryNoiseRunes[r] })
+}
+
+var queryNoiseRunes = map[rune]bool{
+	'(': true, ')': true, '[': true, ']': true, '{': true, '}': true,
+	'"': true, '\'': true, '`': true, ',': true, ';': true, ':': true,
+	'!': true, '?': true,
+	'（': true, '）': true, '【': true, '】': true, '「': true, '」': true,
+	'《': true, '》': true, '，': true, '；': true, '：': true, '！': true,
+	'？': true, '。': true, '、': true,
 }
 
 func hasLetterOrDigit(s string) bool {
