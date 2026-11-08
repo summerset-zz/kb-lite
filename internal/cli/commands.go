@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/summerset-zz/kb-lite/internal/core"
 	"github.com/summerset-zz/kb-lite/internal/daemon"
 )
 
@@ -81,11 +83,15 @@ func runSearch(args []string) int {
 
 	c, err := newClient()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return exitError
+		// 连 token 都没有（没跑过 serve）——直接走离线。
+		return searchOffline(name, queries, *limit, *explain, *asJSON)
 	}
 	body, err := c.get(kbPath(name, "search"), q)
 	if err != nil {
+		var down daemonDownError
+		if errors.As(err, &down) {
+			return searchOffline(name, queries, *limit, *explain, *asJSON)
+		}
 		return fail(err)
 	}
 	if *asJSON {
@@ -100,6 +106,99 @@ func runSearch(args []string) int {
 	}
 	printSearch(name, strings.Join(queries, " "), &resp, *explain)
 	return exitOK
+}
+
+// searchOffline 是 docs/05 里「daemon 未运行时自动降级为离线只读」的实现。
+//
+// 进程内扫目录、切片、打分，结果与走服务端一致（同一个 core.Rank）。
+// 代价是每次查询都重建一遍索引，所以会先提示一句。
+func searchOffline(name string, queries []string, limit int, explain, asJSON bool) int {
+	mgr, err := buildLocalIndex()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	kb, ok := mgr.KB(name)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "没有这个知识库：%s（用 kb-lite list 看看有哪些）\n", name)
+		return exitNotFound
+	}
+	fmt.Fprintln(os.Stderr, "（daemon 没在跑，本次是离线索引：会慢一点，结果相同）")
+
+	compiled := make([]*core.Query, 0, len(queries))
+	for _, q := range queries {
+		compiled = append(compiled, core.Compile(q))
+	}
+	limit = clampInt(limit, 1, 10)
+	hits := core.Rank(kb.Entries, compiled, core.RankOptions{Limit: limit, WithDetails: explain})
+
+	resp := searchRespDTO{OK: true, Query: queries}
+	for _, h := range hits {
+		e := h.Entry
+		resp.Results = append(resp.Results, searchItemDTO{
+			Title: e.Title, Path: e.RelPath, Rev: e.Rev, Score: h.Score,
+			Summary: e.Summary, Tags: e.Tags, Chars: e.Chars,
+			TOC: daemon.FormatTOC(e.TOC),
+		})
+	}
+	if explain {
+		for _, h := range hits {
+			row := explainRowDTO{Path: h.Entry.RelPath}
+			for _, d := range h.Details {
+				row.Details = append(row.Details, detailDTO{Hits: hitDTOs(d.Hits), Score: d.Score})
+			}
+			resp.Debug = append(resp.Debug, row)
+		}
+	}
+
+	if asJSON {
+		b, _ := json.MarshalIndent(resp, "", "  ")
+		fmt.Println(string(b))
+		return exitOK
+	}
+	printSearch(name, strings.Join(queries, " "), &resp, explain)
+	return exitOK
+}
+
+func hitDTOs(hits []core.Hit) []hitDTO {
+	out := make([]hitDTO, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, hitDTO{
+			Keyword: h.Keyword, Title: h.Title, Path: h.Path, TOC: h.TOC,
+			Leaf: h.Leaf, Body: h.Body, Full: h.Full, Approx: h.Approx,
+		})
+	}
+	return out
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// buildLocalIndex 在进程内建一遍索引（离线命令共用）。
+func buildLocalIndex() (*daemon.Manager, error) {
+	dir, err := daemon.ConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := daemon.Load(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(cfg.KBs) == 0 {
+		return nil, fmt.Errorf("还没有知识库。用 kb-lite add <目录> 添加一个。\n配置目录：%s", dir)
+	}
+	mgr := daemon.NewManager(cfg, daemon.BuildOptions{})
+	if err := mgr.Rebuild(); err != nil {
+		return nil, err
+	}
+	return mgr, nil
 }
 
 func printSearch(name, query string, resp *searchRespDTO, explain bool) {
@@ -490,6 +589,127 @@ func runList(args []string) int {
 			state = "已关闭"
 		}
 		fmt.Printf("%s  %s  %s\n", padRight(kb.Name, width), state, kb.RootPath)
+	}
+	return exitOK
+}
+
+// ---- status（离线：进程内建一遍索引，不需要 daemon）----
+
+type statusEntryDTO struct {
+	Path     string   `json:"path"`
+	Title    string   `json:"title"`
+	Summary  string   `json:"summary"`
+	Tags     []string `json:"tags"`
+	Sections int      `json:"sections"`
+	Chars    int      `json:"chars"`
+}
+
+type statusKBDTO struct {
+	Name     string           `json:"name"`
+	ID       string           `json:"id"`
+	RootPath string           `json:"rootPath"`
+	State    string           `json:"state"`
+	Error    string           `json:"error,omitempty"`
+	Entries  int              `json:"entries"`
+	Sections int              `json:"sections"`
+	Bytes    int64            `json:"bytes"`
+	Warnings []string         `json:"warnings,omitempty"`
+	Items    []statusEntryDTO `json:"items,omitempty"`
+}
+
+// runStatus 建一遍索引并打印统计。
+//
+// 它是 docs/05 里「daemon 未运行时自动降级为离线只读」的形态：进程内扫目录、切片、报数，
+// 不起服务。v0.1 没有 /api/status（那是 v0.3），所以想看告警（超大文件、编码失败）
+// 目前只有这条路径和 serve 的启动输出。
+func runStatus(args []string) int {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "")
+	showEntries := fs.Int("entries", 0, "每个知识库打印前 N 个条目")
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+
+	dir, err := daemon.ConfigDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	cfg, err := daemon.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	if len(cfg.KBs) == 0 {
+		fmt.Fprintf(os.Stderr, "还没有知识库。用 kb-lite add <目录> 添加一个。\n配置目录：%s\n", dir)
+		return exitOK
+	}
+
+	mgr := daemon.NewManager(cfg, daemon.BuildOptions{})
+	if err := mgr.Rebuild(); err != nil {
+		fmt.Fprintln(os.Stderr, "建索引失败：", err)
+		return exitError
+	}
+
+	var out []statusKBDTO
+	for _, st := range mgr.States() {
+		dto := statusKBDTO{Name: st.Name, ID: st.ID, State: st.State, Error: st.Error}
+		if kb, ok := mgr.KB(st.Name); ok {
+			dto.RootPath = kb.KB.RootPath
+			dto.Entries = len(kb.Entries)
+			dto.Sections = kb.Sections
+			dto.Bytes = kb.Bytes
+			dto.Warnings = kb.Warnings
+			if *showEntries > 0 {
+				for i, e := range kb.Entries {
+					if i >= *showEntries {
+						break
+					}
+					dto.Items = append(dto.Items, statusEntryDTO{
+						Path: e.RelPath, Title: e.Title, Summary: e.Summary, Tags: e.Tags,
+						Sections: len(e.Sections), Chars: e.Chars,
+					})
+				}
+			}
+		} else {
+			for _, kb := range cfg.KBs {
+				if kb.Name == st.Name {
+					dto.RootPath = kb.RootPath
+				}
+			}
+		}
+		out = append(out, dto)
+	}
+
+	if *asJSON {
+		b, _ := json.MarshalIndent(out, "", "  ")
+		fmt.Println(string(b))
+		return exitOK
+	}
+
+	fmt.Printf("配置目录 %s\n\n", dir)
+	for _, kb := range out {
+		switch kb.State {
+		case "ready":
+			fmt.Printf("%s  %d 篇 / %d 节 / %s\n", padRight(kb.Name, 12), kb.Entries, kb.Sections, formatBytes(kb.Bytes))
+		case "error":
+			fmt.Printf("%s  索引失败：%s\n", padRight(kb.Name, 12), kb.Error)
+		default:
+			fmt.Printf("%s  %s\n", padRight(kb.Name, 12), kb.State)
+		}
+		fmt.Printf("  %s\n", kb.RootPath)
+		for _, w := range kb.Warnings {
+			fmt.Printf("  ⚠ %s\n", w)
+		}
+		for _, it := range kb.Items {
+			title := it.Title
+			if title == "" {
+				title = "（无标题）"
+			}
+			fmt.Printf("    %-44s %-22s %3d 节 %7d 字\n", it.Path, title, it.Sections, it.Chars)
+		}
+		fmt.Println()
 	}
 	return exitOK
 }

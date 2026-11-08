@@ -159,11 +159,35 @@ func TestReadMissingSectionExitsThree(t *testing.T) {
 	}
 }
 
-func TestDaemonDownExitsFour(t *testing.T) {
+// daemon 没在跑时，search 按 docs/05 自动降级为离线索引（进程内现场切片）。
+func TestSearchFallsBackOffline(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(daemon.ConfigDirEnv, dir)
 
-	// 摆一个指向空端口的配置，且 token 存在 —— 这样客户端会真的去连然后失败。
+	kbRoot := filepath.Join(dir, "kb")
+	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 离线也能用\n---\n\n这里有个少见词：鲸落。\n")
+
+	cfg := daemon.DefaultConfig(dir)
+	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	// 刻意不起服务。
+	out, code := capture(t, func() int { return Run([]string{"search", "笔记", "鲸落"}) })
+	if code != exitOK {
+		t.Fatalf("离线 search 应当成功，退出码 = %d，输出：%s", code, out)
+	}
+	if !strings.Contains(out, "离线也能用") {
+		t.Errorf("离线索引没命中：\n%s", out)
+	}
+}
+
+// toc / read / skill 目前仍然需要 daemon（离线降级只接了 search，见下一轮的 TODO）。
+func TestReadWithoutDaemonExitsFour(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(daemon.ConfigDirEnv, dir)
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -180,9 +204,9 @@ func TestDaemonDownExitsFour(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, code := capture(t, func() int { return Run([]string{"search", "笔记", "上线"}) })
+	_, code := capture(t, func() int { return Run([]string{"read", "笔记", "a.md", "--section", "1"}) })
 	if code != exitDaemonDown {
-		t.Errorf("daemon 没跑时应当退出码 4，实际 %d", code)
+		t.Errorf("daemon 没跑时 read 应当退出码 4，实际 %d", code)
 	}
 }
 

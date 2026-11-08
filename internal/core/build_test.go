@@ -147,20 +147,77 @@ func TestTagsNormalization(t *testing.T) {
 	}
 }
 
-func TestBrokenFrontmatterIsKeptAsBody(t *testing.T) {
-	src := "---\ntitle: [未闭合\n---\n\n正文\n"
+func TestLenientFrontmatterRecoversUnquotedColon(t *testing.T) {
+	// 实测自 fontcover：值里出现未加引号的冒号，严格 YAML 必然报错。
+	src := "---\ntitle: WOFF\ndescription: The format: a TTF wrapped in compression.\nkeywords: WOFF, WOFF2, 网页字体\n---\n\n## 正文\n\n内容\n"
+	got := BuildEntry("docs/en/woff.md", src, SliceOptions{})
+
+	if got.Entry.Title != "WOFF" {
+		t.Errorf("Title = %q", got.Entry.Title)
+	}
+	if got.Entry.Summary != "The format: a TTF wrapped in compression." {
+		t.Errorf("Summary = %q", got.Entry.Summary)
+	}
+	if len(got.Entry.Tags) != 3 || got.Entry.Tags[0] != "WOFF" {
+		t.Errorf("Tags = %v", got.Entry.Tags)
+	}
+	if len(got.Warnings) != 1 || !strings.Contains(got.Warnings[0], "宽松解析") {
+		t.Errorf("warnings = %v", got.Warnings)
+	}
+}
+
+func TestLenientFrontmatterSplitsQuotedKeywords(t *testing.T) {
+	// `keywords: "@font-face", src` 也不是合法 YAML（引号后面跟逗号）。
+	src := "---\ntitle: x\nkeywords: \"@font-face\", src, local\n---\n\n正文\n"
 	got := BuildEntry("a.md", src, SliceOptions{})
 
-	if len(got.Warnings) == 0 {
-		t.Error("应当有一条 warn")
+	want := []string{"@font-face", "src", "local"}
+	if len(got.Entry.Tags) != len(want) {
+		t.Fatalf("Tags = %v，想要 %v", got.Entry.Tags, want)
 	}
-	// 不能被静默吞掉：那段 `---` 要留在正文里。
-	if !strings.Contains(got.Entry.SearchFull, "title: [未闭合") {
+	for i := range want {
+		if got.Entry.Tags[i] != want[i] {
+			t.Fatalf("Tags = %v，想要 %v", got.Entry.Tags, want)
+		}
+	}
+}
+
+func TestFrontmatterAliases(t *testing.T) {
+	// name → title / description → summary / keywords → tags（fontcover 实体卡片的用法）
+	src := "---\nname: Adobe Systems\nkinds: [maker]\n---\n\n正文\n"
+	got := BuildEntry("creds/adobe-systems/meta.md", src, SliceOptions{})
+	if got.Entry.Title != "Adobe Systems" {
+		t.Errorf("name 别名没生效：Title = %q", got.Entry.Title)
+	}
+
+	// 主键必须压过别名。
+	src = "---\ntitle: 正名\nname: 别名\ndescription: 描述\nsummary: 摘要\n---\n\n正文\n"
+	got = BuildEntry("a.md", src, SliceOptions{})
+	if got.Entry.Title != "正名" || got.Entry.Summary != "摘要" {
+		t.Errorf("主键没压过别名：Title=%q Summary=%q", got.Entry.Title, got.Entry.Summary)
+	}
+}
+
+func TestBrokenFrontmatterIsKeptAsBody(t *testing.T) {
+	// 连宽松解析都拿不到任何键 —— 这时才整份当正文，不吞用户内容。
+	src := "---\n这里没有任何键值行\n---\n\n正文\n"
+	got := BuildEntry("a.md", src, SliceOptions{})
+
+	if len(got.Warnings) == 0 || !strings.Contains(got.Warnings[0], "解析失败") {
+		t.Errorf("warnings = %v", got.Warnings)
+	}
+	if !strings.Contains(got.Entry.SearchFull, "这里没有任何键值行") {
 		t.Errorf("正文丢了：%q", got.Entry.SearchFull)
 	}
-	// 标题只能走文件名兜底。
 	if got.Entry.Title != "a" {
 		t.Errorf("Title = %q，想要 a", got.Entry.Title)
+	}
+}
+
+func TestLanguageCodeFilenameUsesParentDir(t *testing.T) {
+	got := BuildEntry("creds/adobe-systems/en.md", "正文，没有标题。\n", SliceOptions{})
+	if got.Entry.Title != "adobe-systems" {
+		t.Errorf("Title = %q，想要 adobe-systems", got.Entry.Title)
 	}
 }
 

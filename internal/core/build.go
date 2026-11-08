@@ -10,13 +10,21 @@ import (
 // 这些名字换成父目录名（`docs/api/README.md` → `api`）。
 //
 // 理由见 docs/02-slicing.md：几百个 `README.md` / `index.md` 都叫「README」的话，
-// 搜索结果的标题栏等于没有信息。
+// 搜索结果的标题栏等于没有信息。语言代码同理 —— `creds/adobe-systems/en.md` 的标题
+// 应当是 `adobe-systems`，而不是毫无意义的 `en`。
 var LowInformationStems = map[string]bool{
 	"readme":     true,
 	"index":      true,
 	"untitled":   true,
 	"untitled-1": true,
 	"untitled 1": true,
+
+	// 语言代码。`<slug>/en.md` + `<slug>/zh.md` 的双语目录很常见。
+	"en": true, "zh": true, "ja": true, "ko": true, "fr": true, "de": true,
+	"es": true, "ru": true, "pt": true, "it": true, "nl": true, "pl": true,
+	"tr": true, "ar": true, "cs": true, "sv": true,
+	"zh-cn": true, "zh-tw": true, "zh-hans": true, "zh-hant": true,
+	"en-us": true, "en-gb": true,
 }
 
 // SummaryLimit 是自动摘要的字数上限。

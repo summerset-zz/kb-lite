@@ -58,7 +58,30 @@ type ScanOptions = {
 | `draft` / `publish: false` | bool | **`true` 则整篇跳过**（用户用 Obsidian 草稿时的约定） |
 | `kb_ignore` | bool | `true` 则整篇跳过 |
 
-YAML 解析失败 → 当成没有 frontmatter，正文里那段 `---` 原样保留（不要静默吞掉用户内容），记 `warn`。
+### 别名
+
+主键缺失时才看别名（主键优先）：
+
+| 别名 | 等价于 | 为什么 |
+|---|---|---|
+| `name` | `title` | 实体卡片（厂商 / 作者 / 角色）常用 |
+| `description` | `summary` | Hugo / VitePress / Nextra / Obsidian 社区的事实标准 |
+| `keywords` | `tags` | 同上；常见为逗号分隔字符串 |
+
+> 别名不是「顺手支持」，是实测出来的：fontcover-content 的 217 篇里，161 篇有 `description`、146 篇有 `keywords`、14 篇用 `name`。
+> 不支持的话，这些笔记最值钱的两个检索字段（摘要档 + 标签档）**全是空的**，而用户得不到任何提示。
+> 逗号串里的每一项都要去掉首尾引号（`"@font-face", src` → `@font-face`、`src`）。
+
+### 宽松回退
+
+严格 YAML 解析失败时，**按行**解析 `^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$`：键取冒号前，值取该行剩下部分（去首尾引号）；
+缩进行（嵌套对象 / 块序列）一律忽略。
+
+理由：手写 frontmatter 里「值中间出现未加引号的 `:`」非常常见（实测 `in: a TTF`、`involved: neither`），
+严格模式会把整篇降级成「没有 frontmatter」，白白丢掉标题与摘要 —— 而这只需要宽容一点就能救回来。
+
+宽松解析也拿不到任何键时，才当真的「解析失败」：正文里那段 `---` 原样保留（不要静默吞掉用户内容）。
+**两种情况都记 `warn`**，措辞不同（「不是合法 YAML，已按行宽松解析」/「解析失败，已当作正文保留」）。
 
 > **函数边界**：frontmatter 块在切片**之前**整体剥掉 —— `ParseMarkdownSections()` 收到的
 > markdown 不包含它（也可以没有标题行，那就没有 section 0）。跟导言那段 `---` 的“保留”不矛盾：
@@ -76,6 +99,8 @@ frontmatter.title
 
 - 必须是**第一个非空块**，不是「文档里出现的第一个标题」—— 否则一篇以 `# 前言` 开头的长文，条目名会变成「前言」。
 - `README.md` / `index.md` / `Untitled.md` 这类**没有信息量的文件名**，若前两条都取不到，则用「父目录名」代替（`docs/api/README.md` → `api`）。文件名白名单见 `LOW_INFORMATION_STEMS`。
+  同一张白名单里还有**语言代码**（`en.md` / `zh.md` / `ja.md` …）：`creds/adobe-systems/en.md` 的标题取 `adobe-systems`，
+  而不是毫无意义的 `en` —— `<slug>/en.md` + `<slug>/zh.md` 的双语目录是很常见的组织方式。
 
 ## 分节算法
 

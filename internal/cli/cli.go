@@ -40,6 +40,10 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
 
   list                      列出已配置的知识库
 
+  status                    建一遍索引并打印统计（不需要 daemon）
+    --entries <n>           每个库另外打印前 N 个条目
+    --json                  输出 JSON
+
   search <name> <query>...  检索
     --limit <n>             默认 5，最大 10
     --explain               打印每个关键词命中的位置
@@ -70,6 +74,8 @@ func Run(args []string) int {
 		return runAdd(rest)
 	case "list":
 		return runList(rest)
+	case "status":
+		return runStatus(rest)
 	case "search":
 		return runSearch(rest)
 	case "toc":
