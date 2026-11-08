@@ -161,30 +161,30 @@ func (m Matcher) test(s string) bool {
 
 // Hit 是一个关键词在一条候选上的命中位置（docs/03 的 `Hit`）。
 type Hit struct {
-	Keyword string
-	Title   bool
-	Path    bool
-	TOC     bool
-	Leaf    bool
-	Body    bool
-	Full    bool
+	Keyword string `json:"keyword"`
+	Title   bool   `json:"title"`
+	Path    bool   `json:"path"`
+	TOC     bool   `json:"toc"`
+	Leaf    bool   `json:"leaf"`
+	Body    bool   `json:"body"`
+	Full    bool   `json:"full"`
 	// Approx 表示这是 CJK bigram 变体：只加分，不参与 strong 判定。
-	Approx bool
+	Approx bool `json:"approx,omitempty"`
 }
 
 // Detail 是一条候选在一个查询下的完整得分明细 —— CLI/UI 的 `--explain` 直接吃它。
 type Detail struct {
-	Hits     []Hit
-	Strong   int
-	Weak     int
-	FullOnly int
-	InTitle  int
-	InPath   int
-	InTOC    int
-	InLeaf   int
+	Hits     []Hit `json:"hits"`
+	Strong   int   `json:"strong"`
+	Weak     int   `json:"weak"`
+	FullOnly int   `json:"fullOnly"`
+	InTitle  int   `json:"inTitle"`
+	InPath   int   `json:"inPath"`
+	InTOC    int   `json:"inToc"`
+	InLeaf   int   `json:"inLeaf"`
 	// Approx 是 bigram 的加分总额。
-	Approx int
-	Score  int
+	Approx int `json:"approx"`
+	Score  int `json:"score"`
 }
 
 // Query 是一次编译好的查询。

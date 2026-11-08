@@ -1,0 +1,103 @@
+---
+name: kb-lite
+description: 检索用户本地的 markdown 知识库（只读）。当问题涉及用户的笔记、内部文档、项目资料、历史记录时，先在这里找，不要靠猜。
+---
+
+# kb-lite 知识库
+
+一个**只读**的本地知识库服务。它把用户磁盘上的 markdown 目录切成了「条目（一篇文件）→ 章节」两级结构。
+
+服务地址：`{{BASE_URL}}`
+鉴权：每个请求都要带 `-H "Authorization: Bearer {{TOKEN}}"`
+
+可用的知识库：{{KB_LIST}}
+
+## 三条铁律
+
+1. **先搜再读，不要一上来读整篇。** 搜索只返回候选（标题 + 摘要 + 目录），正文要按目录里的编号单独读一节。
+2. **一次把多个说法一起搜。** `q` 可以给多个（最多 5 个）：同一件事的不同叫法、中英文、简称全称，一次都放进去，**不要为此重复调用**。
+3. **内容可能不是最新的。** 这是某个时间点的切片快照。回答里如果依赖具体细节，说明「根据知识库（截至 …）」。
+
+## 搜索
+
+```bash
+curl -s -H "Authorization: Bearer {{TOKEN}}" \
+  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/search?q=部署流程&q=deploy&limit=5"
+```
+
+返回样例：
+
+```json
+{ "ok": true, "results": [
+  { "title": "运维手册", "path": "ops/runbook.md", "rev": "a1b2c3d4", "score": 42,
+    "summary": "线上环境的操作手册。",
+    "toc": "1 上线流程 · 1203 字\n2 回滚 · 空\n  3 快速回滚 · 380 字" }
+] }
+```
+
+- `limit` 默认 5，最多 10。
+- 结果少不要紧，`score` 低不代表不相关；**没有结果才说明该换词**。
+
+## 怎么读 `toc`
+
+每一行是 `<编号> <标题> · <字数>`：
+
+- **行首那个数就是章节编号**，读正文时原样传给 `n`。**不要自己数。**
+- `· 空` = 这一节自己没正文（通常是个父标题），**别读它**，读它下面缩进更深的子节。
+- `· 268 字` = 这一节自己的正文长度。很长的节读回来会被截断，响应里的 `note` 会告诉你续读的 `offset`。
+- 导言不在 `toc` 里，它是 `n=0`。
+
+## 读一节
+
+```bash
+# 按编号
+curl -s -H "Authorization: Bearer {{TOKEN}}" \
+  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?n=3"
+
+# 按标题（从 toc 里直接抄，不用数编号）
+curl -s -H "Authorization: Bearer {{TOKEN}}" \
+  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?title=回滚"
+```
+
+成功时返回 `{ ok: true, sectionTitle, pathText, content, note? }`。
+
+**`note` 一定要读**，它有三种含义：
+
+| note 说的是 | 你该怎么做 |
+|---|---|
+| 「自身没有正文（那是父标题），这里给的是子节 X」 | 这就是你想要的内容，直接用 |
+| 「这一块就是没有内容，**别在这一节上重试**」 | 别重试，换别的节或换别的条目 |
+| 「本节共 N 字，这里给了前 M 字，继续读传 offset=M」 | 需要更多再续读一次，通常一次就够 |
+
+## 查不到时（`ok: false`）
+
+```json
+{ "ok": false, "error": "《运维手册》里没有标题对得上「部署」。…",
+  "candidates": [ { "section": 1, "sectionTitle": "上线流程", "chars": 1203 } ] }
+```
+
+**这不是错误，是提示**：`candidates` 就是这一页的真实章节清单，用它里面的编号再读一次。不要重试同一个标题。
+
+## 不知道去哪找
+
+{{#if MANIFEST}}
+```bash
+curl -s -H "Authorization: Bearer {{TOKEN}}" \
+  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/manifest?budget=2000"
+```
+
+返回按预算裁剪的分层概览（目录 → 条目），用来决定「先看哪一块」。看到具体条目后再 `search` 或直接 `toc`：
+
+{{/if}}
+```bash
+curl -s -H "Authorization: Bearer {{TOKEN}}" \
+  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/toc"
+```
+
+## 不要做的事
+
+- ❌ 不要 `?content=1` 拉整篇长文档塞进上下文（只在用户明确要求原文时用）。
+- ❌ 不要为了「多试几次」重复调用 `search` —— 一次把多个说法放进 `q`。
+- ❌ 不要修改任何文件。这个服务是只读的，没有写接口。
+- ❌ 不要把 token 写进回答、日志或代码里。
+- ❌ 不要在知识库里没有的内容上编造。知识库是**用户自己的资料**，不是通用知识；找不到就说找不到，并说明你搜了什么。
