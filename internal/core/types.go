@@ -97,6 +97,10 @@ type Entry struct {
 
 	// SearchTitle 是 Title 的小写形式（同时充当 leaf 档：见 03 的「与线上版的三处差异」第 1 条）。
 	SearchTitle string
+	// SearchPath 是 RelPath 的小写形式（03 的 path 档）。
+	SearchPath string
+	// SearchPathLeaf 是 RelPath 末段的小写形式；只在关键词是标识符时参与 leaf 档（03 字段表最后一行）。
+	SearchPathLeaf string
 	// SearchMeta 是「摘要 + 标签」拼起来的小写文本（03 里的 body 档）。
 	SearchMeta string
 	// TocText 是所有节的 title + pathText 拼起来并小写；「这一篇里有一节叫这个名字」是很强的信号。

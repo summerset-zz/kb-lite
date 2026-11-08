@@ -1,0 +1,123 @@
+{
+  "note": "排序快照。改切片或打分必然让这里变，diff 就是给人看的：先确认「变对了吗」再接受。重新生成：go test ./internal/core -run TestRankSnapshot -update-rank",
+  "records": [
+    {
+      "query": "Array",
+      "limit": 5,
+      "paths": [
+        "dom/array.md",
+        "dom/typedarray.md"
+      ]
+    },
+    {
+      "query": "map",
+      "limit": 5,
+      "paths": [
+        "dom/map.md",
+        "dom/array.md",
+        "dom/typedarray.md"
+      ]
+    },
+    {
+      "query": "flatMap",
+      "limit": 5,
+      "paths": [
+        "dom/array.md"
+      ]
+    },
+    {
+      "query": "Element.scrollTo",
+      "limit": 5,
+      "paths": [
+        "dom/api.md"
+      ]
+    },
+    {
+      "query": "部署 回滚",
+      "limit": 5,
+      "paths": [
+        "ops/runbook.md",
+        "ops/migrate.md",
+        "misc/README.md"
+      ]
+    },
+    {
+      "query": "知识库",
+      "limit": 5,
+      "paths": [
+        "guides/kb.md"
+      ]
+    },
+    {
+      "query": "README",
+      "limit": 5,
+      "paths": [
+        "misc/README.md"
+      ]
+    },
+    {
+      "query": "rollback",
+      "limit": 5,
+      "paths": []
+    },
+    {
+      "query": "回滚",
+      "limit": 5,
+      "paths": [
+        "ops/runbook.md",
+        "ops/migrate.md"
+      ]
+    },
+    {
+      "query": "配置",
+      "limit": 5,
+      "paths": [
+        "ops/config.md"
+      ]
+    },
+    {
+      "query": "deploy",
+      "limit": 5,
+      "paths": [
+        "ops/runbook.md"
+      ]
+    },
+    {
+      "query": "服务器",
+      "limit": 5,
+      "paths": [
+        "ops/migrate.md"
+      ]
+    },
+    {
+      "query": "类型化数组",
+      "limit": 5,
+      "paths": [
+        "dom/typedarray.md",
+        "dom/array.md",
+        "dom/map.md"
+      ]
+    },
+    {
+      "query": "上线",
+      "limit": 5,
+      "paths": [
+        "ops/runbook.md"
+      ]
+    },
+    {
+      "query": "tag",
+      "limit": 5,
+      "paths": [
+        "ops/runbook.md"
+      ]
+    },
+    {
+      "query": "端口",
+      "limit": 3,
+      "paths": [
+        "ops/config.md"
+      ]
+    }
+  ]
+}

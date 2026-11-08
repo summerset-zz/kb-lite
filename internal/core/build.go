@@ -61,6 +61,8 @@ func BuildEntry(relPath, src string, opts SliceOptions) BuildResult {
 		Chars:    runeLen(body),
 	}
 	entry.SearchTitle = strings.ToLower(entry.Title)
+	entry.SearchPath = strings.ToLower(relPath)
+	entry.SearchPathLeaf = strings.ToLower(pathLeafOf(relPath))
 	entry.SearchMeta = strings.ToLower(joinNonEmpty(append([]string{entry.Summary}, fm.Tags...)...))
 	// tocText 与 full 都封顶（docs/02 末段）：几千节的文档里，toc 全量拼起来并不小。
 	entry.TocText = strings.ToLower(truncateRunes(tocTextOf(split.Sections), BodyLimit))
@@ -233,6 +235,15 @@ func titleFromPath(relPath string) string {
 		return stem
 	}
 	return file
+}
+
+// pathLeafOf 取相对路径的末段（`ops/runbook.md` → `runbook.md`）。
+func pathLeafOf(relPath string) string {
+	relPath = strings.ReplaceAll(relPath, "\\", "/")
+	if i := strings.LastIndexByte(relPath, '/'); i >= 0 {
+		return relPath[i+1:]
+	}
+	return relPath
 }
 
 func tocTextOf(sections []Section) string {

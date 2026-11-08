@@ -169,7 +169,7 @@ func TestHeadingParsing(t *testing.T) {
 		{"# ###", 0, "", false},
 		{"## 标题 ##", 2, "标题", true},
 		{"## 标题##", 2, "标题##", true}, // 闭合序列前面必须有空白
-		{"# C#", 1, "C#", true},        // 不能被削成 C
+		{"# C#", 1, "C#", true},      // 不能被削成 C
 		{"## 用 **粗体** 和 `code` 举例", 2, "用 粗体 和 code 举例", true},
 		{"## 用*斜体*举例", 2, "用斜体举例", true},
 		{"## snake_case 保留", 2, "snake_case 保留", true},
