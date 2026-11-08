@@ -1,0 +1,504 @@
+package cli
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/summerset-zz/kb-lite/internal/daemon"
+)
+
+// ---- search ----
+
+type hitDTO struct {
+	Keyword string `json:"keyword"`
+	Title   bool   `json:"title"`
+	Path    bool   `json:"path"`
+	TOC     bool   `json:"toc"`
+	Leaf    bool   `json:"leaf"`
+	Body    bool   `json:"body"`
+	Full    bool   `json:"full"`
+	Approx  bool   `json:"approx"`
+}
+
+type detailDTO struct {
+	Hits  []hitDTO `json:"hits"`
+	Score int      `json:"score"`
+}
+
+type explainRowDTO struct {
+	Path    string      `json:"path"`
+	Details []detailDTO `json:"details"`
+}
+
+type searchItemDTO struct {
+	Title   string   `json:"title"`
+	Path    string   `json:"path"`
+	Rev     string   `json:"rev"`
+	Score   int      `json:"score"`
+	Summary string   `json:"summary"`
+	Tags    []string `json:"tags"`
+	Chars   int      `json:"chars"`
+	TOC     string   `json:"toc"`
+}
+
+type searchRespDTO struct {
+	OK      bool            `json:"ok"`
+	Query   []string        `json:"query"`
+	Results []searchItemDTO `json:"results"`
+	Debug   []explainRowDTO `json:"debug"`
+}
+
+func runSearch(args []string) int {
+	fs := flag.NewFlagSet("search", flag.ContinueOnError)
+	limit := fs.Int("limit", 5, "")
+	explain := fs.Bool("explain", false, "")
+	asJSON := fs.Bool("json", false, "")
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 2 {
+		return exitError
+	}
+	name, queries := rest[0], rest[1:]
+
+	q := url.Values{}
+	for _, s := range queries {
+		q.Add("q", s)
+	}
+	q.Set("limit", strconv.Itoa(*limit))
+	if *explain {
+		q.Set("explain", "1")
+	}
+
+	c, err := newClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	body, err := c.get(kbPath(name, "search"), q)
+	if err != nil {
+		return fail(err)
+	}
+	if *asJSON {
+		fmt.Println(string(body))
+		return exitOK
+	}
+
+	var resp searchRespDTO
+	if err := json.Unmarshal(body, &resp); err != nil {
+		fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
+		return exitError
+	}
+	printSearch(name, strings.Join(queries, " "), &resp, *explain)
+	return exitOK
+}
+
+func printSearch(name, query string, resp *searchRespDTO, explain bool) {
+	fmt.Printf("%s ← %q    关键词 = %q    返回 %d 条\n",
+		name, query, resp.Query, len(resp.Results))
+	if len(resp.Results) == 0 {
+		fmt.Println("  （没有命中：换词再试，这个服务不做模糊匹配）")
+		return
+	}
+
+	width := 0
+	for _, r := range resp.Results {
+		if w := displayWidth(r.Title); w > width {
+			width = w
+		}
+	}
+
+	byPath := map[string]*explainRowDTO{}
+	for i := range resp.Debug {
+		byPath[resp.Debug[i].Path] = &resp.Debug[i]
+	}
+
+	for i, r := range resp.Results {
+		fmt.Printf("%3d. %3d  %s  %s\n", i+1, r.Score, padRight(r.Title, width), r.Path)
+		if !explain {
+			continue
+		}
+		if row, ok := byPath[r.Path]; ok {
+			fmt.Printf("        %s\n", explainLine(row.Details))
+		}
+	}
+}
+
+// explainLine 把命中明细渲染成 `部署: 标题 路径 章节   回滚: 路径 全文`。
+//
+// 位置名固定为 docs/03 那六个：标题 / 条目标题 / 路径 / 章节 / 摘要 / 全文。
+func explainLine(details []detailDTO) string {
+	segs := make([]string, 0, len(details))
+	for _, d := range details {
+		parts := make([]string, 0, len(d.Hits))
+		for _, h := range d.Hits {
+			parts = append(parts, h.Keyword+": "+positions(h))
+		}
+		if len(parts) > 0 {
+			segs = append(segs, strings.Join(parts, "    "))
+		}
+	}
+	return strings.Join(segs, "  ‖  ")
+}
+
+func positions(h hitDTO) string {
+	var parts []string
+	if h.Title {
+		parts = append(parts, "标题")
+	}
+	if h.Leaf && !h.Title {
+		parts = append(parts, "条目标题")
+	}
+	if h.Path {
+		parts = append(parts, "路径")
+	}
+	if h.TOC {
+		parts = append(parts, "章节")
+	}
+	if h.Body {
+		parts = append(parts, "摘要")
+	}
+	if h.Full {
+		parts = append(parts, "全文")
+	}
+	if len(parts) == 0 {
+		return "（无）"
+	}
+	return strings.Join(parts, " ")
+}
+
+// ---- toc ----
+
+func runTOC(args []string) int {
+	fs := flag.NewFlagSet("toc", flag.ContinueOnError)
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "用法：kb-lite toc <name> <path>")
+		return exitError
+	}
+
+	c, err := newClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	body, err := c.get(kbPath(rest[0], "entry/"+escapeRelPath(rest[1])+"/toc"), nil)
+	if err != nil {
+		return fail(err)
+	}
+	var resp struct {
+		TOC      string `json:"toc"`
+		Sections int    `json:"sections"`
+		Rev      string `json:"rev"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
+		return exitError
+	}
+	fmt.Printf("%s  （%d 节，rev %s）\n\n%s\n", rest[1], resp.Sections, resp.Rev, resp.TOC)
+	return exitOK
+}
+
+// ---- read ----
+
+type candidateDTO struct {
+	Section      int    `json:"section"`
+	SectionTitle string `json:"sectionTitle"`
+	SectionPath  string `json:"sectionPath"`
+	Chars        int    `json:"chars"`
+}
+
+type sectionRespDTO struct {
+	OK           bool           `json:"ok"`
+	Error        string         `json:"error"`
+	Candidates   []candidateDTO `json:"candidates"`
+	SectionCount int            `json:"sectionCount"`
+	Title        string         `json:"title"`
+	Section      int            `json:"section"`
+	Level        int            `json:"level"`
+	SectionTitle string         `json:"sectionTitle"`
+	PathText     string         `json:"pathText"`
+	Chars        int            `json:"chars"`
+	Content      string         `json:"content"`
+	Note         string         `json:"note"`
+}
+
+func runRead(args []string) int {
+	fs := flag.NewFlagSet("read", flag.ContinueOnError)
+	section := fs.String("section", "", "")
+	title := fs.String("title", "", "")
+	offset := fs.Int("offset", -1, "")
+	maxChars := fs.Int("max-chars", 0, "")
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "用法：kb-lite read <name> <path> [--section n | --title t]")
+		return exitError
+	}
+
+	q := url.Values{}
+	if *section != "" {
+		q.Set("n", *section)
+	} else if *title != "" {
+		q.Set("title", *title)
+	}
+	if *offset >= 0 {
+		q.Set("offset", strconv.Itoa(*offset))
+	}
+	if *maxChars > 0 {
+		q.Set("maxChars", strconv.Itoa(*maxChars))
+	}
+
+	c, err := newClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	body, err := c.get(kbPath(rest[0], "entry/"+escapeRelPath(rest[1])+"/section"), q)
+	if err != nil {
+		return fail(err)
+	}
+
+	var resp sectionRespDTO
+	if err := json.Unmarshal(body, &resp); err != nil {
+		fmt.Fprintln(os.Stderr, "服务端返回的不是合法 JSON：", err)
+		return exitError
+	}
+	if !resp.OK {
+		printMiss(&resp)
+		return exitNotFound
+	}
+
+	fmt.Printf("《%s》第 %d 节「%s」  （%s）  %d 字\n\n%s\n",
+		resp.Title, resp.Section, resp.SectionTitle, resp.PathText, resp.Chars, resp.Content)
+	if resp.Note != "" {
+		fmt.Printf("\n[note] %s\n", resp.Note)
+	}
+	return exitOK
+}
+
+// printMiss 渲染 200+ok:false 的候选清单（ADR-010）。
+func printMiss(resp *sectionRespDTO) {
+	fmt.Fprintln(os.Stderr, resp.Error)
+	if len(resp.Candidates) == 0 {
+		return
+	}
+	fmt.Fprintln(os.Stderr)
+	width := 0
+	for _, c := range resp.Candidates {
+		if w := displayWidth(c.SectionPath); w > width {
+			width = w
+		}
+	}
+	for _, c := range resp.Candidates {
+		chars := strconv.Itoa(c.Chars) + " 字"
+		if c.Chars == 0 {
+			chars = "空"
+		}
+		fmt.Fprintf(os.Stderr, "  n=%-3d %s  %s\n", c.Section, padRight(c.SectionPath, width), chars)
+	}
+}
+
+// ---- skill ----
+
+func runSkill(args []string) int {
+	fs := flag.NewFlagSet("skill", flag.ContinueOnError)
+	base := fs.String("url", "", "覆盖服务地址")
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	c, err := newClient()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	if *base != "" {
+		c.base = strings.TrimRight(*base, "/")
+	}
+	body, err := c.get("/skill.md", nil)
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Print(string(body))
+	return exitOK
+}
+
+// ---- token ----
+
+func runToken(args []string) int {
+	fs := flag.NewFlagSet("token", flag.ContinueOnError)
+	show := fs.Bool("show", false, "")
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	dir, err := daemon.ConfigDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	tok := readToken(dir)
+	if tok == "" {
+		fmt.Fprintln(os.Stderr, "还没有 token —— 先运行一次 kb-lite serve，它会生成")
+		return exitError
+	}
+	if *show {
+		fmt.Println(tok)
+		return exitOK
+	}
+	if len(tok) > 6 {
+		tok = tok[:6] + "…（用 --show 看完整的）"
+	}
+	fmt.Println(tok)
+	return exitOK
+}
+
+// ---- add / list（纯配置操作）----
+
+// runAdd 只改 config.json，不碰索引。
+//
+// docs/01 说 CLI 不要直接读写索引（会和 daemon 抢锁、逻辑实现两遍），但 config.json 是例外：
+// v0.1 还没有管理接口（那是 v0.3），不然用户连「把目录加进来」都做不到。
+// daemon 只在启动时读配置，所以改完要重启 —— 这一点会明确打印出来。
+func runAdd(args []string) int {
+	fs := flag.NewFlagSet("add", flag.ContinueOnError)
+	name := fs.String("name", "", "")
+	var ignore, include stringsFlag
+	fs.Var(&ignore, "ignore", "额外忽略的 glob，可重复")
+	fs.Var(&include, "include", "覆盖默认收录规则，可重复")
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 1 {
+		fmt.Fprintln(os.Stderr, "用法：kb-lite add <dir> [--name <n>] [--ignore <glob>]... [--include <glob>]...")
+		return exitError
+	}
+
+	root, err := filepath.Abs(rest[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		fmt.Fprintf(os.Stderr, "不是一个目录：%s\n", root)
+		return exitError
+	}
+
+	dir, err := daemon.ConfigDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	cfg, err := daemon.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+
+	kbName := *name
+	if kbName == "" {
+		kbName = filepath.Base(root)
+	}
+	for _, kb := range cfg.KBs {
+		if kb.Name == kbName {
+			fmt.Fprintf(os.Stderr, "已经有同名知识库了：%s（用 --name 换个名字）\n", kbName)
+			return exitError
+		}
+	}
+
+	id, err := daemon.NewKBID()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	cfg.KBs = append(cfg.KBs, daemon.KB{
+		ID: id, Name: kbName, RootPath: root, Enabled: true,
+		Ignore: ignore, Include: include,
+	})
+	if err := cfg.Save(dir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+
+	scanned, scanErr := daemon.Scan(daemon.ScanOptions{
+		Root: root, Include: include, Ignore: ignore,
+	})
+	if scanErr != nil {
+		fmt.Fprintf(os.Stderr, "已写入配置，但扫描失败：%v\n", scanErr)
+		return exitError
+	}
+
+	fmt.Printf("已添加「%s」→ %s（扫到 %d 个文件）\n", kbName, root, len(scanned.Files))
+	if len(scanned.Warnings) > 0 {
+		fmt.Printf("  其中 %d 条告警（尺寸超限 / 编码失败之类），启动后可在日志里看到\n", len(scanned.Warnings))
+	}
+	if daemonRunning(cfg.Port) {
+		fmt.Println("⚠ kb-lite 正在运行：重启 serve 之后才能看到这个知识库")
+	} else {
+		fmt.Println("下一步：kb-lite serve")
+	}
+	return exitOK
+}
+
+func runList(args []string) int {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	dir, err := daemon.ConfigDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	cfg, err := daemon.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	if len(cfg.KBs) == 0 {
+		fmt.Println("还没有知识库。用 kb-lite add <目录> 添加一个。")
+		return exitOK
+	}
+
+	width := 0
+	for _, kb := range cfg.KBs {
+		if w := displayWidth(kb.Name); w > width {
+			width = w
+		}
+	}
+	for _, kb := range cfg.KBs {
+		state := "已开启"
+		if !kb.Enabled {
+			state = "已关闭"
+		}
+		fmt.Printf("%s  %s  %s\n", padRight(kb.Name, width), state, kb.RootPath)
+	}
+	return exitOK
+}
+
+func daemonRunning(port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 200*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
