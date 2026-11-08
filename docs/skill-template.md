@@ -39,7 +39,7 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 { "ok": true, "results": [
   { "title": "运维手册", "path": "ops/runbook.md", "rev": "a1b2c3d4", "score": 42,
     "summary": "线上环境的操作手册。",
-    "toc": "0 导言 · 412 字\n1 上线流程 · 1203 字\n2 回滚 · 空\n3 快速回滚 · 380 字" }
+    "toc": "1 上线流程 · 1203 字\n2 回滚 · 空\n  3 快速回滚 · 380 字" }
 ] }
 ```
 

@@ -31,7 +31,7 @@ $ curl "$BASE/kb/我的笔记/search?q=部署流程&q=deploy"
 [
   { "title": "运维手册", "path": "ops/runbook.md", "score": 33,
     "summary": "线上环境的上线、回滚与排障流程。",
-    "toc": "0 导言 · 412 字\n1 上线流程 · 1203 字\n2 回滚 · 380 字\n3 常见故障 · 空" }
+    "toc": "1 上线流程 · 1203 字\n2 回滚 · 380 字\n  3 常见故障 · 空" }
 ]
 
 $ curl "$BASE/kb/我的笔记/entry/ops/runbook.md/section?n=2"

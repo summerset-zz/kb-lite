@@ -125,7 +125,7 @@ D:\notes                        128 篇 · 743 节 · 2.1 MB
 GET /kb/我的笔记/entry/ops/runbook.md
 {
   "title": "运维手册", "path": "ops/runbook.md", "rev": "a1b2c3d4",
-  "sections": 4, "toc": "0 导言 · 412 字\n1 上线流程 · 1203 字\n…"
+  "sections": 4, "toc": "1 上线流程 · 1203 字\n2 回滚 · 空\n  3 快速回滚 · 380 字"
 }
 
 ── 切片边界 ──────────────────────────────
