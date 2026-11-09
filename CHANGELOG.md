@@ -44,6 +44,10 @@ v0.3 = **界面**：一个不想碰命令行的人，从双击 exe 到跑通向�
 
 ### Fixed
 
+- `/kb`（没带库名）不再落到 UI 兜底：返回 `404 kb_name_required` 并指向 `/skill.md`。
+  以前调错地址的 agent 会拿到一页 HTML，以为接口通了，然后在解析阶段莫名失败。
+- 向导完成页的“命令示例”原来写的是 `curl .../kb`（不存在这个接口，拿回来是 HTML），
+  改成 `curl .../skill.md`，与启动横幅里那句一致。
 - 读取密码可以热更新了（`Handler.ReadToken` / `SetReadToken` + 一把 RWMutex）。
   换密码后 `/kb/*` 与 `/skill.md` 立刻按新密码判定，不用重启。
 

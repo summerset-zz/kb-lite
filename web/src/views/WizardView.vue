@@ -94,7 +94,7 @@ const needsAuth = computed(() => props.status.requireToken || lan.value)
 
 const cmdText = computed(
   () =>
-    `curl -s "${base.value}/kb"` +
+    `curl -s "${base.value}/skill.md"` +
     (needsAuth.value ? ' \\\n  -H "Authorization: Bearer <访问密码>"' : ''),
 )
 

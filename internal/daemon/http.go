@@ -161,6 +161,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/shutdown", h.handleShutdown)
 	// `/` 兜底托管 UI：具体路由（/api/…、/kb/…、/skill.md）优先级更高。
 	mux.HandleFunc("GET /", h.handleUI)
+	// 只有 `/kb`（没有库名）也要拦：否则它会落到 UI 兜底，让调错地址的 agent
+	// 拿到一页 HTML 还以为接口通了。docs/04 没有这个路由，agent 的入口是 /skill.md。
+	mux.HandleFunc("GET /kb", h.handleKBIndexHint)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
@@ -470,6 +473,15 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "没有这个接口："+seg)
 	}
+}
+
+// handleKBIndexHint 是 `GET /kb` 的兜底：这里没有接口，只有 `/kb/{name}/...`。
+//
+// 存在的理由很实际：地址写错时它会落到 UI 兜底，agent 拿到一页 HTML 会以为“接口通了”，
+// 然后在解析阶段莫名其妙地失败。给一条能读懂的 404 比什么都强。
+func (h *Handler) handleKBIndexHint(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotFound, "kb_name_required",
+		"这里要写知识库名：/kb/{name}/search、/kb/{name}/entry/…。不知道名字就先看 /skill.md。")
 }
 
 // handleStatus 是 `GET /api/status`（docs/04）。
