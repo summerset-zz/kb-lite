@@ -108,6 +108,13 @@ export const api = {
   installSkill: (kind: 'read' | 'authoring', targets: string[]) =>
     request<{ installed: SkillTarget[] }>('POST', '/api/skill/install', { kind, targets }),
 
+  /** 暂停与恢复只影响给 AI 的那一面；索引与进程都不动。 */
+  setPaused: (paused: boolean) =>
+    request<{ ok: boolean; paused: boolean; message: string }>(
+      'POST',
+      paused ? '/api/pause' : '/api/resume',
+    ),
+
   /** 读取密码：show 拿当前那把，rotate 换一把（旧的立刻失效）。 */
   authToken: (action: 'show' | 'rotate') =>
     request<{ ok: boolean; token: string; rotated?: boolean }>('POST', '/api/auth/token', { action }),

@@ -29,6 +29,8 @@ export interface Status {
   lanExposed: boolean
   requireToken: boolean
   adminAuth: boolean
+  /** 暂停时给 AI 的那一面返回 503；界面与 /api/* 照常。 */
+  paused: boolean
   kbs: KB[]
 }
 

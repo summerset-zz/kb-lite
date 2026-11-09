@@ -68,6 +68,9 @@ type Handler struct {
 	// port 与 lanExposed 跟着监听一起变（设置页改完当场重开），所以不能用 opts 里的副本。
 	port       atomic.Int32
 	lanExposed atomic.Bool
+	// paused 只夹住给 AI 用的那一面（docs/04）：界面与 /api/* 照常，
+	// 否则用户看不到“继续使用”按钮，`kb-lite start` 也没地方可调。
+	paused atomic.Bool
 }
 
 // NewHandler 建一个 Handler。
@@ -103,6 +106,12 @@ func (h *Handler) Port() int { return int(h.port.Load()) }
 
 // LANExposed 返回当前是否绑在非回环地址上。
 func (h *Handler) LANExposed() bool { return h.lanExposed.Load() }
+
+// SetPaused 暂停或恢复给 AI 的那一面。索引与进程都不动，恢复不用重新整理。
+func (h *Handler) SetPaused(v bool) { h.paused.Store(v) }
+
+// Paused 返回当前是否暂停。
+func (h *Handler) Paused() bool { return h.paused.Load() }
 
 // SetRequireToken 热更新读取密码开关（设置页保存后调用）。
 func (h *Handler) SetRequireToken(v bool) { h.requireToken.Store(v) }
@@ -143,6 +152,12 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
 	mux.HandleFunc("POST /api/auth/token", h.handleAuthToken)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
+	mux.HandleFunc("POST /api/pause", func(w http.ResponseWriter, r *http.Request) {
+		h.handlePaused(w, r, true)
+	})
+	mux.HandleFunc("POST /api/resume", func(w http.ResponseWriter, r *http.Request) {
+		h.handlePaused(w, r, false)
+	})
 	mux.HandleFunc("POST /api/shutdown", h.handleShutdown)
 	// `/` 兜底托管 UI：具体路由（/api/…、/kb/…、/skill.md）优先级更高。
 	mux.HandleFunc("GET /", h.handleUI)
@@ -196,6 +211,13 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 				writeError(w, http.StatusUnauthorized, "unauthorized", "缺少或错误的访问密码。")
 				return
 			}
+		}
+		// 5. 暂停（docs/04）：只挡给 AI 用的那一面。界面与 /api/* 照常，
+		//    否则用户看不到“继续使用”，`kb-lite start` 也没有可以调的通道。
+		if h.paused.Load() && isReadPath(r.URL.Path) {
+			writeError(w, http.StatusServiceUnavailable, "paused",
+				"服务已经暂停，AI 现在连不上。界面里点“继续使用”就能恢复。")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -457,7 +479,9 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	// 端口要取“现在实际监听的那个”：热重开之后 opts.Port 是旧值，
 	// 而 UI 正是从这个字段拼地址的（横幅、页头、复制的那句口令）。
-	writeJSON(w, http.StatusOK, h.mgr.Status(h.Port(), h.opts.DBMode, h.requireToken.Load()))
+	st := h.mgr.Status(h.Port(), h.opts.DBMode, h.requireToken.Load())
+	st.Paused = h.paused.Load()
+	writeJSON(w, http.StatusOK, st)
 }
 
 // handleManifest 是 `GET /kb/{name}/manifest`（docs/04）。

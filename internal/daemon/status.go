@@ -16,8 +16,10 @@ type Status struct {
 	// RequireToken 是**实际生效**的读取密码开关（已含“绑局域网必定开”）。
 	RequireToken bool `json:"requireToken"`
 	// AdminAuth 恒为 true：管理面永远要凭据，这不是可选项。
-	AdminAuth bool       `json:"adminAuth"`
-	KBs       []StatusKB `json:"kbs"`
+	AdminAuth bool `json:"adminAuth"`
+	// Paused 为真时给 AI 的那一面（/kb/*、/skill.md）返回 503 paused。
+	Paused bool       `json:"paused"`
+	KBs    []StatusKB `json:"kbs"`
 }
 
 // StatusKB 是一个知识库的状态。

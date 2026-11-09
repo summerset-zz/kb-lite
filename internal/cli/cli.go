@@ -76,7 +76,9 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --target dsh|claude|both  装到哪，默认 dsh
     --url <base>            覆盖服务地址
   token [--show] [--rotate] 看/换读取面的访问密码（管理凭据不提供打印）
-  stop                      请求服务退出（同 quit）
+  stop                      暂停：AI 那一面返回 503，进程与索引都还在
+  start                     从暂停恢复（不重新整理）
+  quit                      退出：关监听、关记录文件、进程结束
   version
 `
 
@@ -105,8 +107,12 @@ func Run(args []string) int {
 		return runReindex(rest)
 	case "settings":
 		return runSettings(rest)
-	case "stop", "quit":
-		return runStop(rest)
+	case "stop":
+		return runPause(rest, true)
+	case "start":
+		return runPause(rest, false)
+	case "quit":
+		return runQuit(rest)
 	case "list":
 		return runList(rest)
 	case "status":

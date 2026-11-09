@@ -107,6 +107,22 @@ async function rerunWizard() {
   }
 }
 
+async function togglePause() {
+  busy.value = 'pause'
+  error.value = ''
+  notice.value = ''
+  try {
+    const next = !props.status.paused
+    await api.setPaused(next)
+    notice.value = next ? s.settings.paused : '已恢复，AI 现在可以查了。'
+    await refresh()
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : s.errors.generic
+  } finally {
+    busy.value = ''
+  }
+}
+
 const quitOpen = ref(false)
 async function quit() {
   busy.value = 'quit'
@@ -223,6 +239,19 @@ function setTheme(v: string) {
 
     <!-- 其他 -->
     <section class="card p-4 mt-4 space-y-4">
+      <div>
+        <p class="text-sm font-medium">{{ s.settings.service }}</p>
+        <p class="muted text-xs mt-0.5">{{ s.settings.pauseHint }}</p>
+        <button
+          class="btn btn-sm mt-2"
+          type="button"
+          :disabled="busy !== ''"
+          @click="togglePause"
+        >
+          {{ status.paused ? s.settings.resume : s.settings.pause }}
+        </button>
+      </div>
+
       <div>
         <p class="text-sm font-medium">{{ s.settings.theme }}</p>
         <div class="flex gap-2 mt-2">

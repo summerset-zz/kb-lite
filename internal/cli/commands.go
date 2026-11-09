@@ -856,9 +856,38 @@ func runSettings(args []string) int {
 	return exitOK
 }
 
-// runStop 请求 daemon 退出（关监听、关记录文件、进程结束）。
-func runStop(args []string) int {
-	fs := flag.NewFlagSet("stop", flag.ContinueOnError)
+// runPause 处理 `stop`（暂停）与 `start`（恢复）。
+//
+// 暂停的是**给 AI 的那一面**：`/kb/*` 与 `/skill.md` 返回 503，界面与 /api/* 照常。
+// 监听不关 —— 否则 `start` 就没有可以唤醒它的通道（docs/05）。
+func runPause(args []string, paused bool) int {
+	fs := flag.NewFlagSet("pause", flag.ContinueOnError)
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+	path := "/api/resume"
+	if paused {
+		path = "/api/pause"
+	}
+	if _, err := c.admin(http.MethodPost, path, nil); err != nil {
+		return fail(err)
+	}
+	if paused {
+		fmt.Println("服务已经暂停，AI 现在连不上。用 kb-lite start 恢复。")
+	} else {
+		fmt.Println("已恢复，AI 现在可以查了。索引还在，没有重新整理。")
+	}
+	return exitOK
+}
+
+// runQuit 请求 daemon 退出（关监听、关记录文件、进程结束）。
+func runQuit(args []string) int {
+	fs := flag.NewFlagSet("quit", flag.ContinueOnError)
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError

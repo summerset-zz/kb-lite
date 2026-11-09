@@ -105,6 +105,11 @@ export const s = {
     themeDark: '深色',
     quit: '退出 kb-lite',
     quitHint: '退出后 AI 就连不上了。关掉浏览器标签不算退出。',
+    service: '服务',
+    paused: '服务已经暂停，AI 现在连不上。',
+    resume: '继续使用',
+    pause: '暂停服务',
+    pauseHint: '暂停只是让 AI 连不上，索引和进程都还在。点“继续使用”立刻恢复，不用重新整理。',
   },
 
   skill: {
@@ -144,5 +149,4 @@ export const s = {
   errors: {
     daemonDown: '连不上服务。它可能已经退出了。',
     generic: '出错了',
-  },
-}
+  },}

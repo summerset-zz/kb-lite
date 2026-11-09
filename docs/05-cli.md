@@ -90,9 +90,10 @@ kb-lite sync <name> [--wait]
    # 只 pull，不 add/commit/push。冲突或非 fast-forward 时不强行处理，
    # 打印 git 的输出并退出码 2，让用户自己解决。
 kb-lite stop
-   # 暂停服务：关掉 HTTP 监听，**进程、索引、托盘都保留**；再 `start` 立刻恢复（不重切）
+   # 暂停服务：AI 那一面（/kb/*、/skill.md）返回 503，**进程、索引、托盘、管理面都保留**；
+   # 再 `start` 立刻恢复，不重切。监听不关 —— 否则 `start` 就没有可以唤醒它的通道
 kb-lite start
-   # 从暂停状态恢复监听（不传参时是前台进程，所以不要指望它后台跑）
+   # 从暂停状态恢复（打 /api/resume；不传参时是前台进程，所以不要指望它后台跑）
 kb-lite quit
    # 关监听 → 关记录文件 → 进程结束
 kb-lite version

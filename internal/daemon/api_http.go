@@ -288,6 +288,18 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handlePaused 处理 `POST /api/pause` 与 `/api/resume`（docs/04）。
+//
+// 只切换“给 AI 的那一面”：监听、索引、进程、界面全都不动，恢复不需要重新整理。
+func (h *Handler) handlePaused(w http.ResponseWriter, r *http.Request, paused bool) {
+	h.SetPaused(paused)
+	msg := "已恢复，AI 现在可以查了。"
+	if paused {
+		msg = "服务已经暂停，AI 现在连不上。"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "paused": paused, "message": msg})
+}
+
 // handleShutdown 是 `POST /api/shutdown`：优雅退出（UI 的“退出”按钮与 `kb-lite stop`）。
 func (h *Handler) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
