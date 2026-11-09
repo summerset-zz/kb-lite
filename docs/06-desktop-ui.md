@@ -117,14 +117,18 @@ kb-lite serve --open     # 额外打开默认浏览器到 UI
 
 **第 3 步 · 第一个知识库、开始整理、完成页**
 
-完成页给出四个按钮，只复制，不下载文件：
+完成页给出四段“给 AI 用的东西”。每一段**先把内容摊开**（`<pre>`，长文本只露前 10 行并注明
+“点复制拿到全文”），再配一个复制按钮。只给按钮不给内容，用户不知道会复制到什么，也不敢点。
+四段都是复制，不下载文件：
 
-| 按钮 | 内容 |
-|---|---|
-| 复制命令示例 | 一条可直接粘贴执行的命令。按当前访问密码设置决定是否带 `Authorization` |
-| 复制给 AI 的说明书 | `/skill.md` 的全文 |
-| 复制 MCP 配置 | 可直接存成 `.mcp.json` 的 JSON，指向本地 HTTP 地址 |
-| 复制整理说明 | 写作 skill（`/authoring.md`）的全文 |
+| 标题 | 内容 | 次要说明 |
+|---|---|---|
+| 给 AI 的说明书 | `/skill.md` 的全文 | 放在 AI 工具认识的目录里，它就会用这个知识库 |
+| MCP 配置 | 可直接存成 `.mcp.json` 的 JSON，指向本地 HTTP 地址 | 存成 .mcp.json，支持 MCP 的工具会认它 |
+| 整理说明 | 写作 skill（`/authoring.md`）的全文 | 交给另一个 AI，让它把 docx、pdf 这些整理成能进知识库的格式 |
+| 命令示例 | 一条可直接粘贴执行的命令，按当前访问密码设置决定是否带 `Authorization` | 想自己试试接口时用 |
+
+文字块上方统一加一行（§8.5 的原文）：这一段是给 AI 用的，你不用看懂。点“复制”把它粘给 AI 就行。
 
 第 3 步是产品的最后一公里。用户卡住的从来不是接口设计，而是怎么接进自己的 AI。
 
@@ -158,15 +162,37 @@ D:\notes                     128 篇 · 743 节 · 2.1 MB
 
 | 按钮主文本 | 次要文本 | 装什么 | 装到哪 |
 |---|---|---|---|
-| 安装 SKILL / 更新 SKILL | 让 AI 能查这个知识库 | `/skill.md` 渲染结果 | `~/.agents/skills/kb-lite/SKILL.md`（DSH 读这里），可选再装一份到 `~/.claude/skills/kb-lite/SKILL.md` |
-| 安装整理 SKILL / 更新整理 SKILL | 让 AI 把文件整理成这个格式 | `docs/authoring-template.md` 渲染结果 | `~/.agents/skills/kb-lite-authoring/SKILL.md` |
+| 安装检索 SKILL / 更新检索 SKILL | 让 AI 能查这个知识库 | `/skill.md` 渲染结果 | `~/.agents/skills/kb-lite/SKILL.md`（DSH 读这里），可选再装一份到 `~/.claude/skills/kb-lite/SKILL.md` |
+| 安装整理 SKILL / 更新整理 SKILL | 让 AI 把你的文件整理进知识库 | `docs/authoring-template.md` 渲染结果 | `~/.agents/skills/kb-lite-authoring/SKILL.md` |
 
-每个按钮下面给一句可以直接说给 AI 听的话，点一下复制：
+每个按钮下面给一句可以直接说给 AI 听的话，**原句显示在屏幕上**，旁边一个复制按钮
+（只给按钮不给内容，用户不知道会复制到什么，也不敢点）：
 
 - 检索：用 kb-lite 去我的知识库里查一下……
 - 整理：用 kb-lite-authoring 把这些文件整理成可以进知识库的格式
 
-按钮下方一行小字：装好后要重启一次 AI 工具才会生效。
+按钮下方一行小字，照抄：
+
+> 装好后要重启一次 AI 工具才生效：它只在启动时读那个目录。不想重启，就把下面这段话直接贴给它，这一次也能用。
+
+**为什么是“重启”而不是“刷新”**：kb-lite 只做一件事，把文件写进约定目录。
+skill 是 AI 工具自己在**启动时**扫目录发现的（Claude Code 扫 `~/.claude/skills/*/SKILL.md`，
+DSH 扫 `~/.agents/skills/*/SKILL.md`），没有任何进程间接口能让别的程序命令它“重新加载”。
+所以要么重启工具，要么把内容直接贴进对话 —— 后者对任何工具都成立，这也是 UI 上留那句话的原因。
+不得在文案里写“点一下就会立刻生效”，那是做不到的。
+
+```ts
+// AI 工具那一侧大致是这个样子：启动时扫一遍，之后不再看磁盘。
+// kb-lite 无法干预这一步，只能把文件放对位置。
+const skillDirs = [join(homedir(), '.agents', 'skills'), join(homedir(), '.claude', 'skills')]
+const skills = skillDirs.flatMap((dir) =>
+  readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => parseFrontmatter(readFileSync(join(dir, d.name, 'SKILL.md'), 'utf8')))
+    .filter((sk) => sk.name && sk.description),
+)
+// 现在 skills 进了这次会话的上下文；工具不重启就不会再读第二遍
+```
 
 > [!NOTE]
 > 两份 SKILL 必须分开装（ADR-017）。把写作规范塞进检索 SKILL 里，agent 会在只想查东西的时候也去改用户的文件。

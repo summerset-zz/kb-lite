@@ -48,11 +48,15 @@ export const s = {
     pickFolderHint: '我们会把它整理成 AI 能查的形式。文件不会被改动。',
     name: '名称',
     done: '准备好了',
-    doneHint: '下面这几个按钮的东西都是给 AI 的，你不用看懂。',
-    copySkill: '复制给 AI 的说明书',
-    copyMcp: '复制 MCP 配置',
-    copyCurl: '复制命令示例',
-    copyAuthoring: '复制整理说明',
+    doneHint: '下面这几段都是给 AI 用的，你不用看懂。想用的时候点“复制”粘给它。',
+    copyCurl: '命令示例',
+    copyCurlHint: '想自己试试接口时用',
+    copySkill: '给 AI 的说明书',
+    copySkillHint: '放在 AI 工具认识的目录里，它就会用这个知识库',
+    copyMcp: 'MCP 配置',
+    copyMcpHint: '存成 .mcp.json，支持 MCP 的工具会认它',
+    copyAuthoring: '整理说明',
+    copyAuthoringHint: '交给另一个 AI，让它把 docx、pdf 这些整理成能进知识库的格式',
   },
 
   kbs: {
@@ -104,15 +108,18 @@ export const s = {
   },
 
   skill: {
-    installRead: '安装 SKILL',
+    installRead: '安装检索 SKILL',
     installReadHint: '让 AI 能查这个知识库',
     installAuthoring: '安装整理 SKILL',
-    installAuthoringHint: '让 AI 把文件整理成这个格式',
-    afterInstall: '装好后要重启一次 AI 工具才会生效。',
+    installAuthoringHint: '让 AI 把你的文件整理进知识库',
+    // 这句话必须说准：我们只能把文件写进去，能不能认到是 AI 工具自己的事。
+    afterInstall:
+      '装好后要重启一次 AI 工具才生效：它只在启动时读那个目录。不想重启，就把下面这段话直接贴给它，这一次也能用。',
     installed: '已安装到',
+    promptReadHint: '把这句话发给 AI，它就会来查这个知识库',
     promptRead: '用 kb-lite 去我的知识库里查一下……',
+    promptAuthoringHint: '把这句话发给另一个 AI，让它把文件整理成能进知识库的样子',
     promptAuthoring: '用 kb-lite-authoring 把这些文件整理成可以进知识库的格式',
-    copyPrompt: '复制这句话',
   },
 
   about: {

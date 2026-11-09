@@ -7,7 +7,14 @@ import (
 )
 
 // 没构建过 UI 时，`GET /` 要给出一个能看懂的占位页，而不是 404 或空白。
+//
+// 这个断言只能在“没构建过”的仓库上跑：`internal/daemon/static/` 一旦有产物，
+// 服务会直接吐真界面。所以有产物就跳过，占位页本身由 TestUIFallbackHTML 盯。
 func TestUIServesFallbackPage(t *testing.T) {
+	if _, err := staticFS.ReadFile("static/index.html"); err == nil {
+		t.Skip("这个工作区已经构建过界面，占位页路径不会被走到")
+	}
+
 	srv := newTestServerWith(t, testServerOpts{features: DefaultFeatures, requireToken: true})
 
 	status, _, raw := doRequest(t, srv, "/", func(r *http.Request) {
@@ -18,6 +25,15 @@ func TestUIServesFallbackPage(t *testing.T) {
 	}
 	if !strings.Contains(raw, "界面还没有构建") {
 		t.Errorf("占位页内容不对：%s", raw)
+	}
+}
+
+// 占位页的文案与命令：用户照着这三行就能把界面构建出来。
+func TestUIFallbackHTML(t *testing.T) {
+	for _, want := range []string{"界面还没有构建", "pnpm install", "pnpm build", "internal/daemon/static/"} {
+		if !strings.Contains(uiFallbackHTML, want) {
+			t.Errorf("占位页里应该看到 %q", want)
+		}
 	}
 }
 

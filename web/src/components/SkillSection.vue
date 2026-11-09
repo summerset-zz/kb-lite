@@ -2,12 +2,12 @@
 import { ref } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
+import CopyInline from './CopyInline.vue'
 
 const alsoClaude = ref(false)
 const busy = ref('')
 const error = ref('')
 const done = ref<{ kind: string; paths: string[] } | null>(null)
-const copied = ref('')
 
 async function install(kind: 'read' | 'authoring') {
   busy.value = kind
@@ -20,18 +20,6 @@ async function install(kind: 'read' | 'authoring') {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
   } finally {
     busy.value = ''
-  }
-}
-
-async function copyPrompt(text: string, key: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    copied.value = key
-    window.setTimeout(() => {
-      if (copied.value === key) copied.value = ''
-    }, 1600)
-  } catch {
-    error.value = '这句话没复制成。手动选中复制吧。'
   }
 }
 </script>
@@ -49,13 +37,6 @@ async function copyPrompt(text: string, key: string) {
           {{ s.skill.installRead }}
         </button>
         <p class="muted text-xs mt-1">{{ s.skill.installReadHint }}</p>
-        <button
-          class="btn btn-ghost btn-xs"
-          type="button"
-          @click="copyPrompt(s.skill.promptRead, 'read')"
-        >
-          {{ copied === 'read' ? s.common.copied : s.skill.copyPrompt }}
-        </button>
       </div>
 
       <div>
@@ -68,13 +49,6 @@ async function copyPrompt(text: string, key: string) {
           {{ s.skill.installAuthoring }}
         </button>
         <p class="muted text-xs mt-1">{{ s.skill.installAuthoringHint }}</p>
-        <button
-          class="btn btn-ghost btn-xs"
-          type="button"
-          @click="copyPrompt(s.skill.promptAuthoring, 'authoring')"
-        >
-          {{ copied === 'authoring' ? s.common.copied : s.skill.copyPrompt }}
-        </button>
       </div>
     </div>
 
@@ -89,6 +63,24 @@ async function copyPrompt(text: string, key: string) {
       <p>{{ s.skill.installed }}：</p>
       <p v-for="p in done.paths" :key="p" class="mono break-all">{{ p }}</p>
       <p v-if="done.paths.length === 0" class="muted">一个都没写成，检查一下设置里有没有写权限。</p>
+    </div>
+
+    <!-- 不想重启的话，这两句话直接贴给 AI 也能用（docs/06 §5.2） -->
+    <div class="mt-3 grid grid-cols-1 gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs muted flex-1 min-w-0">{{ s.skill.promptReadHint }}</span>
+          <CopyInline :text="s.skill.promptRead" />
+        </div>
+        <p class="mono text-xs mt-1">{{ s.skill.promptRead }}</p>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs muted flex-1 min-w-0">{{ s.skill.promptAuthoringHint }}</span>
+          <CopyInline :text="s.skill.promptAuthoring" />
+        </div>
+        <p class="mono text-xs mt-1">{{ s.skill.promptAuthoring }}</p>
+      </div>
     </div>
 
     <p v-if="error" class="note mt-2 text-sm">{{ error }}</p>

@@ -178,6 +178,29 @@ body {
   font-size: 13px;
 }
 
+/* 给 AI 用的那一段的预览：可滚动、能换行、不撑破布局。 */
+.copy-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.preview {
+  margin: 0;
+  max-height: 190px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .radio-row {
   display: flex;
   gap: 10px;

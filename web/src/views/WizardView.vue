@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { Status } from '../types'
 import DirPicker from '../components/DirPicker.vue'
+import CopyBlock from '../components/CopyBlock.vue'
 
 const props = defineProps<{ status: Status }>()
 const emit = defineEmits<{ done: [] }>()
@@ -71,39 +72,40 @@ async function finish() {
   }
 }
 
-// ---- 完成页的四个“复制”：只复制，不下载文件（docs/06 §5.1）----
+// ---- 完成页的四段“给 AI 用的东西”：先露内容，再给复制（docs/06 §5.1 ⁄ §8.5）----
 
-const copied = ref('')
-const copyError = ref('')
+const skillText = ref('')
+const authoringText = ref('')
 
-async function copy(kind: 'cmd' | 'skill' | 'mcp' | 'authoring') {
-  copyError.value = ''
-  const base = `http://${location.hostname}:${port.value}`
+// 走到完成页才去取两份文档，不然第一步就多两个请求。
+watch(step, async (v) => {
+  if (v !== 3) return
   try {
-    let text: string
-    if (kind === 'cmd') {
-      const auth =
-        props.status.requireToken || lan.value ? ' \\\n  -H "Authorization: Bearer <访问密码>"' : ''
-      text = `curl -s "${base}/kb"${auth}`
-    } else if (kind === 'mcp') {
-      text = JSON.stringify(
-        { mcpServers: { 'kb-lite': { type: 'http', url: `${base}/skill.md` } } },
-        null,
-        2,
-      )
-    } else {
-      text = await api.docText(kind)
-    }
-    await navigator.clipboard.writeText(text)
-    copied.value = kind
-    window.setTimeout(() => {
-      if (copied.value === kind) copied.value = ''
-    }, 1600)
+    const [read, write] = await Promise.all([api.docText('skill'), api.docText('authoring')])
+    skillText.value = read
+    authoringText.value = write
   } catch {
-    copyError.value =
-      '这段没复制成。你的浏览器可能不允许这个页面写剪贴板，换个浏览器或手动选中复制。'
+    error.value = '两份说明没读出来。刷新一下页面再试。'
   }
-}
+})
+
+const base = computed(() => `http://${location.hostname}:${port.value}`)
+const needsAuth = computed(() => props.status.requireToken || lan.value)
+
+const cmdText = computed(
+  () =>
+    `curl -s "${base.value}/kb"` +
+    (needsAuth.value ? ' \\\n  -H "Authorization: Bearer <访问密码>"' : ''),
+)
+
+// MCP 的工具描述就是这个地址：多数客户端读完它就自己会调。
+const mcpText = computed(() =>
+  JSON.stringify(
+    { mcpServers: { 'kb-lite': { type: 'http', url: `${base.value}/skill.md` } } },
+    null,
+    2,
+  ),
+)
 </script>
 
 <template>
@@ -206,23 +208,22 @@ async function copy(kind: 'cmd' | 'skill' | 'mcp' | 'authoring') {
         <h2 class="font-medium">{{ s.wizard.done }}</h2>
         <p class="muted text-sm mt-1">{{ s.wizard.doneHint }}</p>
 
-        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button class="btn" type="button" @click="copy('cmd')">
-            {{ copied === 'cmd' ? s.common.copied : s.wizard.copyCurl }}
-          </button>
-          <button class="btn" type="button" @click="copy('skill')">
-            {{ copied === 'skill' ? s.common.copied : s.wizard.copySkill }}
-          </button>
-          <button class="btn" type="button" @click="copy('mcp')">
-            {{ copied === 'mcp' ? s.common.copied : s.wizard.copyMcp }}
-          </button>
-          <button class="btn" type="button" @click="copy('authoring')">
-            {{ copied === 'authoring' ? s.common.copied : s.wizard.copyAuthoring }}
-          </button>
-        </div>
-
         <p class="note mt-4 text-sm">{{ s.agentNote }}</p>
-        <p v-if="copyError" class="note mt-2 text-sm">{{ copyError }}</p>
+
+        <div class="mt-3 grid grid-cols-1 gap-3">
+          <CopyBlock
+            :label="s.wizard.copySkill"
+            :hint="s.wizard.copySkillHint"
+            :text="skillText"
+          />
+          <CopyBlock :label="s.wizard.copyMcp" :hint="s.wizard.copyMcpHint" :text="mcpText" />
+          <CopyBlock
+            :label="s.wizard.copyAuthoring"
+            :hint="s.wizard.copyAuthoringHint"
+            :text="authoringText"
+          />
+          <CopyBlock :label="s.wizard.copyCurl" :hint="s.wizard.copyCurlHint" :text="cmdText" />
+        </div>
       </section>
 
       <p v-if="error" class="note mt-4 text-sm">{{ error }}</p>

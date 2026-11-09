@@ -19,6 +19,34 @@ const (
 	testAdminToken = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 )
 
+// closedPort 返回一个刚放掉的端口。
+//
+// 这台机器上真的可能有个 kb-lite 在 7331 上跑着。离线降级的测试如果直接用默认端口，
+// 就会連到一个真服务上（还被访问密码挡住），变成假失败。
+func closedPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+	return port
+}
+
+// offlineConfig 是“这台机器上没服务在跑”的配置：知识库摆好，端口指向空号。
+func offlineConfig(t *testing.T, dir, kbRoot string) *daemon.Config {
+	t.Helper()
+
+	cfg := daemon.DefaultConfig(dir)
+	cfg.Port = closedPort(t)
+	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
 // setup 起一个真的服务，并把配置目录/端口/token 都摆好，让 CLI 能连上。
 func setup(t *testing.T) string {
 	t.Helper()
@@ -193,11 +221,7 @@ func TestSearchFallsBackOffline(t *testing.T) {
 	kbRoot := filepath.Join(dir, "kb")
 	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 离线也能用\n---\n\n这里有个少见词：鲸落。\n")
 
-	cfg := daemon.DefaultConfig(dir)
-	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
-	if err := cfg.Save(dir); err != nil {
-		t.Fatal(err)
-	}
+	offlineConfig(t, dir, kbRoot)
 
 	// 刻意不起服务。
 	out, code := capture(t, func() int { return Run([]string{"search", "笔记", "鲸落"}) })
@@ -218,11 +242,7 @@ func TestSkillOutWritesUTF8WithoutBOM(t *testing.T) {
 
 	kbRoot := filepath.Join(dir, "kb")
 	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 甲\n---\n\n正文\n")
-	cfg := daemon.DefaultConfig(dir)
-	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
-	if err := cfg.Save(dir); err != nil {
-		t.Fatal(err)
-	}
+	offlineConfig(t, dir, kbRoot)
 
 	outPath := filepath.Join(dir, "skills", "kb-lite", "SKILL.md")
 	if code := Run([]string{"skill", "--out", outPath}); code != exitOK {
@@ -256,8 +276,7 @@ func TestSkillOutIncludesTokenWhenRequired(t *testing.T) {
 
 	kbRoot := filepath.Join(dir, "kb")
 	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 甲\n---\n\n正文\n")
-	cfg := daemon.DefaultConfig(dir)
-	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
+	cfg := offlineConfig(t, dir, kbRoot)
 	cfg.RequireToken = true
 	if err := cfg.Save(dir); err != nil {
 		t.Fatal(err)
@@ -293,13 +312,7 @@ func TestReadTOCSkillFallBackOffline(t *testing.T) {
 	mustWrite(t, filepath.Join(kbRoot, "a.md"),
 		"---\ntitle: 离线读\ntags: [测试]\n---\n\n## 第一节\n\n这里有鲸落两个字。\n")
 
-	cfg := daemon.DefaultConfig(dir)
-	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
-	if err := cfg.Save(dir); err != nil {
-		t.Fatal(err)
-	}
-
-	// 刻意不起服务。
+	offlineConfig(t, dir, kbRoot)
 
 	out, code := capture(t, func() int { return Run([]string{"read", "笔记", "a.md", "--section", "1"}) })
 	if code != exitOK {
@@ -356,6 +369,7 @@ func TestListOutput(t *testing.T) {
 	t.Setenv(daemon.ConfigDirEnv, dir)
 
 	cfg := daemon.DefaultConfig(dir)
+	cfg.Port = closedPort(t)
 	cfg.KBs = []daemon.KB{{ID: "k1", Name: "我的笔记", RootPath: `D:\notes`, Enabled: true}}
 	if err := cfg.Save(dir); err != nil {
 		t.Fatal(err)
