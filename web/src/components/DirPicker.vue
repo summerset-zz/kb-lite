@@ -29,7 +29,14 @@ async function go(path: string) {
 onMounted(() => void go(props.start ?? ''))
 
 const path = computed(() => cur.value?.path ?? '')
-const canUp = computed(() => Boolean(cur.value?.parent))
+
+// 根目录（`D:\`）没有 parent，但还能退回上一屏的盘符列表。
+// 以前只认 parent，于是在盘符根目录上“返回”永远是禁用的，用户卡在那里。
+const upTarget = computed(() => cur.value?.parent ?? '')
+const canUp = computed(() => {
+  if (!path.value) return false // 已经是盘符列表，没有更上一层
+  return Boolean(cur.value?.parent) || Boolean(cur.value?.drives?.length)
+})
 
 // 大盘根目录的 markdown 数量到上限就只说“2000+”，不要再报一个精确值骗人。
 const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
@@ -38,7 +45,7 @@ const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
 <template>
   <div class="card p-4">
     <div class="flex items-center gap-2 flex-wrap">
-      <button class="btn btn-sm" type="button" :disabled="!canUp || loading" @click="go(cur?.parent ?? '')">
+      <button class="btn btn-sm" type="button" :disabled="!canUp || loading" @click="go(upTarget)">
         {{ s.common.back }}
       </button>
       <span class="mono flex-1 truncate" :title="path">{{ path || s.picker.root }}</span>

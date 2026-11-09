@@ -48,6 +48,9 @@ watch(
   max-width: none;
   max-height: 88vh;
   overflow: auto;
+  /* 必须自己写回来：Tailwind 的 preflight 给所有元素 `margin: 0`，
+     把 dialog 靠 margin:auto 居中的那条也一起抹掉了，于是弹框贴在左上角。 */
+  margin: auto;
 }
 .shell::backdrop {
   background: rgb(0 0 0 / 42%);
