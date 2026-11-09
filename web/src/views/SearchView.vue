@@ -13,9 +13,6 @@ const loading = ref(false)
 const error = ref('')
 const resp = ref<SearchResponse | null>(null)
 
-// 哪一条展开了“凭什么排在这”。同时只展开一条：这类表格很宽，展开多了没法看。
-const openPath = ref('')
-
 const hasKB = computed(() => props.status.kbs.length > 0)
 
 /** 把 debug 行按 path 索引，方便每条结果取自己的明细。 */
@@ -40,7 +37,6 @@ async function run() {
   if (!q || !kbName.value) return
   loading.value = true
   error.value = ''
-  openPath.value = ''
   try {
     resp.value = await api.search(kbName.value, q, limit.value)
   } catch (e) {
@@ -54,10 +50,6 @@ async function run() {
 function detailOf(path: string) {
   const row = debugByPath.value.get(path)
   return row?.details?.[0]
-}
-
-function toggle(path: string) {
-  openPath.value = openPath.value === path ? '' : path
 }
 </script>
 
@@ -112,12 +104,11 @@ function toggle(path: string) {
               </p>
             </div>
             <span class="text-sm shrink-0">{{ r.score }} 分</span>
-            <button class="btn btn-sm shrink-0" type="button" @click="toggle(r.path)">
-              {{ s.search.why }} {{ openPath === r.path ? '▴' : '▾' }}
-            </button>
           </div>
 
-          <div v-if="openPath === r.path && detailOf(r.path)" class="mt-3 overflow-auto">
+          <!-- 命中说明默认就摊开：这一页存在的理由就是看它，藏在按钮后面只会多一步。 -->
+          <div v-if="detailOf(r.path)" class="mt-3 overflow-auto">
+            <p class="text-xs muted mb-1">{{ s.search.why }}</p>
             <table class="explain">
               <thead>
                 <tr>

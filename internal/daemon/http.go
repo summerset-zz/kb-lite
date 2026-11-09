@@ -150,6 +150,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/kbs/{name}/index", h.handleKBIndex)
 	mux.HandleFunc("GET /api/fs/list", h.handleFSList)
 	mux.HandleFunc("POST /api/search", h.handleAdminSearch)
+	mux.HandleFunc("POST /api/preview", h.handlePreview)
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
 	mux.HandleFunc("POST /api/auth/token", h.handleAuthToken)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)

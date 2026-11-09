@@ -8,17 +8,18 @@ import AppFooter from './components/AppFooter.vue'
 import WizardView from './views/WizardView.vue'
 import KBListView from './views/KBListView.vue'
 import SearchView from './views/SearchView.vue'
+import AgentView from './views/AgentView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AboutView from './views/AboutView.vue'
 
-type Tab = 'kbs' | 'search' | 'settings' | 'about'
+type Tab = 'kbs' | 'search' | 'agent' | 'settings' | 'about'
 
 const { status, loading, error, refresh, needWizard } = useStatus()
 
 // 页签跟着 URL 锚点走：托盘的“设置”直接打开 /#settings，刷新也不丢当前页。
 const tabFromHash = (): Tab => {
   const h = location.hash.replace('#', '')
-  return h === 'settings' || h === 'about' || h === 'search' ? h : 'kbs'
+  return h === 'settings' || h === 'about' || h === 'search' || h === 'agent' ? h : 'kbs'
 }
 const tab = ref<Tab>(tabFromHash())
 
@@ -92,6 +93,7 @@ async function resume() {
       <main class="flex-1">
         <KBListView v-if="tab === 'kbs'" :status="status" />
         <SearchView v-else-if="tab === 'search'" :status="status" />
+        <AgentView v-else-if="tab === 'agent'" :status="status" />
         <SettingsView v-else-if="tab === 'settings'" :status="status" />
         <AboutView v-else :status="status" />
       </main>

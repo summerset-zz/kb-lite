@@ -1,4 +1,4 @@
-import type { FsList, KB, SearchResponse, SkillTarget, Status } from './types'
+import type { FsList, KB, PreviewResponse, SearchResponse, SkillTarget, Status } from './types'
 import { s } from './strings'
 
 /*
@@ -93,6 +93,10 @@ export const api = {
   /** 搜索调试页用：与 agent 面同一套打分，但走管理面（界面只有管理凭据）。 */
   search: (kb: string, query: string, limit = 5) =>
     request<SearchResponse>('POST', '/api/search', { kb, q: [query], limit }),
+
+  /** Agent 视角页：由服务端带着读取密码去取一次，把原样响应回给界面。 */
+  preview: (body: { kind: string; kb?: string; q?: string; path?: string; n?: number }) =>
+    request<PreviewResponse>('POST', '/api/preview', body),
 
   settings: (patch: {
     port?: number

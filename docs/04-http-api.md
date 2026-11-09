@@ -132,6 +132,30 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 响应与 `GET /kb/{name}/search?format=json&explain=1` **完全一致**（包括 `debug` 里每个关键词
 命中在哪个字段），所以两边不会漂。`q` 最多 5 个，每个不超过 200 字。
 
+### `POST /api/preview`
+
+Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把原样响应回给界面。
+
+```jsonc
+{ "kind": "skill" }                                   // skill | authoring
+{ "kind": "manifest", "kb": "笔记" }
+{ "kind": "search",   "kb": "笔记", "q": "部署 回滚" }
+{ "kind": "section",  "kb": "笔记", "path": "ops/runbook.md", "n": 1 }
+```
+
+响应：
+
+```jsonc
+{ "ok": true, "kind": "skill", "url": "http://127.0.0.1:7331/skill.md",
+  "status": 200, "contentType": "text/markdown; charset=utf-8", "body": "…" }
+```
+
+- 为什么由服务端代取：界面手上只有管理凭据，拿不到读取密码（ADR-015），自己发一定 401。
+  代取才能让人看到**真的**响应，包括 `Content-Type`、状态码，以及暂停时的 `503 paused`。
+- **必须白名单**：只允许上表那几个 `kind`，`kb` 必须真的存在，`path` 必须是相对路径
+  （不以 `/` 开头、不含 `..`）。绝不能变成任意 URL 代理，否则两把钥匙就白分开了。
+- `body` 超过 200 KB 截断并回 `"truncated": true`。
+
 ### `POST /api/settings`
 改端口 / 绑定地址 / 数据库位置 / 读 token 开关。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
 

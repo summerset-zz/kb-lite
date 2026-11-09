@@ -110,3 +110,14 @@ export interface SearchResponse {
   results: SearchResult[]
   debug?: { path: string; details: Detail[]; hits: Hit[][] }[]
 }
+
+/** 服务端代取的一次原始响应（Agent 视角页）。 */
+export interface PreviewResponse {
+  ok: boolean
+  kind: string
+  url: string
+  status: number
+  contentType: string
+  body: string
+  truncated?: boolean
+}

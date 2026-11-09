@@ -227,16 +227,19 @@ const skills = skillDirs.flatMap((dir) =>
 ```
 运维手册                                        12 分
 ops/runbook.md · rev a1b2c3d4 · 3 节
-[凭什么排在这 ▾]
+为什么排在这里
+┌────────┬──────┬──────────┬──────┬──────┬──────┬──────┐
+│ 关键词 │ 标题 │ 条目标题 │ 路径 │ 章节 │ 摘要 │ 全文 │
+├────────┼──────┼──────────┼──────┼──────┼──────┼──────┤
+│ 上线   │      │          │      │  ✓   │  ✓   │  ✓   │
+└────────┴──────┴──────────┴──────┴──────┴──────┴──────┘
+命中要点 1 · 弱命中 2 · 只在全文里 0
 ```
 
-展开「凭什么排在这」是一张表，列从 `docs/03` 的顺序取，不要自己发明：
+**命中说明默认就展开，不做下拉。** 这一页存在的理由就是看它，藏在按钮后面只会多一步操作；
+等真有第二类内容要折叠时再加下拉。列从 `docs/03` 的顺序取，不要自己发明。
 
-| 关键词 | 标题 | 条目标题 | 路径 | 章节 | 摘要 | 全文 |
-|---|---|---|---|---|---|---|
-| 上线 |  |  |  | ✓ | ✓ | ✓ |
-
-表下面一行小字给四个计数：`命中要点 1 · 弱命中 2 · 只在全文里 0`。有 bigram 近似命中时再加一句
+有 bigram 近似命中时在计数下面再加一句：
 `近似命中加了 3 分（中文没有分词，这里按两字一组补的）`。
 
 空结果时的文案照抄：
@@ -248,16 +251,32 @@ ops/runbook.md · rev a1b2c3d4 · 3 节
 数据来源：`POST /api/search`（管理面，UI 专用）。**不要**让 UI 直接打 `/kb/{name}/search`：
 那条要访问密码，而界面手上只有管理凭据。agent 那一面仍然是 `/kb/{name}/search`，两边共用同一套打分。
 
-### 5.4 作者页
-- 头像：`web/public/avatar-summerset.jpg`
-- 名字：Summerset
-- 简介，照抄 GitHub 主页，以后可改：
-  > Hybrid Humanoid including features below: - product manager - designer - front-end coder - musician - fox
-- 邮箱：`kyoinbeijing@163.com`
-- GitHub：https://github.com/summerset-zz
-- 打赏：`web/public/buymecoffee-wx.png`，微信二维码。深色主题下必须包一层白底卡片，否则二维码识别不出来。不要给图片加滤镜。
+### 5.4 Agent 视角页
 
-### 5.4 设置页
+把 **AI 真正收到的东西原样摊开**：用户不用信我们的描述，自己看。
+
+入口：导航第三个页签「给 AI 看」。默认整页只显示一排“取一次”按钮，点了才请求，
+因为四个请求加起来不小，而且用户不是每次都想看。
+
+四块，每块一行标题、一个小按钮「取一次 / 重新取」、状态与 `Content-Type`，然后一个可滚动的 `<pre>`：
+
+| 块 | 实际请求 | 给谁看 |
+|---|---|---|
+| AI 读到的说明书 | `GET /skill.md` | 这是 agent 第一步拿到的东西，里面有地址、密码、库列表 |
+| 不知道搜什么词时 | `GET /kb/{name}/manifest?budget=800` | 预算内裁切的分层概览 |
+| 一次检索 | `GET /kb/{name}/search?q=…&format=json` | 一个词的原始 JSON，含 `toc` |
+| 一次按节阅读 | `GET /kb/{name}/entry/{path}/section?n=1` | agent 读完目录后的第二步 |
+
+每块下面一行小字：
+
+> 这几段是 AI 看到的原文，一个字都没改过。看不懂是正常的。
+
+**谁去发这个请求**：服务端（`POST /api/preview`，管理面）。界面手上只有管理凭据，拿不到读取密码，
+自己发会 401；而“代发”才能看到**真的**响应（包括 `Content-Type`、状态码与边界情况）。
+为此这个接口必须白名单：只允许上表那几个 `kind`，`kb` 必须真的存在，`path` 必须是相对路径，
+绝不能变成任意 URL 代理。响应超过 200 KB 就截断并注明。
+
+### 5.5 设置页
 
 | 项 | 行为 |
 |---|---|
@@ -291,7 +310,17 @@ ops/runbook.md · rev a1b2c3d4 · 3 节
 3. 原子写 `config.json`。
 4. 重新监听。**先绑新地址，成功了才关旧的**；绑不上就回滚，旧地址继续服务并报错。
 
-### 5.5 标题
+### 5.6 作者页
+
+- 头像：`web/public/avatar-summerset.jpg`
+- 名字：Summerset
+- 简介，照抄 GitHub 主页，以后可改：
+  > Hybrid Humanoid including features below: - product manager - designer - front-end coder - musician - fox
+- 邮箱：`kyoinbeijing@163.com`
+- GitHub：https://github.com/summerset-zz
+- 打赏：`web/public/buymecoffee-wx.png`，微信二维码。深色主题下必须包一层白底卡片，否则二维码识别不出来。不要给图片加滤镜。
+
+### 5.7 标题
 
 浏览器里不自绘标题栏。页面顶部一条 `KBLite by Summerset-zz` 的页头即可。浏览器标签页标题写 `KBLite · 我的知识库`，favicon 用 `web/public/favicon.svg`。
 
