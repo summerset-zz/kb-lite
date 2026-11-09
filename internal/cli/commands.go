@@ -288,6 +288,86 @@ func positions(h hitDTO) string {
 	return strings.Join(parts, " ")
 }
 
+// ---- manifest ----
+
+// runManifest 打印 `/kb/{name}/manifest`（docs/04）：按字符预算裁剪的分层概览。
+//
+// 默认输出就是服务端渲染好的文本 —— 这个接口的存在意义是「便宜」，
+// CLI 自己再拼一遍只会多一处会跑偏的渲染。
+func runManifest(args []string) int {
+	fs := flag.NewFlagSet("manifest", flag.ContinueOnError)
+	budget := fs.Int("budget", 0, "")
+	depth := fs.Int("depth", 0, "")
+	prefix := fs.String("prefix", "", "")
+	asJSON := fs.Bool("json", false, "")
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 1 {
+		fmt.Fprintln(os.Stderr, "用法：kb-lite manifest <库名> [--budget 2000] [--prefix <p>] [--depth 3] [--json]")
+		return exitError
+	}
+	name := rest[0]
+
+	q := url.Values{}
+	if *budget > 0 {
+		q.Set("budget", strconv.Itoa(*budget))
+	}
+	if *depth > 0 {
+		q.Set("depth", strconv.Itoa(*depth))
+	}
+	if *prefix != "" {
+		q.Set("prefix", *prefix)
+	}
+	if *asJSON {
+		q.Set("format", "json")
+	}
+
+	if c, err := newClient(); err == nil {
+		body, err := c.get(kbPath(name, "manifest"), q)
+		if err == nil {
+			printRaw(body)
+			return exitOK
+		}
+		var down daemonDownError
+		if !errors.As(err, &down) {
+			return fail(err)
+		}
+	}
+
+	mgr, err := buildLocalIndex()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	kb, ok := mgr.KB(name)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "没有这个知识库：%s（用 kb-lite list 看看有哪些）\n", name)
+		return exitNotFound
+	}
+	m := daemon.BuildManifest(kb, daemon.ManifestOptions{Budget: *budget, Prefix: *prefix, Depth: *depth})
+	if *asJSON {
+		b, err := json.MarshalIndent(m, "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return exitError
+		}
+		printRaw(append(b, '\n'))
+		return exitOK
+	}
+	fmt.Print(m.RenderManifestText())
+	return exitOK
+}
+
+// printRaw 原样输出服务端内容，缺换行时补一个（不然 shell 提示符会贴着最后一行）。
+func printRaw(b []byte) {
+	os.Stdout.Write(b)
+	if len(b) > 0 && b[len(b)-1] != '\n' {
+		fmt.Println()
+	}
+}
+
 // ---- toc ----
 
 func runTOC(args []string) int {
@@ -573,7 +653,7 @@ func fetchSkillText(base string) (string, int) {
 	if base != "" {
 		serviceBase = strings.TrimRight(base, "/")
 	}
-	return daemon.RenderSkillText(mgr.Index(), serviceBase, token, nil), exitOK
+	return daemon.RenderSkillText(mgr.Index(), serviceBase, token, daemon.DefaultFeatures), exitOK
 }
 
 // ---- token ----

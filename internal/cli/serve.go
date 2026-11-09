@@ -71,12 +71,14 @@ func runServe(args []string) int {
 
 	// 缓存是**可选的加速**（ADR-003）：打不开就纯内存跑，不要因为缓存坏了就起不来。
 	opts := daemon.BuildOptions{Force: *force}
+	dbMode := "memory"
 	if !*noDB {
 		store, err := daemon.OpenStore(cfg.DBPath)
 		switch {
 		case err == nil:
 			defer store.Close()
 			opts.Store = store
+			dbMode = "sqlite"
 		case errors.Is(err, daemon.ErrDBUnavailable), errors.Is(err, daemon.ErrDBNeedsUpgrade):
 			fmt.Fprintf(os.Stderr, "%v —— 本次不落盘\n", err)
 		default:
@@ -116,8 +118,9 @@ func runServe(args []string) int {
 	handler := daemon.NewHandler(mgr, token, daemon.HandlerOptions{
 		Port:       actualPort,
 		LANExposed: exposed,
-		// v0.1 没有 manifest（docs/09 排在 v0.2），所以 /skill.md 里那一段不渲染。
-		Features: map[string]bool{},
+		DBMode:     dbMode,
+		// 路由都存在了，所以 /skill.md 里 manifest 那一段会渲染出来（docs/09 v0.2）。
+		Features: daemon.DefaultFeatures,
 	})
 	srv := &http.Server{
 		Handler:           handler.Routes(),

@@ -12,6 +12,12 @@ import (
 //go:embed skill_template.md
 var skillTemplate string
 
+// DefaultFeatures 是「这个版本已经实现了哪些可选接口」。
+//
+// 只有**真的存在路由**的才能出现在 /skill.md 里（docs/04 末段：加了参数忘了改 skill，
+// 比没有 skill 更糟；反过来写了不存在的接口，agent 会一直撞 404）。
+var DefaultFeatures = map[string]bool{"manifest": true}
+
 // handleSkill 渲染 `GET /skill.md`（docs/04 末段 + docs/skill-template.md）。
 //
 // 「必须与实现同源」这条在这里落成两件事：

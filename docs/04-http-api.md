@@ -39,7 +39,7 @@ token 在 `<配置目录>/token`，`kb-lite token --show` 可打印。详见 [07
 
 ```jsonc
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "port": 7331,
   "dbPath": "C:\\Users\\me\\AppData\\Roaming\\kb-lite\\index.db",
   "dbMode": "sqlite",              // "sqlite" | "memory"
@@ -48,10 +48,16 @@ token 在 `<配置目录>/token`，`kb-lite token --show` 可打印。详见 [07
     { "name": "我的笔记", "id": "k1f3a9c2", "rootPath": "D:\\notes",
       "enabled": true, "state": "ready",       // ready | indexing | error | disabled
       "entries": 128, "sections": 743, "bytes": 2201398,
-      "lastIndexedAt": 1762473600000, "warnings": 2 }
+      "lastIndexedAt": 1762473600000, "warnings": 2,
+      "progress": { "done": 120, "total": 530 }   // 仅 state == indexing 时出现
+    }
   ]
 }
 ```
+
+**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸），这个服务没有兔认证的路由。
+
+`state == "indexing"` 时，`entries/sections` 还是**上一次**索引的数字 —— 调用方据此判断新鲜度（docs/01）。
 
 ### `GET /api/kbs` / `POST /api/kbs`
 
@@ -154,7 +160,7 @@ UI 上必须二次确认，且确认文案要写明「目录里的文件不会�
 
 ### `GET /kb/{name}/manifest`
 
-`?budget=2000&prefix=&depth=3`
+`?budget=2000&prefix=&depth=3&format=text|json`
 
 按**字符预算**返回分层概览，给 agent 在「不知道去哪找」时用：
 
@@ -163,12 +169,19 @@ UI 上必须二次确认，且确认文案要写明「目录里的文件不会�
 ▸ ops/         12 篇   3.4k 字
    运维手册     4 节    1.2k 字
 ▸ guides/      31 篇  22.1k 字
-   … 还有 19 篇
+   … 还有 19 篇没列出（budget=2000，调大 ?budget= 可以看更多）
 ```
 
-- 目录按条目数降序，条目按 `chars` 降序；
-- 超预算时优先折叠叶子，并在末行写明折叠了多少；
-- `format=json` 时返回 `{ dirs: [...], entries: [...] }` 结构。
+- 预算算的是**渲染出来的字符数**（含末尾那句折叠提示），不是字节 —— 实测 `budget=1200` 就是 1200 字以内；
+- 目录按条目数降序（同数量按路径升序），条目按 `chars` 降序（同字数按路径升序）；
+- 目录层级超过 `depth` 的合并到前 `depth` 段（`depth=1` 时 `docs/en/a.md` 归到 `docs`）；
+- 超预算时**优先折叠叶子**：一个目录的条目一旦放不下就整组剩下的折掉（不跳着挑短的 —— 那样列出来的就不再是前缀，渲染会对不齐）；
+  连目录行都放不下时整组不出现（`dirs[].shown = false`），只在末尾那一行里计数；
+- 条目标题超过 **40 字截断加 `…`**：实测语料里有 frontmatter 没换行导致标题变成一整段的条目，一个就能把预算吃光；
+- **默认 `format=text`**：这个接口存在的意义就是便宜，JSON 的括号与键名都是冤枉钱。
+  `format=json` 返回 `{ok, name, entries, sections, budget, prefix, depth, folded, dirs, items, text}` ——
+  `text` 就是默认形态，CLI 与 UI 都用它，**不要各自再写一遍渲染**。
+- `budget` / `depth` 传了非法值不报 400，退回默认（一个写错的参数不值得让调用方去处理错误分支）。
 
 ### `GET /kb/{name}/list`
 

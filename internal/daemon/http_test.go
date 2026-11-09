@@ -18,6 +18,10 @@ const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc
 // 端口必须**先**定下来：Host 校验比的是 `HandlerOptions.Port`，用 httptest 的随机端口
 // 会让所有请求都撞 421。所以先 Listen，再拿端口建 Handler。
 func newTestServer(t *testing.T) *httptest.Server {
+	return newTestServerWithFeatures(t, DefaultFeatures)
+}
+
+func newTestServerWithFeatures(t *testing.T, features map[string]bool) *httptest.Server {
 	t.Helper()
 
 	root := t.TempDir()
@@ -40,7 +44,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	h := NewHandler(mgr, testToken, HandlerOptions{Port: port})
+	h := NewHandler(mgr, testToken, HandlerOptions{Port: port, Features: features})
 	srv := &httptest.Server{Listener: ln, Config: &http.Server{Handler: h.Routes()}}
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -252,9 +256,9 @@ func TestSkillEndpoint(t *testing.T) {
 	if !strings.Contains(string(body), "- 笔记（1 篇") {
 		t.Errorf("KB 清单没渲染出来")
 	}
-	// v0.1 没实现 manifest，文档里就不能出现它。
-	if strings.Contains(string(body), "/manifest") {
-		t.Error("v0.1 的 skill.md 不该提到还没实现的 manifest")
+	// v0.2 的 manifest 已经实装，所以文档里必须有它（路由与文档同源，见 skill.go）。
+	if !strings.Contains(string(body), "/manifest") {
+		t.Error("manifest 已经实现，skill.md 里不该缺这一段")
 	}
 }
 

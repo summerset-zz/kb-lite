@@ -14,6 +14,13 @@
 - `serve --force`：忽略缓存全部重切。`serve` 启动会打印「复用缓存 N 篇，重新切片 M 篇」。
 - `status` 与离线 `search` / `read` / `toc` 也吃缓存（**只读连接**，写索引仍然只允许 daemon）。
 - 删掉的文件在 `tombstone` 留痕，便于诊断「为什么这篇不见了」。
+- **`GET /api/status`**（docs/04）：版本 / 端口 / `dbMode` / 每个 KB 的 `state`、条目数、`lastIndexedAt`、告警数，
+  索引中还会有 `progress`。`state == "indexing"` 时返回的检索结果仍是上一次的 —— 调用方据此判断新鲜度。
+- **`GET /kb/{name}/manifest`**（docs/04）：按**字符预算**裁剪的分层概览，给 agent 在「不知道搜什么词」时用。
+  `?budget=&prefix=&depth=&format=text|json`；默认文本形态（JSON 的括号是冤枉钱）。
+  预算算的是渲染出来的字符数（含末尾折叠提示），实测 `budget=1200` 就在 1200 字以内。
+- `kb-lite manifest <库名> [--budget] [--prefix] [--depth] [--json]`，daemon 没跑时自动离线渲染。
+- `/skill.md` 里 manifest 那一段现在会渲染出来（路由存在才渲染，`DefaultFeatures` 统一管）。
 
 ### Changed
 

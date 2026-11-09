@@ -36,6 +36,8 @@ type HandlerOptions struct {
 	// Features 控制哪些可选路由存在（目前只有 "manifest"）。
 	// /skill.md 的样子由它决定 —— 没实现的东西不能在文档里出现（docs/04 末段）。
 	Features map[string]bool
+	// DBMode 是 "sqlite" | "memory"，只用于 /api/status 报告。
+	DBMode string
 }
 
 // Handler 是全部 HTTP 行为的入口。
@@ -51,6 +53,10 @@ func NewHandler(mgr *Manager, token string, opts HandlerOptions) *Handler {
 	if opts.Port == 0 {
 		opts.Port = DefaultPort
 	}
+	if opts.DBMode == "" {
+		// 没显式说就是内存模式（测试与 --no-db 都是这样）。
+		opts.DBMode = "memory"
+	}
 	return &Handler{
 		mgr:      mgr,
 		token:    token,
@@ -63,6 +69,7 @@ func NewHandler(mgr *Manager, token string, opts HandlerOptions) *Handler {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /skill.md", h.handleSkill)
+	mux.HandleFunc("GET /api/status", h.handleStatus)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
@@ -224,6 +231,18 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, errorResponse{Error: errorBody{Code: code, Message: message}})
 }
 
+// atoiDefault 解析查询参数里的整数，坏值退回默认（不因此报 400：
+// 一个写错的 ?budget= 不值得让调用方去处理错误分支）。
+func atoiDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return def
+}
+
 // ---- 路由分发 ----
 
 func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
@@ -251,11 +270,46 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 	switch seg {
 	case "search":
 		h.handleSearch(w, r, kb)
+	case "manifest":
+		h.handleManifest(w, r, kb)
 	case "entry":
 		h.handleEntryFamily(w, r, kb, tail)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "没有这个接口："+seg)
 	}
+}
+
+// handleStatus 是 `GET /api/status`（docs/04）。
+//
+// 它**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸）之外，
+// 这个服务没有兔认证的路由。
+func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.mgr.Status(h.opts.Port, h.opts.DBMode))
+}
+
+// handleManifest 是 `GET /kb/{name}/manifest`（docs/04）。
+//
+// 默认返回**文本**：这个接口存在的意义就是「便宜」，JSON 的括号与键名都是冤枉钱。
+func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request, kb *KBIndex) {
+	q := r.URL.Query()
+	budget := atoiDefault(q.Get("budget"), 0)
+	depth := atoiDefault(q.Get("depth"), 0)
+	m := BuildManifest(kb, ManifestOptions{Budget: budget, Prefix: q.Get("prefix"), Depth: depth})
+
+	if q.Get("format") == "json" {
+		// text 一并给出：UI 与 CLI 要的就是同一份东西，别让它们各写一遍渲染。
+		type jsonManifest struct {
+			OK bool `json:"ok"`
+			Manifest
+			Text string `json:"text"`
+		}
+		writeJSON(w, http.StatusOK, jsonManifest{OK: true, Manifest: m, Text: m.RenderManifestText()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(m.RenderManifestText()))
 }
 
 // remainderAfterKB 返回 `/kb/<name>/` 之后的**仍处于转义状态**的路径。

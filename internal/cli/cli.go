@@ -51,6 +51,11 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --json                  原样打印服务端 JSON
 
   toc  <name> <path>        只看目录
+  manifest <name>           按预算裁剪的分层概览（不知道搜什么词时用）
+    --budget <n>            默认 2000 字
+    --prefix <p>            只看某个目录
+    --depth <n>             目录展开层级，默认 3
+    --json                  JSON 格式
   read <name> <path>        读一节
     --section <n> | --title <t>
     --offset <n>  --max-chars <n>
@@ -83,6 +88,8 @@ func Run(args []string) int {
 		return runSearch(rest)
 	case "toc":
 		return runTOC(rest)
+	case "manifest":
+		return runManifest(rest)
 	case "read":
 		return runRead(rest)
 	case "skill":
