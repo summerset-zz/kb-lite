@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
+v0.2 = **落盘与增量**：缓存可以随时删，删了只损失启动时间（ADR-003）。
+
 ### Added
 
 - **SQLite 缓存**（`internal/daemon/sqlite.go`）：`modernc.org/sqlite` v1.29.10，纯 Go 无 cgo，五个平台仍然交叉编译通过。
@@ -67,5 +71,11 @@
 - `skill.md` 里的端口/token 是生成时的快照：`add` / 改端口 / `token --rotate` 之后要重新 `skill --out`（v0.2 提供 `kb-lite skill --install`）。
 - 无 SQLite、无增量索引、无 UI。
 
-[Unreleased]: https://github.com/summerset-zz/kb-lite/compare/v0.1.0...HEAD
+### Validated
+
+- 真实语料（251 个文件 / 1.5 MB）：冷启动 185 ms → 二次启动 **64 ms**；复用缓存时 frontmatter 告警一条不少。
+- 五个目标平台交叉编译通过；`-tags nosqlite` 瘦身构建 8.24 MB 也能跑。
+
+[Unreleased]: https://github.com/summerset-zz/kb-lite/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/summerset-zz/kb-lite/releases/tag/v0.2.0
 [0.1.0]: https://github.com/summerset-zz/kb-lite/releases/tag/v0.1.0
