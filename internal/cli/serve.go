@@ -99,7 +99,11 @@ func runServe(args []string) int {
 	}
 
 	// 缓存是**可选的加速**（ADR-003）：打不开就纯内存跑，不要因为缓存坏了就起不来。
-	opts := daemon.BuildOptions{Force: *force}
+	//
+	// ConfigDir 必须给：管理接口（界面里的设置页、建库、换访问密码）改完配置要落盘，
+	// 少了它每一次保存都会回「不知道配置目录，改不了配置」。daemon 层的测试都是自己
+	// 把 ConfigDir 摆好的，所以这个漏项只有真的跑起 serve 才看得见（见 serve_test.go）。
+	opts := daemon.BuildOptions{Force: *force, ConfigDir: dir}
 	dbMode := "memory"
 	if !*noDB {
 		store, err := daemon.OpenStore(cfg.DBPath)
