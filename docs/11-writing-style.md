@@ -75,6 +75,15 @@
 - 标签类只用名词短语（`端口`、`访问密码`），不用句子；
 - 报错必须给出下一步能点的按钮。
 
+## 例外：被代码逐字锁住的文案
+
+下列文本不是文档，是**运行时输出**，改动它等于改行为。它们暂时保留角括号与破折号，
+要统一风格就单独一次提交，并同步代码与测试：
+
+- `internal/daemon/notes.go` 里三段 `note` 与两段 `error` 文案（`notes_test.go` 锁住）；
+- `internal/daemon/skill_template.md` 与 `docs/skill-template.md`（两份必须逐字一致，`skill_template_test.go` 锁住）；
+- `docs/authoring-template.md`（以后也会被服务端渲染，同样要两份同步）。
+
 ## 怎么验
 
 风格没有自动化检查（`warnUnparsedStrong()` 只管加粗是否解析）。改完抽查：

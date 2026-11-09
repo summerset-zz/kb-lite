@@ -10,19 +10,19 @@
 
 ## 必读顺序
 
-1. [`docs/00-vision.md`](./docs/00-vision.md) —— 边界。**先看「明确不做」那一节。**
+1. [`docs/00-vision.md`](./docs/00-vision.md)：边界。**先看“明确不做”那一节。**
 2. [`docs/01-architecture.md`](./docs/01-architecture.md)
-3. [`docs/02-slicing.md`](./docs/02-slicing.md) —— 契约，逐字实现
-4. [`docs/03-search.md`](./docs/03-search.md) —— 算法，逐字实现
-5. [`docs/04-http-api.md`](./docs/04-http-api.md) —— 接口与文案
+3. [`docs/02-slicing.md`](./docs/02-slicing.md)：契约，逐字实现
+4. [`docs/03-search.md`](./docs/03-search.md)：算法，逐字实现
+5. [`docs/04-http-api.md`](./docs/04-http-api.md)：接口与文案
 6. [`docs/05-cli.md`](./docs/05-cli.md) · [`docs/06-desktop-ui.md`](./docs/06-desktop-ui.md) · [`docs/07-security.md`](./docs/07-security.md)
 7. [`docs/08-build-release.md`](./docs/08-build-release.md) · [`docs/09-roadmap.md`](./docs/09-roadmap.md) · [`docs/10-decisions.md`](./docs/10-decisions.md)
-8. [`docs/11-writing-style.md`](./docs/11-writing-style.md) —— 行文风格（角括号 0、不用破折号、用“你”）。**你写的每个中文句子都适用**
+8. [`docs/11-writing-style.md`](./docs/11-writing-style.md)：行文风格（角括号 0、不用破折号、用“你”）。**你写的每个中文句子都适用**
 9. 给 agent 的两份模板：[`docs/skill-template.md`](./docs/skill-template.md)（教**读**）· [`docs/authoring-template.md`](./docs/authoring-template.md)（教**写**）
 
 ## 技术约束（硬）
 
-**语言选型的第一原则是「对用户影响最小」**：用户拿到的应该是一个双击即用的二进制，不该为了跑它去装任何运行时。理由见 [ADR-013](./docs/10-decisions.md#adr-013-服务端用-go)。
+**语言选型的第一原则是“对用户影响最小”**：用户拿到的应该是一个双击即用的二进制，不该为了跑它去装任何运行时。理由见 [ADR-013](./docs/10-decisions.md#adr-013-服务端用-go)。
 
 - **服务端（core / daemon / cli）= Go ≥ 1.22**，产物是**单个静态二进制**，用户侧零安装。
 - **`internal/core` 不得 import `net/http` / `os` / `path/filepath`，不得有运行时依赖。** 切片与打分必须是纯函数（输入字符串 → 输出对象）。
@@ -34,7 +34,7 @@
 - SQLite 拿不到时降级为**纯内存**并正常运行。
 - 前端：`web/`，**Vite + Vue 3 + TS + Tailwind v4**，交互原语用 `reka-ui`（无样式），图标 `@iconify-json/lucide`。
   **禁止 SSR / Nuxt、CSS-in-JS、Element/Naive/Ant 这类整套组件库**（ADR-016）。**禁止 `innerHTML` 渲染用户内容**。
-  产物用 `//go:embed` 打进二进制 —— **用户侧永远不需要 Node**。
+  产物用 `//go:embed` 打进二进制。**用户侧永远不需要 Node**。
 - 托盘：**纯 Go 自己实现**（Windows 先行的 `Shell_NotifyIcon` + 消息循环），**不引入 cgo，不上 Tauri/Electron**（ADR-014）。
   平台代码用 `_windows.go` 包起来，其他平台编空实现。
 - 凭据分两级（ADR-015）：读取面（`/kb/*`、`/skill.md`）的 **token 默认关**，用户可在设置页打开；
@@ -45,12 +45,12 @@
 
 ## 不能自己发挥的地方
 
-以下内容**照抄文档**，不允许「顺手优化」：
+以下内容**照抄文档**，不允许“顺手优化”：
 
 | 项 | 见 |
 |---|---|
 | 章节编号规则（全局扁平、0 = 导言、空节保留） | 02 |
-| 标题取值链与「低信息量文件名」清单 | 02 |
+| 标题取值链与“低信息量文件名”清单 | 02 |
 | 打分权重与字段名 | 03 |
 | `toc` 的文本格式（`<编号> <标题> · 268 字` / `· 空`） | 04 |
 | 三种 `note` 文案 | 04 |
@@ -65,7 +65,7 @@
 
 严格按 [`docs/09-roadmap.md`](./docs/09-roadmap.md)：**v0.1 只做 core + daemon + CLI + `/skill.md`，不要提前写 UI。**
 
-v0.1 的验收标准是「一个真 agent 能靠 `skill.md` 独立完成检索」，达不到就不要进入 v0.2 —— 后面的所有工作都建立在这个协议是对的之上。
+v0.1 的验收标准是“一个真 agent 能靠 `skill.md` 独立完成检索”。达不到就不要进入 v0.2。后面的所有工作都建立在这个协议是对的之上。
 
 ## 开发命令
 

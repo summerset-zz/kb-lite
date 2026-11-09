@@ -2,11 +2,11 @@
 
 > 你的 markdown 目录，一个 curl 就能查的知识库。
 >
-> **零 LLM、零依赖、只读、目录即真相 —— 服务端自带写给 agent 的使用说明。**
+> **零 LLM、零依赖、只读、目录即真相。服务端自带写给 agent 的使用说明。**
 
 把一堆 `.md` 文件指给 kb-lite，它切好、索引好、在本地起一个 HTTP 服务；你的 Agent、聊天机器人、harness 用 `curl` 就能检索和阅读，而且拿到的不是一个语无伦次的片段，而是一份**结构化的目录**，再按编号精确读某一节。
 
-不接向量库，不调大模型，不联网，不要 API key。删掉索引文件也不会丢一个字的资料 —— 你的 markdown 就是数据库。
+不接向量库，不调大模型，不联网，不要 API key。删掉索引文件也不会丢一个字的资料。你的 markdown 就是数据库。
 
 ---
 
@@ -16,7 +16,7 @@
 |---|---|
 | **basic-memory** | 强，但 MCP-first（每个客户端 spawn 一份）、要 Python/uv、要求按它的 `Observations/Relations` 语法写笔记、语义检索要 embedding |
 | **obsidian-local-rest-api** | 最像，但必须常驻 Obsidian、搜索是 Obsidian 自己的模糊搜索、而且**全量可写**（给 agent 用太危险） |
-| **Trilium / SilverBullet / Khoj** | 都是「笔记应用自带 API」，不是「给你的目录加一个只读的 agent 接口」，而且体量重 |
+| **Trilium / SilverBullet / Khoj** | 都是“笔记应用自带 API”，不是“给你的目录加一个只读的 agent 接口”，而且体量重 |
 | **llm-wiki / 各类 MCP 小项目** | 理念对了（wiki over RAG），但依赖 LLM 跑后台任务、排序靠 BM25、几乎没有中文优化 |
 
 kb-lite 只做一件事：**把一个 markdown 目录，变成 agent 能高效导航的只读接口。**
@@ -25,7 +25,7 @@ kb-lite 只做一件事：**把一个 markdown 目录，变成 agent 能高效�
 
 ```
 $ kb-lite add ~/notes --name 我的笔记
-已索引「我的笔记」：128 篇 / 743 节 / 2.1 MB
+已索引“我的知识库”：128 篇 / 743 节 / 2.1 MB
 
 $ curl "$BASE/kb/我的笔记/search?q=部署流程&q=deploy"
 [
@@ -72,7 +72,7 @@ kb-lite serve --db D:\kb\index.db
 | [09-roadmap](./docs/09-roadmap.md) | 分阶段范围 |
 | [10-decisions](./docs/10-decisions.md) | 已定决策与被否掉的方案及理由 |
 | [skill-template](./docs/skill-template.md) | 服务端吐出、给使用侧 agent 的说明文档 |
-| [authoring-template](./docs/authoring-template.md) | 给「把 docx / pdf 转成知识库」的 AI 的整理说明 |
+| [authoring-template](./docs/authoring-template.md) | 给“把 docx / pdf 转成知识库”的 AI 的整理说明 |
 
 ## 许可
 

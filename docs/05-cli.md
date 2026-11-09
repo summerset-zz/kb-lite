@@ -2,7 +2,7 @@
 
 CLI 是 daemon 的**薄客户端**。除了 `serve`，所有命令都翻译成一次 HTTP 调用。
 
-> 为什么不让 CLI 直接读写 SQLite：会与正在运行的 daemon 抢 WAL 锁，并且等于把业务逻辑实现两遍。CLI 唯一的「本地能力」是**离线只读模式**（见文末）。
+> 为什么不让 CLI 直接读写 SQLite：会与正在运行的 daemon 抢 WAL 锁，并且等于把业务逻辑实现两遍。CLI 唯一的“本地能力”是**离线只读模式**（见文末）。
 
 ```
 kb-lite <command> [options]
@@ -20,7 +20,7 @@ kb-lite serve
   --log-level <l>     error|warn|info|debug，默认 info
 ```
 
-前台运行，Ctrl+C 退出。**不做后台守护化** —— 需要常驻请用系统服务（见 08）或桌面版（见 06）。
+前台运行，Ctrl+C 退出。**不做后台守护化**。需要常驻请用系统服务（见 08）或桌面版（见 06）。
 
 ## 知识库管理
 
@@ -42,7 +42,7 @@ kb-lite doctor
    #      索引里有多少条记录的源文件已消失、SQLite 驱动是否可用、-h 返回的 Host 校验配置
 ```
 
-`remove` 的确认文案必须写明「只删除关联与索引条目，不会删除 `D:\notes` 里的任何文件」，并且需要 `--yes` 或交互确认。
+`remove` 的确认文案必须写明“只删除关联与索引条目，不会删除 `D:\notes` 里的任何文件”，并且需要 `--yes` 或交互确认。
 
 ## 检索（调试与自用）
 
@@ -72,7 +72,7 @@ kb-lite manifest <name> [--budget 2000] [--prefix <p>]
 ```
 kb-lite skill [--url <base>] [--kb <name>] [--out <path>]
    # 打印 /skill.md 的内容（“让 AI 能查我的笔记”那份）
-   # --out 由进程自己写文件（UTF-8 无 BOM）—— 不要用 shell 的 `>`：
+   # --out 由进程自己写文件（UTF-8 无 BOM）。不要用 shell 的 `>`：
    #   PowerShell 的 `>` 会写成 UTF-16，`Out-File -Encoding utf8` 会带 BOM，
    #   两者都会让 YAML frontmatter 失效，skill 就读不出来了。
 kb-lite skill --install [--target dsh|claude|both]
@@ -105,7 +105,7 @@ kb-lite version
 | 0 | 成功 |
 | 1 | 一般错误 |
 | 2 | 外部依赖失败（git 冲突、端口全被占、DB 版本过新） |
-| 3 | 查无此物（KB / 条目 / 章节）—— 便于脚本分支 |
+| 3 | 查无此物（KB / 条目 / 章节），便于脚本分支 |
 | 4 | daemon 未运行（需要它的写操作） |
 
 ## daemon 未运行时的行为
@@ -113,14 +113,14 @@ kb-lite version
 | 命令 | 行为 |
 |---|---|
 | `search` / `toc` / `read` / `manifest` / `status` / `skill` | **自动降级为离线只读**：进程内扫目录，并用 SQLite（**只读连接**）按 sha1 跳过没变过的文件。SQLite 不存在或 `--no-db` 时现场全量切片（慢一点，但结果一致） |
-| `add` / `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `sync` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon** —— 用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
+| `add` / `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `sync` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon**。用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
 
 > `settings` / `skill --install` 之所以也必须走 daemon：它们要改的是**正在运行的那份配置**，
 > 自己改 `config.json` 会和内存里的状态对不上（端口、监听地址、skill 渲染日期）。
 
 ## 实现注意
 
-- 参数解析用标准库 `flag`（子命令各建一个 `FlagSet`），**不要引入 cobra / urfave/cli** —— 命令数量撑不起一个框架的依赖链与错误文案。
+- 参数解析用标准库 `flag`（子命令各建一个 `FlagSet`），**不要引入 cobra / urfave/cli**。命令数量撑不起一个框架的依赖链与错误文案。
 - 所有输出走 `stdout`；错误与警告走 `stderr`（保证 `--json` 时可以管道）。
 - 中文对齐：表格列宽按**显示宽度**算（CJK 算 2），否则 `--explain` 输出的表格会歪。
 - 不要把 token 打进 `debug` 日志。`--verbose` 打印请求 URL 时也要把 `Authorization` 头隐去。

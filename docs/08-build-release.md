@@ -2,7 +2,7 @@
 
 ## 仓库
 
-`github.com/summerset-zz/kb-lite`，MIT，公开。**没有商业版、没有云服务、不接受赞助作为承诺**（可以在 README 放一句「如果有用，star 就够了」）。
+`github.com/summerset-zz/kb-lite`，MIT，公开。**没有商业版、没有云服务、不接受赞助作为承诺**（可以在 README 放一句“如果有用，star 就够了”）。
 
 ```
 kb-lite/
@@ -35,7 +35,7 @@ kb-lite/
   README.md
 ```
 
-- **服务端没有任何 JS 工具链。** 切片器就是 02 里那套逐行 ATX 扫描（`slice.go`，约 200 行），**不用 `goldmark` 之类的 Markdown 库** —— 我们要的是「按行切、不解析行内语法」，一个完整解析器在这里是净负担，而且它的行为不完全可控。
+- **服务端没有任何 JS 工具链。** 切片器就是 02 里那套逐行 ATX 扫描（`slice.go`，约 200 行），**不用 `goldmark` 之类的 Markdown 库**。我们要的是“按行切、不解析行内语法”，一个完整解析器在这里是净负担，而且它的行为不完全可控。
 - **Go ≥ 1.22**（`net/http` 的 `ServeMux` 增强路由是 1.22 才有的）。CI 跑 1.22 与最新稳定版。
 - `web/` 用 pnpm + Vite；它的 `package.json` **只服务于构建**，不产生任何用户需要安装的东西。
 
@@ -77,14 +77,14 @@ v0.2 的实测体积（在 Windows 上一台机器交叉编译全部五个目标
 | `linux/amd64` | 11.20 MB |
 
 对比 v0.1（没有 SQLite）：windows/amd64 8.44 MB。**SQLite 花了约 3.0 MB**（纯 Go 的 libc 转译层占大头），
-换掉的是「每次启动都要全量重切」—— 1000 篇从 179 ms 降到 53 ms（`go test -bench BenchmarkRebuild ./internal/daemon`）。
+换掉的是“每次启动都要全量重切”，1000 篇从 179 ms 降到 53 ms（`go test -bench BenchmarkRebuild ./internal/daemon`）。
 不想要这 3 MB 可以 `-tags nosqlite` 构建：功能全在，只是每次都纯内存重切（见 `driver_none.go`）。
 
-不裁剪（带符号）的同一产物是 16.90 MB —— `-s -w` 省下约 32%。
+不裁剪（带符号）的同一产物是 16.90 MB，`-s -w` 省下约 32%。
 
-只要 `modernc.org/sqlite` 这个纯 Go 依赖还在，上面每一条都能在 Windows 上跑。**一旦有人换成 `mattn/go-sqlite3`，交叉编译会立刻全部失败**，而且错误发生在链接阶段、很难一眼看出原因 —— 这是必须在 code review 里拦住的事。
+只要 `modernc.org/sqlite` 这个纯 Go 依赖还在，上面每一条都能在 Windows 上跑。**一旦有人换成 `mattn/go-sqlite3`，交叉编译会立刻全部失败**，而且错误发生在链接阶段、很难一眼看出原因。这是必须在 code review 里拦住的事。
 
-任何一个目标平台构建失败都是**阻塞问题**（不像 SEA 时代可以退化成「要求用户装 Node」—— 那正是我们要消灭的东西）。
+任何一个目标平台构建失败都是**阻塞问题**（不像 SEA 时代可以退化成“要求用户装 Node”。那正是我们要消灭的东西）。
 
 ## CI
 
@@ -128,23 +128,23 @@ Release 正文从 `CHANGELOG.md` 的对应版本段落生成。正文开头固�
 2. Windows 用户：下载哪个文件、要不要安装（答案是**不用，双击即用**）；
 3. 遇到 SmartScreen 怎么办（截图）。
 
-**不再有 npm 包。** `npx kb-lite serve` 这条路径已经不需要了 —— 二进制本身就是零安装，而且更快、不依赖网络。仓库里给 `web/` 用的 `package.json` 不要发布。
+**不再有 npm 包。** `npx kb-lite serve` 这条路径已经不需要了。二进制本身就是零安装，而且更快、不依赖网络。仓库里给 `web/` 用的 `package.json` 不要发布。
 
 ## GitHub Pages 宣传页
 
 - 仓库 Settings → Pages → Source = **GitHub Actions**，发布 `website/` 的构建产物。
-- 因为仓库名是 `kb-lite`，站点地址是 `https://summerset-zz.github.io/kb-lite/` —— **构建时 base path 必须设为 `/kb-lite/`**（否则 CSS/JS 404，这是最常见的翻车点，本地 `pnpm preview` 看不出来）。
+- 因为仓库名是 `kb-lite`，站点地址是 `https://summerset-zz.github.io/kb-lite/`，所以**构建时 base path 必须设为 `/kb-lite/`**（否则 CSS/JS 404，这是最常见的翻车点，本地 `pnpm preview` 看不出来）。
 
 技术选择：**Vite + 普通 HTML/CSS**，不要上 Astro/Next。
 
-- 这个站点只有一页，加一个「文档」页（把 `docs/` 里的几篇精简版转成 HTML 或直接用 GitHub 链接）。
+- 这个站点只有一页，加一个“文档”页（把 `docs/` 里的几篇精简版转成 HTML 或直接用 GitHub 链接）。
 - 上框架的收益是 0，成本是多一份依赖要升级。
 
-内容顺序（照这个顺序写，不要按「功能列表」写）：
+内容顺序（照这个顺序写，不要按“功能列表”写）：
 
-1. **一句话 + 一段 curl 的真实输出**（第一屏就要让人看到「哦这是给我 agent 用的」）；
+1. **一句话 + 一段 curl 的真实输出**（第一屏就要让人看到“哦这是给我 agent 用的”）；
 2. 三个终端块：`add` → `search` → `read`，真实的输出，不美化；
-3. 「为什么不用 basic-memory / obsidian-local-rest-api」的对比表（**沿用 README 那张**，两边必须一致）；
+3. “为什么不用 basic-memory / obsidian-local-rest-api”的对比表（**沿用 README 那张**，两边必须一致）；
 4. 安装（Windows / macOS / Linux 各下载一个文件，双击即用）；
 5. 截图：主界面 + **Agent 视角页**（这张最有说服力）；
 6. FAQ：会不会上传我的笔记（不会）/ 要不要 API key（不要）/ 支持 PDF 吗（不）/ 能多人用吗（用 git）；
@@ -156,4 +156,4 @@ Release 正文从 `CHANGELOG.md` 的对应版本段落生成。正文开头固�
 
 - `CONTRIBUTING.md` 里写清：切片与打分是核心，改它们必须带排序快照的 diff；
 - Issue 模板：`bug`（含 `kb-lite doctor` 输出）、`检索不准`（含 `--explain` 输出）、`新功能`；
-- **`检索不准` 模板是本项目最重要的一个** —— 它同时是产品反馈渠道和权重调参的数据来源。
+- **`检索不准` 模板是本项目最重要的一个**。它同时是产品反馈渠道和权重调参的数据来源。
