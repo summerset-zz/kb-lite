@@ -3,8 +3,10 @@ package core
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -95,6 +97,62 @@ func TestIdentifierWordBoundary(t *testing.T) {
 	// 中文没有词边界：「数组」应当命中「类型化数组」。
 	if d := Compile("数组").Score(&typedArray); d.Score == 0 {
 		t.Error("搜「数组」没命中「类型化数组」")
+	}
+}
+
+// TestWhitespaceTolerantMatch 锁住 docs/03「空白容忍」：查询里不带空格的术语，
+// 也要能命中文档里带空格/全角空格/换行的写法。
+func TestWhitespaceTolerantMatch(t *testing.T) {
+	mk := func(rel, body string) *Entry {
+		e := BuildEntry(rel, "---\ntitle: 字符集\n---\n\n## 编码\n\n"+body+"\n", SliceOptions{}).Entry
+		return &e
+	}
+
+	// 半角空格：`GB18030` ↔ `GB 18030`（真实语料里就是这么写的）。
+	if d := Compile("GB18030").Score(mk("std/a.md", "国家标准是 GB 18030，与 GBK 兼容。")); d.Score == 0 {
+		t.Errorf("搜 GB18030 没命中「GB 18030」：%+v", d.Hits)
+	}
+	// 全角空格也不能挡。
+	if d := Compile("OpenType").Score(mk("std/b.md", "字体格式叫 Open\u3000Type。")); d.Score == 0 {
+		t.Errorf("搜 OpenType 没命中「Open　Type」：%+v", d.Hits)
+	}
+	// 换行同理（md 里长行被折过）。
+	if d := Compile("webfont").Score(mk("std/c.md", "这里讲 web\nfont 的加载顺序。")); d.Score == 0 {
+		t.Errorf("搜 webfont 没命中被换行折开的「web font」：%+v", d.Hits)
+	}
+
+	// 反方向本来就能命中：查询里带空格会被切成两个关键词，各自都命中。
+	if d := Compile("GB 18030").Score(mk("std/d.md", "国家标准是 GB 18030。")); d.Score == 0 {
+		t.Errorf("搜「GB 18030」没命中：%+v", d.Hits)
+	}
+
+	// **边界不放宽**：前后仍然是标识符字符就不算命中。
+	if d := Compile("GB18030").Score(mk("std/e.md", "写法 xGB 18030 不对。")); d.Score != 0 {
+		t.Errorf("「xGB 18030」不该命中 GB18030（左边粘着 x）：分 %d", d.Score)
+	}
+	if d := Compile("GB18030").Score(mk("std/f.md", "写法 GB 18030x 也不对。")); d.Score != 0 {
+		t.Errorf("「GB 18030x」不该命中 GB18030（右边粘着 x）：分 %d", d.Score)
+	}
+}
+
+// BenchmarkRank 盯的是「空白容忍匹配」的代价：它只在普通匹配失败后才跑，
+// 所以最坏情况是**一个都命中不了的关键词** —— 每条候选的每个字段都要走一遍松散扫描。
+func BenchmarkRank(b *testing.B) {
+	body := strings.Repeat("这一段用来模拟真实笔记的长度与中英混排。标准写法是 GB 18030，字体格式写 OpenType。\n", 40)
+	for _, n := range []int{500, 5000} {
+		b.Run(fmt.Sprintf("entries=%d", n), func(b *testing.B) {
+			entries := make([]*Entry, 0, n)
+			for i := 0; i < n; i++ {
+				md := fmt.Sprintf("---\ntitle: 文档 %d\nsummary: 摘要 %d 提到 API 与 tag。\n---\n\n## 小节 %d\n\n%s", i, i, i, body)
+				e := BuildEntry(fmt.Sprintf("d/%d.md", i), md, SliceOptions{}).Entry
+				entries = append(entries, &e)
+			}
+			q := Compile("zzqqxx absentword 部署")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				Rank(entries, []*Query{q}, RankOptions{Limit: 5})
+			}
+		})
 	}
 }
 

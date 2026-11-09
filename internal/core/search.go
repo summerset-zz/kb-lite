@@ -159,6 +159,81 @@ func (m Matcher) test(s string) bool {
 	return false
 }
 
+// match = 先 test，失败且关键词是标识符时再试一次「空白容忍」匹配。
+//
+// 为什么只为标识符做：`GB18030` / `OpenType` / `webfont` 这类术语，人写文档时经常写成
+// `GB 18030` / `Open Type` / `web font`，而查询里不会带空格 —— 带了就被空格切成两个关键词了。
+// 反过来「中文被拆成多段」的情况不存在（中文不写空格），所以含 CJK 的关键词不做。
+func (m Matcher) match(s string) bool {
+	if m.test(s) {
+		return true
+	}
+	if !m.ident {
+		return false
+	}
+	return m.testSpaced(s)
+}
+
+// testSpaced 判断「文本在关键词的相邻字符之间插入了空白」时是否命中。
+//
+// 语义上是 `gb ?18030`，不是「去掉所有空白再比」：去空白的版本会把相邻词粘在一起
+// （`flat map` → `flatmap`），词边界当场失效 —— `map` 就会命中 `flat map`，
+// 而卡词边界正是 docs/03 里写清楚要防的事。这里只在**已有的空白**处放行，
+// 前后边界检查与 test 完全一致，所以不会放宽边界。
+func (m Matcher) testSpaced(s string) bool {
+	if len(m.kw) < 2 {
+		return false
+	}
+	first := m.kw[0]
+	for from := 0; from < len(s); {
+		i := strings.IndexByte(s[from:], first)
+		if i < 0 {
+			return false
+		}
+		start := from + i
+		if !identByteAt(s, start-1) {
+			if end, ok := matchAcrossSpaces(s, start, m.kw); ok && !identByteAt(s, end) {
+				return true
+			}
+		}
+		from = start + 1
+	}
+	return false
+}
+
+// matchAcrossSpaces 从 start 起逐个字节比 kw，字符之间允许多个空白。
+// 返回匹配结束位置（不含尾随空白的第一个字节之后的位置）。
+func matchAcrossSpaces(s string, start int, kw string) (int, bool) {
+	pos := start
+	for k := 0; k < len(kw); k++ {
+		if k > 0 {
+			pos = skipSpaces(s, pos)
+		}
+		if pos >= len(s) || s[pos] != kw[k] {
+			return 0, false
+		}
+		pos++
+	}
+	return pos, true
+}
+
+// skipSpaces 跳过半角空白与全角空格（U+3000，中文排版里会出现）。
+func skipSpaces(s string, pos int) int {
+	for pos < len(s) {
+		switch s[pos] {
+		case ' ', '\t', '\n', '\r', '\v', '\f':
+			pos++
+			continue
+		}
+		if strings.HasPrefix(s[pos:], "\u3000") {
+			pos += len("\u3000")
+			continue
+		}
+		break
+	}
+	return pos
+}
+
 // Hit 是一个关键词在一条候选上的命中位置（docs/03 的 `Hit`）。
 type Hit struct {
 	Keyword string `json:"keyword"`
@@ -335,13 +410,13 @@ func (q *Query) Score(e *Entry) Detail {
 // hit 把匹配器打到一条候选的所有字段上。
 func (m Matcher) hit(e *Entry) Hit {
 	h := Hit{Keyword: m.Display, Approx: m.approx}
-	h.Title = m.test(e.SearchTitle)
+	h.Title = m.match(e.SearchTitle)
 	// leaf = 条目标题（差异 1）；关键词是标识符时**额外**再看路径末段（03 字段表最后一行）。
-	h.Leaf = h.Title || (m.ident && m.test(e.SearchPathLeaf))
-	h.Path = m.test(e.SearchPath)
-	h.TOC = m.test(e.TocText)
-	h.Body = m.test(e.SearchMeta)
-	h.Full = m.test(e.SearchFull)
+	h.Leaf = h.Title || (m.ident && m.match(e.SearchPathLeaf))
+	h.Path = m.match(e.SearchPath)
+	h.TOC = m.match(e.TocText)
+	h.Body = m.match(e.SearchMeta)
+	h.Full = m.match(e.SearchFull)
 	return h
 }
 

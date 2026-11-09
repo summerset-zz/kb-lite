@@ -69,6 +69,10 @@ func runSearch(args []string) int {
 		return exitError
 	}
 	if len(rest) < 2 {
+		// 别静默退 1：`kb-lite search GB18030`（忘了写库名）是最容易犯的错，
+		// 什么都不打印的话用的人只会以为「搜不到」。
+		fmt.Fprintln(os.Stderr, "用法：kb-lite search <库名> <关键词…> [--limit n] [--explain] [--json]")
+		fmt.Fprintln(os.Stderr, "  库名用 kb-lite list 看；关键词可以给多个。")
 		return exitError
 	}
 	name, queries := rest[0], rest[1:]
