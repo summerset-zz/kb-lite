@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,10 +19,14 @@ import (
 )
 
 // client 是到本地 daemon 的薄客户端。
+//
+// token 是读取面的访问密码，可能为空（没启用时）。apiToken 是管理面凭据，只在调 /api/*
+// 时用，**永远不打印**（ADR-015）。
 type client struct {
-	base  string
-	token string
-	hc    *http.Client
+	base     string
+	token    string
+	apiToken string
+	hc       *http.Client
 }
 
 // daemonDownError 对上 docs/05 的退出码 4。
@@ -45,8 +50,18 @@ func (e httpError) Error() string {
 	return e.msg
 }
 
+// readToken 读读取面的访问密码。没有文件就是“没启用访问密码”，不是错误。
 func readToken(dir string) string {
-	b, err := os.ReadFile(filepath.Join(dir, daemon.TokenFileName))
+	b, err := os.ReadFile(filepath.Join(dir, daemon.ReadTokenFileName))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// readAPIToken 读管理面凭据。它不交给用户，只给 CLI 用（ADR-015）。
+func readAPIToken(dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, daemon.APITokenFileName))
 	if err != nil {
 		return ""
 	}
@@ -62,14 +77,11 @@ func newClient() (*client, error) {
 	if err != nil {
 		return nil, err
 	}
-	tok := readToken(dir)
-	if tok == "" {
-		return nil, errors.New("还没有 token —— 先运行一次 kb-lite serve，它会生成")
-	}
 	return &client{
-		base:  "http://127.0.0.1:" + strconv.Itoa(cfg.Port),
-		token: tok,
-		hc:    &http.Client{Timeout: 60 * time.Second},
+		base:     "http://127.0.0.1:" + strconv.Itoa(cfg.Port),
+		token:    readToken(dir),
+		apiToken: readAPIToken(dir),
+		hc:       &http.Client{Timeout: 60 * time.Second},
 	}, nil
 }
 
@@ -82,7 +94,9 @@ func (c *client) get(path string, q url.Values) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
 
 	resp, err := c.hc.Do(req)
 	if err != nil {
@@ -114,6 +128,60 @@ func (c *client) get(path string, q url.Values) ([]byte, error) {
 // kbPath 拼 `/kb/<name>/...`。KB 名字里可能有中文和空格，必须按段转义。
 func kbPath(name string, tail string) string {
 	return "/kb/" + url.PathEscape(name) + "/" + tail
+}
+
+// admin 发一次管理面请求（`/api/*`）。
+//
+// 管理面要 admin 凭据，还要求同源信号：CLI **主动**带 `Origin`。
+// curl 默认两个都不带，所以 agent 手里那把读取密码打不开管理面（ADR-015）。
+func (c *client) admin(method, path string, payload any) ([]byte, error) {
+	if c.apiToken == "" {
+		return nil, errors.New("还没有管理凭据，先运行一次 kb-lite serve，它会生成")
+	}
+	var body io.Reader
+	if payload != nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequest(method, c.base+path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-KB-Admin", c.apiToken)
+	req.Header.Set("Origin", c.base)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	}
+
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		var opErr *net.OpError
+		if errors.As(err, &opErr) {
+			return nil, daemonDownError{base: c.base}
+		}
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	raw, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if resp.StatusCode >= 400 {
+		var er struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(raw, &er)
+		return raw, httpError{status: resp.StatusCode, code: er.Error.Code, msg: er.Error.Message}
+	}
+	return raw, nil
 }
 
 // escapeRelPath 把相对路径按段转义（保留 `/` 作为分隔）。

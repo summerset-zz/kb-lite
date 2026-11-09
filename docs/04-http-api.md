@@ -20,10 +20,10 @@ X-KB-Token: <读 token>
 ```
 
 读 token 在 `<配置目录>/read-token`，`kb-lite token --show` 可打印，给用户的只有这一把。
-
 **管理面** `/api/*` **永远**需要 admin 凭据：UI 靠同源页面下发的 `HttpOnly; SameSite=Strict` cookie，
-CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。另外还要求 `Sec-Fetch-Site: same-origin` 或 `Origin: <自己>`
-（curl 默认两个都不带 → `403`）。**agent 手里的读 token 打不开管理面。**
+CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条路还要求 `Sec-Fetch-Site: same-origin`
+或 `Origin: <自己>`（curl 默认两个都不带 → `403`）；cookie 那条不需要，因为 `SameSite=Strict` 已经保证
+跨站请求带不上它。**agent 手里的读取密码打不开管理面。**
 
 通用约定：
 
@@ -35,7 +35,7 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。另外还要求 `Se
 
 | 形态 | 用在哪 | 为什么 |
 |---|---|---|
-| **`4xx` + `{"error":{"code","message"}}`** | 请求本身不合法（无 token、KB 不存在、路径越界） | 调用方是程序，需要能分支 |
+| **`4xx` + `{"error":{"code","message"}}`** | 请求本身不合法（凭据不对、KB 不存在、路径越界） | 调用方是程序，需要能分支 |
 | **`200` + `{"ok":false,"error":"人话","candidates":[…]}`** | “你查的这个东西不存在，但这是为什么、你可以试这些” | 调用方是**模型**，它需要看到候选才能纠正自己，而不是收到一个异常 |
 
 第二种是本项目的核心设计之一，**不要改成抛异常**。线上版的血泪教训：用 404 回“这一节不存在”时，模型会反复重试同一个调用。
@@ -66,7 +66,7 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。另外还要求 `Se
 }
 ```
 
-**要 admin 凭据**（见上面两级认证）：除了 `/skill.md` 与 `GET /`（UI 静态页），这个服务没有不要凭据的路由。
+**要 admin 凭据**（见上面两级认证）。读取面是否要凭据看 `requireToken`：关着时 `/kb/*` 与 `/skill.md` 直接可用。
 
 `state == "indexing"` 时，`entries/sections` 还是**上一次**索引的数字。调用方据此判断新鲜度（docs/01）。
 
@@ -140,7 +140,7 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 ### `POST /api/auth/token`
 
 ```jsonc
-{ "action": "rotate" }            // 重新生成读 token；开了 requireToken 时旧的立即失效
+{ "action": "rotate" }            // 重新生成读取密码；旧的立即失效
 ```
 
 ### `POST /api/skill/install`
@@ -344,10 +344,11 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 ## `GET /skill.md`
 
 返回给使用侧 agent 的说明文档（`text/markdown`）。内容模板见 [skill-template](./skill-template.md)，
-`{{BASE_URL}}`、`{{TOKEN}}`、`{{KB_LIST}}`、`{{KB_SAMPLE}}` 由服务端在渲染时填入。
+`{{BASE_URL}}`、`{{AUTH}}`、`{{AUTH_NOTE}}`、`{{KB_LIST}}`、`{{KB_SAMPLE}}` 由服务端在渲染时填入。
 
-**token 是条件渲染的**：`requireToken` 关着时，模板里所有 `Authorization` 头整段消失（不能遗留 `Bearer ` 空值）。
-同理还有 `{{#if MANIFEST}}` 这类能力门控。没实现的东西一律不出现在文档里。
+**token 是条件渲染的**：访问密码关着时，`{{AUTH}}` 渲染成空串，文档里一句鉴权头都不留。
+不能只把值换成空而留下 `-H "Authorization: Bearer "`，那会让 agent 以为自己的头写错了。
+同理还有 `{{#if MANIFEST}}` 这类能力门控，没实现的东西一律不出现在文档里。
 
 **必须与实现同源**：这段文本里描述的参数名、返回字段、`note` 文案，都要从同一份常量生成，不许手写第二份。加了参数忘了改 skill，比没有 skill 更糟。
 

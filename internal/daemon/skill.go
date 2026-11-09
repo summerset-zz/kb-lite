@@ -31,7 +31,12 @@ func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
 	if r.Host == "" {
 		base = "http://127.0.0.1:" + strconv.Itoa(h.opts.Port)
 	}
-	out := RenderSkillText(h.mgr.Index(), base, h.token, h.opts.Features)
+	// 读取密码没开就不把密码写进文档：那是给用户看的纸，不该多一个用不上的东西。
+	tok := ""
+	if h.opts.RequireToken {
+		tok = h.readToken
+	}
+	out := RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -39,10 +44,20 @@ func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
 }
 
 // RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。
+//
+// token 为空表示读取面不需要访问密码。这时 `{{AUTH}}` 渲染成空、`{{AUTH_NOTE}}`
+// 换成一句“不需要密码”。**不能**留一个空的 `Bearer `：agent 会以为自己的头写错了。
 func RenderSkillText(idx *Index, base, token string, features map[string]bool) string {
+	auth := ""
+	authNote := "这个服务没有启用访问密码，直接请求即可。"
+	if token != "" {
+		auth = `-H "Authorization: Bearer ` + token + `" `
+		authNote = fmt.Sprintf("每个请求都要带 `-H \"Authorization: Bearer %s\"`", token)
+	}
 	return renderSkill(skillTemplate, map[string]string{
 		"BASE_URL":  base,
-		"TOKEN":     token,
+		"AUTH":      auth,
+		"AUTH_NOTE": authNote,
 		"KB_LIST":   kbListText(idx),
 		"KB_SAMPLE": url.PathEscape(sampleKBName(idx)),
 	}, features)

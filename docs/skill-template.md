@@ -1,6 +1,6 @@
 # skill 模板（`GET /skill.md` 的内容）
 
-> 这份文本由服务端**在渲染时**填入 `{{BASE_URL}}`、`{{TOKEN}}`、`{{KB_LIST}}` 后返回给使用侧的 agent。
+> 这份文本由服务端**在渲染时**填入 `{{BASE_URL}}`、`{{AUTH}}`、`{{KB_LIST}}` 后返回给使用侧的 agent。
 > 它必须与接口实现同源 —— 参数名、字段名、`note` 文案改动时，本文件必须一起改（写测试锁住）。
 
 ---
@@ -16,7 +16,7 @@ description: 检索用户本地的 markdown 知识库（只读）。当问题涉
 一个**只读**的本地知识库服务。它把用户磁盘上的 markdown 目录切成了「条目（一篇文件）→ 章节」两级结构。
 
 服务地址：`{{BASE_URL}}`
-鉴权：每个请求都要带 `-H "Authorization: Bearer {{TOKEN}}"`
+鉴权：{{AUTH_NOTE}}
 
 可用的知识库：{{KB_LIST}}
 
@@ -29,7 +29,7 @@ description: 检索用户本地的 markdown 知识库（只读）。当问题涉
 ## 搜索
 
 ```bash
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/search?q=部署流程&q=deploy&limit=5"
 ```
 
@@ -59,11 +59,11 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 
 ```bash
 # 按编号
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?n=3"
 
 # 按标题（从 toc 里直接抄，不用数编号）
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?title=回滚"
 ```
 
@@ -89,14 +89,14 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 ## 不知道去哪找
 
 ```bash
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/manifest?budget=2000"
 ```
 
 返回按预算裁剪的分层概览（目录 → 条目），用来决定「先看哪一块」。看到具体条目后再 `search` 或直接 `toc`：
 
 ```bash
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/toc"
 ```
 
@@ -116,7 +116,8 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 | 占位符 | 内容 |
 |---|---|
 | `{{BASE_URL}}` | `http://127.0.0.1:<实际端口>` |
-| `{{TOKEN}}` | 当前 token（是的，明文写进去 —— 这份文档只在本地可见，且用户会整段粘给本地 agent） |
+| `{{AUTH}}` | 命令里的鉴权头。读取密码开着时是 `-H "Authorization: Bearer <token>" `；关着时是**空串**（不能留一个空的 `Bearer `） |
+| `{{AUTH_NOTE}}` | 鉴权说明那一行：“每个请求都要带 `-H …`”，或“这个服务没有启用访问密码，直接请求即可。” |
 | `{{KB_LIST}}` | 每个 KB 一行：`- 我的笔记（128 篇，2.1 MB）` |
 | `{{KB_SAMPLE}}` | 第一个 KB 的名字（URL 编码后的形式），用作示例 |
 

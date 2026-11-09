@@ -11,17 +11,30 @@ import (
 	"testing"
 )
 
-const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const (
+	testToken      = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	testAdminToken = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+)
+
+// testServerOpts 让每个测试只关心自己那一点：要不要读取密码、有哪些可选路由。
+type testServerOpts struct {
+	features     map[string]bool
+	requireToken bool
+}
 
 // newTestServer 起一个真的 http.Server。
 //
 // 端口必须**先**定下来：Host 校验比的是 `HandlerOptions.Port`，用 httptest 的随机端口
 // 会让所有请求都撞 421。所以先 Listen，再拿端口建 Handler。
 func newTestServer(t *testing.T) *httptest.Server {
-	return newTestServerWithFeatures(t, DefaultFeatures)
+	return newTestServerWith(t, testServerOpts{features: DefaultFeatures, requireToken: true})
 }
 
 func newTestServerWithFeatures(t *testing.T, features map[string]bool) *httptest.Server {
+	return newTestServerWith(t, testServerOpts{features: features, requireToken: true})
+}
+
+func newTestServerWith(t *testing.T, o testServerOpts) *httptest.Server {
 	t.Helper()
 
 	root := t.TempDir()
@@ -44,7 +57,9 @@ func newTestServerWithFeatures(t *testing.T, features map[string]bool) *httptest
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	h := NewHandler(mgr, testToken, HandlerOptions{Port: port, Features: features})
+	h := NewHandler(mgr, testToken, testAdminToken, HandlerOptions{
+		Port: port, Features: o.features, RequireToken: o.requireToken,
+	})
 	srv := &httptest.Server{Listener: ln, Config: &http.Server{Handler: h.Routes()}}
 	srv.Start()
 	t.Cleanup(srv.Close)

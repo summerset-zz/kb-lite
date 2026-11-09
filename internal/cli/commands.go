@@ -641,12 +641,15 @@ func fetchSkillText(base string) (string, int) {
 		return "", exitError
 	}
 
-	// 离线时**要保证 token 存在**：文档里没有 token 就是一份不能用的说明。
-	// 这里建的和 serve 之后用的是同一个文件，不冲突。
-	token, err := daemon.LoadOrCreateToken(dir)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return "", exitError
+	// 离线时只有在“读取面要密码”时才需要 token。没启用密码就渲染一份不带鉴权的文档，
+	// 不能留一个空的 `Bearer `（agent 会以为自己的头写错了）。
+	token := ""
+	if cfg.EffectiveRequireToken() {
+		token, err = daemon.LoadOrCreateReadToken(dir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return "", exitError
+		}
 	}
 
 	serviceBase := "http://127.0.0.1:" + strconv.Itoa(cfg.Port)
@@ -658,9 +661,11 @@ func fetchSkillText(base string) (string, int) {
 
 // ---- token ----
 
+// runToken 只讲**读取面**的访问密码。管理凭据（api-token）不提供打印命令（ADR-015）。
 func runToken(args []string) int {
 	fs := flag.NewFlagSet("token", flag.ContinueOnError)
 	show := fs.Bool("show", false, "")
+	rotate := fs.Bool("rotate", false, "")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError
@@ -670,12 +675,28 @@ func runToken(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
-	tok := readToken(dir)
-	if tok == "" {
-		fmt.Fprintln(os.Stderr, "还没有 token —— 先运行一次 kb-lite serve，它会生成")
+	cfg, err := daemon.Load(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
-	if *show {
+	if !cfg.EffectiveRequireToken() {
+		fmt.Fprintln(os.Stderr, "当前没有启用访问密码（只有本机能访问）。要开就改 config.json 的 requireToken，或用设置页。")
+		return exitOK
+	}
+
+	if *rotate {
+		_ = os.Remove(filepath.Join(dir, daemon.ReadTokenFileName))
+	}
+	tok, err := daemon.LoadOrCreateReadToken(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	if *rotate {
+		fmt.Fprintln(os.Stderr, "已换新密码。已配置的 agent 都要换成新的。")
+	}
+	if *show || *rotate {
 		fmt.Println(tok)
 		return exitOK
 	}

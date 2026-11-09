@@ -3,6 +3,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,7 +78,7 @@ func TestLoadBrokenConfig(t *testing.T) {
 func TestToken(t *testing.T) {
 	dir := t.TempDir()
 
-	first, err := LoadOrCreateToken(dir)
+	first, err := LoadOrCreateReadToken(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestToken(t *testing.T) {
 		t.Errorf("token 长度 = %d，想要 64（32 字节 hex）", len(first))
 	}
 
-	second, err := LoadOrCreateToken(dir)
+	second, err := LoadOrCreateReadToken(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,13 +94,114 @@ func TestToken(t *testing.T) {
 		t.Error("第二次调用应当复用已有 token")
 	}
 
-	info, err := os.Stat(filepath.Join(dir, TokenFileName))
+	info, err := os.Stat(filepath.Join(dir, ReadTokenFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Windows 上 Chmod 基本是空操作，这里只断言非 Windows 的权限位。
 	if info.Mode().Perm()&0o077 != 0 && os.PathSeparator == '/' {
 		t.Errorf("token 权限 = %v，想要 0600", info.Mode().Perm())
+	}
+}
+
+// TestAPITokenIsSeparate 锁住 ADR-015：两个凭据必须是两把钥匙。
+func TestAPITokenIsSeparate(t *testing.T) {
+	dir := t.TempDir()
+	read, err := LoadOrCreateReadToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, err := LoadOrCreateAPIToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read == api {
+		t.Error("读取密码与管理凭据不能是同一个值")
+	}
+	if _, err := os.Stat(filepath.Join(dir, APITokenFileName)); err != nil {
+		t.Errorf("api-token 没落盘：%v", err)
+	}
+}
+
+// TestLegacyTokenMigrates 锁住 v0.2 的 `token` 会被改名成 `read-token`。
+func TestLegacyTokenMigrates(t *testing.T) {
+	dir := t.TempDir()
+	const old = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	if err := os.WriteFile(filepath.Join(dir, legacyTokenFileName), []byte(old+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadOrCreateReadToken(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != old {
+		t.Errorf("迁移后的 token = %q，想要沿用旧值（否则已配好的 agent 全断）", got)
+	}
+}
+
+// TestConfigMigrationKeepsTokenOn 是升级安全的关键一条：
+// v1 是“读取面强制要密码”，迁移到 v2 不能把这道门悄悄打开。
+func TestConfigMigrationKeepsTokenOn(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ConfigFileName),
+		`{"schemaVersion":1,"port":7331,"kbs":[{"id":"k1","name":"甲","rootPath":"C:\\notes"}]}`)
+
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SchemaVersion != SchemaVersion {
+		t.Errorf("schemaVersion = %d，想要 %d", c.SchemaVersion, SchemaVersion)
+	}
+	if !c.RequireToken {
+		t.Error("从 v1 迁移过来必须保持“要密码”")
+	}
+	if !c.SetupCompleted {
+		t.Error("已有配置的用户不该再被弹一次向导")
+	}
+	if c.Host != DefaultHost {
+		t.Errorf("host = %q，想要 %q", c.Host, DefaultHost)
+	}
+
+	// 迁移要落盘：否则下次启动又迁一遍，中间的用户改动会丢。
+	raw, err := os.ReadFile(filepath.Join(dir, ConfigFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"schemaVersion": 2`) {
+		t.Errorf("迁移没有写回：%s", raw)
+	}
+}
+
+// TestFreshConfigHasNoToken 锁住“新装默认不要密码”。
+func TestFreshConfigHasNoToken(t *testing.T) {
+	c, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.RequireToken {
+		t.Error("新装默认不该要密码")
+	}
+	if c.SetupCompleted {
+		t.Error("新装应当进向导")
+	}
+	if c.EffectiveRequireToken() {
+		t.Error("只有本机时，生效值应当是“不要密码”")
+	}
+}
+
+// TestLanForcesToken 锁住硬不变式：绑了非回环地址就必须有密码。
+func TestLanForcesToken(t *testing.T) {
+	c := DefaultConfig(t.TempDir())
+	c.Host = "0.0.0.0"
+	if !c.EffectiveRequireToken() {
+		t.Error("绑 0.0.0.0 时访问密码必须强制为开")
+	}
+	for _, h := range []string{"127.0.0.1", "localhost", "::1", ""} {
+		c.Host = h
+		if !IsLoopbackHost(h) {
+			t.Errorf("%q 应当被当成回环地址", h)
+		}
 	}
 }
 

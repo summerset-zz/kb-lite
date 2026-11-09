@@ -14,13 +14,19 @@ import (
 const (
 	// ConfigFileName 是配置文件名（docs/01「配置文件」）。
 	ConfigFileName = "config.json"
-	// TokenFileName 是 token 文件名，32 字节随机 hex，0600。
-	TokenFileName = "token"
-	// SchemaVersion 是 config.json 的版本。
-	SchemaVersion = 1
+	// ReadTokenFileName 是读取面的访问密码（界面叫“访问密码”），32 字节随机 hex，0600。
+	ReadTokenFileName = "read-token"
+	// APITokenFileName 是管理面的凭据。UI 靠 HttpOnly cookie 拿，界面不显示（ADR-015）。
+	APITokenFileName = "api-token"
+	// legacyTokenFileName 是 v0.2 及以前的单凭据文件名。读到它就迁成 read-token。
+	legacyTokenFileName = "token"
+	// SchemaVersion 是 config.json 的版本。v2 加了 host / requireToken / setupCompleted。
+	SchemaVersion = 2
 	// DefaultPort 是默认端口；被占时自动 +1（docs/04）。
 	DefaultPort = 7331
-	// DBFileName 是默认的缓存文件名（v0.2 起才真的用）。
+	// DefaultHost 是默认绑定地址。只绑回环地址时读取面才可以不要密码。
+	DefaultHost = "127.0.0.1"
+	// DBFileName 是默认的缓存文件名。
 	DBFileName = "index.db"
 
 	// ConfigDirEnv 是配置目录的逃生口：测试用它，将来 `--config` 也可以用它。
@@ -67,10 +73,32 @@ func (k *KB) UnmarshalJSON(b []byte) error {
 //
 // KB 列表与配置在 config.json，**不在数据库里** —— 数据库是可重建的缓存（ADR-003）。
 type Config struct {
-	SchemaVersion int    `json:"schemaVersion"`
-	Port          int    `json:"port"`
-	DBPath        string `json:"dbPath"`
-	KBs           []KB   `json:"kbs"`
+	SchemaVersion int `json:"schemaVersion"`
+	// SetupCompleted 为 false 时 UI 进向导（docs/06 5.1）。
+	SetupCompleted bool `json:"setupCompleted"`
+	Port           int  `json:"port"`
+	// Host 是监听地址。非回环地址时 requireToken 强制为真（ADR-015）。
+	Host string `json:"host"`
+	// RequireToken 是“读取面要不要密码”。新装默认为假；从 v1 迁过来的为真。
+	RequireToken bool   `json:"requireToken"`
+	DBPath       string `json:"dbPath"`
+	KBs          []KB   `json:"kbs"`
+}
+
+// IsLoopbackHost 判断是不是只绑本机。
+func IsLoopbackHost(h string) bool {
+	switch strings.ToLower(strings.TrimSpace(h)) {
+	case "", "127.0.0.1", "localhost", "::1", "[::1]":
+		return true
+	}
+	return false
+}
+
+// EffectiveRequireToken 是**实际生效**的读取密码开关。
+//
+// 绑了非回环地址就一定为真：否则等于把知识库公开给整个局域网（ADR-015 的硬不变式）。
+func (c *Config) EffectiveRequireToken() bool {
+	return c.RequireToken || !IsLoopbackHost(c.Host)
 }
 
 // ConfigDir 返回各平台的配置目录。
@@ -112,7 +140,10 @@ func DefaultConfig(dir string) *Config {
 	return &Config{
 		SchemaVersion: SchemaVersion,
 		Port:          DefaultPort,
-		DBPath:        filepath.Join(dir, DBFileName),
+		Host:          DefaultHost,
+		// 新装默认不要密码（ADR-015）。绑局域网时 EffectiveRequireToken 会强制为真。
+		RequireToken: false,
+		DBPath:       filepath.Join(dir, DBFileName),
 	}
 }
 
@@ -130,14 +161,28 @@ func Load(dir string) (*Config, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, fmt.Errorf("%s 解析失败：%w", p, err)
 	}
-	if c.SchemaVersion == 0 {
+
+	migrated := false
+	if c.SchemaVersion < SchemaVersion {
+		// v1 只有一把 token，且读取面**强制**要密码。迁移时必须保持“要密码”，
+		// 否则升级会默默把用户的门打开。用户想关自己去设置里关。
+		c.RequireToken = true
+		c.SetupCompleted = true // 已经在用了，不要再弹向导
 		c.SchemaVersion = SchemaVersion
+		migrated = true
 	}
 	if c.Port == 0 {
 		c.Port = DefaultPort
 	}
+	if c.Host == "" {
+		c.Host = DefaultHost
+	}
 	if c.DBPath == "" {
 		c.DBPath = filepath.Join(dir, DBFileName)
+	}
+	if migrated {
+		// 迁移后立刻落盘：否则下次启动又会走一遍迁移，而用户此间的改动会丢。
+		_ = c.Save(dir)
 	}
 	return &c, nil
 }
@@ -161,15 +206,41 @@ func (c *Config) Save(dir string) error {
 	return os.Rename(tmp, p)
 }
 
-// LoadOrCreateToken 读 `<dir>/token`；没有就生成 32 字节随机 hex 并写盘（0600）。
-func LoadOrCreateToken(dir string) (string, error) {
-	p := filepath.Join(dir, TokenFileName)
+// LoadOrCreateReadToken 读 `<dir>/read-token`；没有就生成。
+//
+// 会把 v0.2 的旧文件 `<dir>/token` 迁过来（直接改名，不丢用户已配好的 agent）。
+func LoadOrCreateReadToken(dir string) (string, error) {
+	return loadOrCreateToken(dir, ReadTokenFileName, legacyTokenFileName)
+}
+
+// LoadOrCreateAPIToken 读 `<dir>/api-token`；没有就生成。
+//
+// 只有 UI 与 CLI 用它，**界面上不展示**（ADR-015）。
+func LoadOrCreateAPIToken(dir string) (string, error) {
+	return loadOrCreateToken(dir, APITokenFileName, "")
+}
+
+func loadOrCreateToken(dir, name, migrateFrom string) (string, error) {
+	p := filepath.Join(dir, name)
 	if b, err := os.ReadFile(p); err == nil {
 		if tok := strings.TrimSpace(string(b)); tok != "" {
 			return tok, nil
 		}
 	} else if !os.IsNotExist(err) {
 		return "", err
+	}
+
+	if migrateFrom != "" {
+		old := filepath.Join(dir, migrateFrom)
+		if _, err := os.Stat(old); err == nil {
+			// 改名失败也无所谓：下面还能读旧文件。
+			_ = os.Rename(old, p)
+			if b, err := os.ReadFile(p); err == nil {
+				if tok := strings.TrimSpace(string(b)); tok != "" {
+					return tok, nil
+				}
+			}
+		}
 	}
 
 	buf := make([]byte, 32)

@@ -47,7 +47,7 @@ func setup(t *testing.T) string {
 	if err := cfg.Save(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, daemon.TokenFileName), []byte(testToken+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, daemon.ReadTokenFileName), []byte(testToken+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ func setup(t *testing.T) string {
 	if err := mgr.Rebuild(); err != nil {
 		t.Fatal(err)
 	}
-	h := daemon.NewHandler(mgr, testToken, daemon.HandlerOptions{Port: port})
+	h := daemon.NewHandler(mgr, testToken, "", daemon.HandlerOptions{Port: port})
 	srv := &httptest.Server{Listener: ln, Config: &http.Server{Handler: h.Routes()}}
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -203,11 +203,10 @@ func TestSearchFallsBackOffline(t *testing.T) {
 	}
 }
 
-// skill --out 必须写出「UTF-8 无 BOM、且带 token」的文件。
+// skill --out 必须写出「UTF-8 无 BOM」的文件。
 //
-// 这两条都是踩过的坑：带 BOM 会让 YAML frontmatter 失效（skill 读不出来），
-// 没 token 则文档能用却调不通（离线时 token 可能还没被 serve 创建过）。
-func TestSkillOutWritesUTF8WithoutBOMAndWithToken(t *testing.T) {
+// 带 BOM 会让 YAML frontmatter 失效，skill 就读不出来了。这是踩过的坑。
+func TestSkillOutWritesUTF8WithoutBOM(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(daemon.ConfigDirEnv, dir)
 
@@ -229,18 +228,53 @@ func TestSkillOutWritesUTF8WithoutBOMAndWithToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bytes.HasPrefix(b, []byte{0xEF, 0xBB, 0xBF}) {
-		t.Fatal("不能带 UTF-8 BOM —— 会让 frontmatter 失效")
+		t.Fatal("不能带 UTF-8 BOM，会让 frontmatter 失效")
 	}
 	if !bytes.HasPrefix(b, []byte("---\r\nname: kb-lite")) && !bytes.HasPrefix(b, []byte("---\nname: kb-lite")) {
 		t.Fatalf("开头不是 frontmatter：%q", string(b[:40]))
 	}
 
+	// 新装默认不要密码，所以文档里不该有任何鉴权头，也不该生成凭据文件。
+	if bytes.Contains(b, []byte("Authorization")) {
+		t.Error("没启用访问密码时，文档里不该出现 Authorization 头")
+	}
+	if tok := readToken(dir); tok != "" {
+		t.Errorf("没启用访问密码时不该生成 read-token，实际 %q", tok)
+	}
+}
+
+// 启用访问密码后，离线渲染的 skill 必须带上那把密码，否则用户拿到手也调不通。
+func TestSkillOutIncludesTokenWhenRequired(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(daemon.ConfigDirEnv, dir)
+
+	kbRoot := filepath.Join(dir, "kb")
+	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 甲\n---\n\n正文\n")
+	cfg := daemon.DefaultConfig(dir)
+	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
+	cfg.RequireToken = true
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	outPath := filepath.Join(dir, "skills", "kb-lite", "SKILL.md")
+	if code := Run([]string{"skill", "--out", outPath}); code != exitOK {
+		t.Fatalf("退出码 = %d", code)
+	}
+
+	b, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tok := readToken(dir)
 	if tok == "" {
-		t.Fatal("离线渲染 skill 时应当顺手生成 token")
+		t.Fatal("启用密码时，离线渲染应当顺手生成 read-token")
 	}
 	if !bytes.Contains(b, []byte(tok)) {
-		t.Error("文档里应当带上 token，否则拿到手也调不通")
+		t.Error("文档里应当带上访问密码")
+	}
+	if bytes.Contains(b, []byte("Bearer \" ")) {
+		t.Error("凭证位置渲染坏了")
 	}
 }
 

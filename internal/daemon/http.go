@@ -38,18 +38,27 @@ type HandlerOptions struct {
 	Features map[string]bool
 	// DBMode 是 "sqlite" | "memory"，只用于 /api/status 报告。
 	DBMode string
+	// RequireToken 是读取面（/kb/*、/skill.md）是否需要访问密码。
+	// 调用方传的是 Config.EffectiveRequireToken()，已经含“绑局域网必定开”这条。
+	RequireToken bool
 }
+
+// AdminCookieName 是管理凭据的 cookie 名。同源页面靠它过 /api/*。
+const AdminCookieName = "kb-admin"
 
 // Handler 是全部 HTTP 行为的入口。
 type Handler struct {
-	mgr      *Manager
-	token    string
+	mgr *Manager
+	// readToken 是读取面的访问密码；RequireToken 为假时不校验。
+	readToken string
+	// apiToken 是管理面的凭据。**不能**发给用户，也不进任何文档（ADR-015）。
+	apiToken string
 	opts     HandlerOptions
 	failures *throttle
 }
 
 // NewHandler 建一个 Handler。
-func NewHandler(mgr *Manager, token string, opts HandlerOptions) *Handler {
+func NewHandler(mgr *Manager, readToken, apiToken string, opts HandlerOptions) *Handler {
 	if opts.Port == 0 {
 		opts.Port = DefaultPort
 	}
@@ -58,10 +67,11 @@ func NewHandler(mgr *Manager, token string, opts HandlerOptions) *Handler {
 		opts.DBMode = "memory"
 	}
 	return &Handler{
-		mgr:      mgr,
-		token:    token,
-		opts:     opts,
-		failures: newThrottle(authFailureWindow, authFailureMax),
+		mgr:       mgr,
+		readToken: readToken,
+		apiToken:  apiToken,
+		opts:      opts,
+		failures:  newThrottle(authFailureWindow, authFailureMax),
 	}
 }
 
@@ -96,19 +106,38 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, "bad_origin", "不接受跨源请求。")
 			return
 		}
-		// 4. token。
-		if !h.tokenOK(r) {
-			if retry := h.failures.fail(clientKey(r)); retry > 0 {
-				w.Header().Set("Retry-After", strconv.Itoa(retry))
-				writeError(w, http.StatusTooManyRequests, "too_many_failures",
-					"认证失败次数过多，稍后再试。")
+		// 4. 分面鉴权（ADR-015）：读取面可选密码，管理面永远要凭据。
+		if isAdminPath(r.URL.Path) {
+			if !h.adminOK(r) {
+				if retry := h.failures.fail(clientKey(r)); retry > 0 {
+					w.Header().Set("Retry-After", strconv.Itoa(retry))
+					writeError(w, http.StatusTooManyRequests, "too_many_failures",
+						"认证失败次数过多，稍后再试。")
+					return
+				}
+				writeError(w, http.StatusUnauthorized, "unauthorized_admin",
+					"管理接口需要管理凭据（UI 用同源 cookie，CLI 用 X-KB-Admin）。")
 				return
 			}
-			writeError(w, http.StatusUnauthorized, "unauthorized", "缺少或错误的 token。")
-			return
+		} else if h.opts.RequireToken {
+			if !h.readTokenOK(r) {
+				if retry := h.failures.fail(clientKey(r)); retry > 0 {
+					w.Header().Set("Retry-After", strconv.Itoa(retry))
+					writeError(w, http.StatusTooManyRequests, "too_many_failures",
+						"认证失败次数过多，稍后再试。")
+					return
+				}
+				writeError(w, http.StatusUnauthorized, "unauthorized", "缺少或错误的访问密码。")
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isAdminPath 判断是不是管理面。
+func isAdminPath(p string) bool {
+	return p == "/api" || strings.HasPrefix(p, "/api/")
 }
 
 // hostAllowed 只认本机的三种写法。
@@ -145,7 +174,8 @@ func (h *Handler) originAllowed(origin string) bool {
 	return false
 }
 
-func (h *Handler) tokenOK(r *http.Request) bool {
+// readTokenOK 校验读取面的访问密码。
+func (h *Handler) readTokenOK(r *http.Request) bool {
 	tok := ""
 	if v := r.Header.Get("Authorization"); strings.HasPrefix(v, "Bearer ") {
 		tok = strings.TrimSpace(v[len("Bearer "):])
@@ -153,10 +183,65 @@ func (h *Handler) tokenOK(r *http.Request) bool {
 	if tok == "" {
 		tok = strings.TrimSpace(r.Header.Get("X-KB-Token"))
 	}
-	if tok == "" || h.token == "" {
+	if tok == "" || h.readToken == "" {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(tok), []byte(h.token)) == 1
+	return subtle.ConstantTimeCompare([]byte(tok), []byte(h.readToken)) == 1
+}
+
+// adminOK 校验管理面的凭据。
+//
+// 两条路：
+//   - CLI / 脚本：`X-KB-Admin` 头。**额外**要求同源信号，curl 默认两个都不带。
+//   - UI：`kb-admin` cookie，由同源页面下发，带 HttpOnly 与 SameSite=Strict。
+//     跨站请求浏览器根本不会带这个 cookie，所以它不需要再看同源信号。
+func (h *Handler) adminOK(r *http.Request) bool {
+	if h.apiToken == "" {
+		return false
+	}
+	if v := strings.TrimSpace(r.Header.Get("X-KB-Admin")); v != "" {
+		if subtle.ConstantTimeCompare([]byte(v), []byte(h.apiToken)) != 1 {
+			return false
+		}
+		return h.sameOriginSignal(r)
+	}
+	if c, err := r.Cookie(AdminCookieName); err == nil && c.Value != "" {
+		return subtle.ConstantTimeCompare([]byte(c.Value), []byte(h.apiToken)) == 1
+	}
+	return false
+}
+
+// sameOriginSignal 判断请求是否来自同源页面。
+func (h *Handler) sameOriginSignal(r *http.Request) bool {
+	if r.Header.Get("Sec-Fetch-Site") == "same-origin" {
+		return true
+	}
+	if o := r.Header.Get("Origin"); o != "" {
+		return h.originAllowed(o)
+	}
+	// 旧 Safari 的同源 GET 两个头都可能没有，用 Referer 兜一下。
+	if ref := r.Header.Get("Referer"); ref != "" {
+		for _, host := range h.selfHosts() {
+			if strings.HasPrefix(ref, "http://"+host) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// SetAdminCookie 给同源页面下发管理凭据。UI 页（GET /）在渲染时调用。
+func (h *Handler) SetAdminCookie(w http.ResponseWriter) {
+	if h.apiToken == "" {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     AdminCookieName,
+		Value:    h.apiToken,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
 }
 
 func clientKey(r *http.Request) string {
@@ -284,7 +369,7 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 // 它**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸）之外，
 // 这个服务没有兔认证的路由。
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.mgr.Status(h.opts.Port, h.opts.DBMode))
+	writeJSON(w, http.StatusOK, h.mgr.Status(h.opts.Port, h.opts.DBMode, h.opts.RequireToken))
 }
 
 // handleManifest 是 `GET /kb/{name}/manifest`（docs/04）。

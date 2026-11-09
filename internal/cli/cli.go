@@ -27,7 +27,7 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
 
   serve                     前台起服务（Ctrl+C 退出）
     --port <n>              端口；被占时自动 +1 并写回 config
-    --host <addr>           默认 127.0.0.1；改成 0.0.0.0 会打印醒目警告
+    --host <addr>           默认 127.0.0.1；改成 0.0.0.0 会强制开启访问密码
     --open                  启动后打开浏览器
     --db <path>             缓存库位置（默认 <配置目录>/index.db，可以随时删）
     --no-db                 不落盘（纯内存，每次启动都重切）
@@ -63,7 +63,7 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
   skill                     打印 /skill.md（可直接重定向成 SKILL.md）
     --out <path>            写到文件（UTF-8、无 BOM），已存在的目录会自动创建
     --url <base>            覆盖服务地址
-  token [--show]            显示 token
+  token [--show] [--rotate] 看/换读取面的访问密码（管理凭据不提供打印）
   version
 `
 
@@ -122,7 +122,7 @@ func (s *stringsFlag) Set(v string) error {
 // boolFlagNames 是**不带值**的开关。用来把 `--limit 5` 的 5 正确地算在 flag 这一边。
 var boolFlagNames = map[string]bool{
 	"explain": true, "json": true, "open": true, "no-db": true, "show": true, "help": true,
-	"force": true,
+	"force": true, "rotate": true,
 }
 
 // splitFlags 把参数拆成「flag」与「位置参数」两半边。

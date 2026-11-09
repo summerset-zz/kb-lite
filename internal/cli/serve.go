@@ -25,7 +25,7 @@ import (
 func runServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	portFlag := fs.Int("port", 0, "")
-	host := fs.String("host", "127.0.0.1", "")
+	host := fs.String("host", "", "")
 	dbPath := fs.String("db", "", "")
 	noDB := fs.Bool("no-db", false, "")
 	openBrowserFlag := fs.Bool("open", false, "")
@@ -54,13 +54,27 @@ func runServe(args []string) int {
 	if *portFlag > 0 {
 		cfg.Port = *portFlag
 	}
+	if *host != "" {
+		cfg.Host = *host
+	}
 	if *dbPath != "" {
 		cfg.DBPath = *dbPath
 	}
 
-	token, err := daemon.LoadOrCreateToken(dir)
+	// 硬不变式（ADR-015）：绑了非回环地址就必须要访问密码，否则等于把知识库开放给局域网。
+	if !daemon.IsLoopbackHost(cfg.Host) && !cfg.RequireToken {
+		cfg.RequireToken = true
+		fmt.Fprintln(os.Stderr, "绑定到非本机地址，已自动开启访问密码（否则同网段的人都能读你的知识库）。")
+	}
+
+	readToken, err := daemon.LoadOrCreateReadToken(dir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "生成 token 失败：", err)
+		fmt.Fprintln(os.Stderr, "生成访问密码失败：", err)
+		return exitError
+	}
+	apiToken, err := daemon.LoadOrCreateAPIToken(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "生成管理凭据失败：", err)
 		return exitError
 	}
 
@@ -94,7 +108,7 @@ func runServe(args []string) int {
 	}
 	printIndexStats(mgr, time.Since(started))
 
-	ln, actualPort, err := listenLoop(*host, cfg.Port)
+	ln, actualPort, err := listenLoop(cfg.Host, cfg.Port)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "起不来：", err)
 		return exitExternal
@@ -107,28 +121,30 @@ func runServe(args []string) int {
 		}
 	}
 
-	exposed := *host != "127.0.0.1" && *host != "localhost" && *host != "::1"
+	exposed := !daemon.IsLoopbackHost(cfg.Host)
 	if exposed {
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintf(os.Stderr, "!!! 警告：服务绑到了 %s —— 局域网（甚至外网）都能访问。\n", *host)
-		fmt.Fprintln(os.Stderr, "!!! 这个模式下 Host 校验会被放开（docs/07 第 1 条），只在你确认过网络环境时这么做。")
+		fmt.Fprintf(os.Stderr, "!!! 警告：服务绑到了 %s，同一个网络里的人都能访问。\n", cfg.Host)
+		fmt.Fprintln(os.Stderr, "!!! 这个模式下 Host 校验会被放开（docs/07 第 1 条），确认过网络环境才这么做。")
 		fmt.Fprintln(os.Stderr, "")
 	}
 
-	handler := daemon.NewHandler(mgr, token, daemon.HandlerOptions{
-		Port:       actualPort,
-		LANExposed: exposed,
-		DBMode:     dbMode,
+	handler := daemon.NewHandler(mgr, readToken, apiToken, daemon.HandlerOptions{
+		Port:         actualPort,
+		LANExposed:   exposed,
+		DBMode:       dbMode,
+		RequireToken: cfg.EffectiveRequireToken(),
 		// 路由都存在了，所以 /skill.md 里 manifest 那一段会渲染出来（docs/09 v0.2）。
 		Features: daemon.DefaultFeatures,
 	})
+
 	srv := &http.Server{
 		Handler:           handler.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	base := "http://" + net.JoinHostPort(*host, strconv.Itoa(actualPort))
-	printBanner(base, dir, len(mgr.Index().KBs))
+	base := "http://" + net.JoinHostPort(cfg.Host, strconv.Itoa(actualPort))
+	printBanner(base, dir, len(mgr.Index().KBs), cfg.EffectiveRequireToken())
 
 	if *openBrowserFlag {
 		openInBrowser(base)
@@ -192,10 +208,16 @@ func printIndexStats(mgr *daemon.Manager, took time.Duration) {
 	fmt.Printf("用时 %d ms\n\n", took.Milliseconds())
 }
 
-func printBanner(base, dir string, kbCount int) {
+func printBanner(base, dir string, kbCount int, requireToken bool) {
 	fmt.Printf("kb-lite %s · %s · %d 个知识库\n", daemon.Version, base, kbCount)
-	fmt.Printf("token：%s\n", filepath.Join(dir, daemon.TokenFileName))
-	fmt.Printf("把这段给你的 agent：curl -s -H \"Authorization: Bearer $TOKEN\" %s/skill.md\n", base)
+	if requireToken {
+		fmt.Printf("访问密码：%s\n", filepath.Join(dir, daemon.ReadTokenFileName))
+		fmt.Printf("把这段给你的 agent：curl -s -H \"Authorization: Bearer $TOKEN\" %s/skill.md\n", base)
+	} else {
+		// 密码没开就别提它：多一行用不上的东西只会让人以为自己漏配了什么。
+		fmt.Printf("这个服务没有启用访问密码（只有本机可以访问）。\n")
+		fmt.Printf("把这段给你的 agent：curl -s %s/skill.md\n", base)
+	}
 	fmt.Println("Ctrl+C 退出。")
 	fmt.Println()
 }

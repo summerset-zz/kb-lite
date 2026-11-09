@@ -148,7 +148,13 @@ func TestManifestPrefixAndDepth(t *testing.T) {
 func TestStatusEndpoint(t *testing.T) {
 	srv := newTestServer(t)
 
-	status, body, raw := doRequest(t, srv, "/api/status", nil)
+	// 管理面要管理凭据：CLI 走头 + Origin（同源信号）。
+	admin := func(r *http.Request) {
+		r.Header.Set("X-KB-Admin", testAdminToken)
+		r.Header.Set("Origin", srv.URL)
+	}
+
+	status, body, raw := doRequest(t, srv, "/api/status", admin)
 	if status != http.StatusOK {
 		t.Fatalf("status = %d：%s", status, raw)
 	}
@@ -157,6 +163,9 @@ func TestStatusEndpoint(t *testing.T) {
 	}
 	if body["dbMode"] != "memory" {
 		t.Errorf("dbMode = %v（测试里没开缓存，应当是 memory）", body["dbMode"])
+	}
+	if body["requireToken"] != true {
+		t.Errorf("requireToken = %v，测试服务器开着密码，应当是 true", body["requireToken"])
 	}
 	kbs, _ := body["kbs"].([]any)
 	if len(kbs) != 1 {
@@ -173,12 +182,27 @@ func TestStatusEndpoint(t *testing.T) {
 		t.Error("lastIndexedAt 应当是毫秒时间戳")
 	}
 
-	// 没 token 也不行（/api 不是公开面）。
+	// 只带读取密码不行：管理面要的是另一把钥匙（ADR-015）。
+	status, _, _ = doRequest(t, srv, "/api/status", nil)
+	if status != http.StatusUnauthorized {
+		t.Errorf("只带读取密码时 status = %d，想要 401", status)
+	}
+
+	// 有管理凭据但没有同源信号（curl 就是这样）也不行。
 	status, _, _ = doRequest(t, srv, "/api/status", func(r *http.Request) {
-		r.Header.Del("Authorization")
+		r.Header.Set("X-KB-Admin", testAdminToken)
 	})
 	if status != http.StatusUnauthorized {
-		t.Errorf("无 token 时 status = %d，想要 401", status)
+		t.Errorf("没有同源信号时 status = %d，想要 401", status)
+	}
+
+	// 同源页面的 cookie 可以过。
+	status, _, _ = doRequest(t, srv, "/api/status", func(r *http.Request) {
+		r.Header.Del("Authorization")
+		r.AddCookie(&http.Cookie{Name: AdminCookieName, Value: testAdminToken})
+	})
+	if status != http.StatusOK {
+		t.Errorf("cookie 认证 status = %d，想要 200", status)
 	}
 }
 

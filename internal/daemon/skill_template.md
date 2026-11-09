@@ -8,7 +8,7 @@ description: 检索用户本地的 markdown 知识库（只读）。当问题涉
 一个**只读**的本地知识库服务。它把用户磁盘上的 markdown 目录切成了「条目（一篇文件）→ 章节」两级结构。
 
 服务地址：`{{BASE_URL}}`
-鉴权：每个请求都要带 `-H "Authorization: Bearer {{TOKEN}}"`
+鉴权：{{AUTH_NOTE}}
 
 可用的知识库：{{KB_LIST}}
 
@@ -21,7 +21,7 @@ description: 检索用户本地的 markdown 知识库（只读）。当问题涉
 ## 搜索
 
 ```bash
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/search?q=部署流程&q=deploy&limit=5"
 ```
 
@@ -51,11 +51,11 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 
 ```bash
 # 按编号
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?n=3"
 
 # 按标题（从 toc 里直接抄，不用数编号）
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?title=回滚"
 ```
 
@@ -82,7 +82,7 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 
 {{#if MANIFEST}}
 ```bash
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/manifest?budget=2000"
 ```
 
@@ -90,7 +90,7 @@ curl -s -H "Authorization: Bearer {{TOKEN}}" \
 
 {{/if}}
 ```bash
-curl -s -H "Authorization: Bearer {{TOKEN}}" \
+curl -s {{AUTH}}\
   "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/toc"
 ```
 
