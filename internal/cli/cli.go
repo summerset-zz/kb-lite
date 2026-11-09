@@ -45,6 +45,8 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
   rename <old> <new>        改显示名（条目不用重切）
   reindex [name] [--force] [--wait]
                             重新整理；不传名字就是全部
+  settings [--port <n>] [--host <addr>] [--db <path>] [--password on|off]
+                            查看/修改设置（不带参数就是查看）
 
   list                      列出已配置的知识库
 
@@ -67,10 +69,14 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --section <n> | --title <t>
     --offset <n>  --max-chars <n>
 
-  skill                     打印 /skill.md（可直接重定向成 SKILL.md）
+  skill                     打印 /skill.md
     --out <path>            写到文件（UTF-8、无 BOM），已存在的目录会自动创建
+    --install               装到 agent 的 skill 目录（教 AI 怎么查）
+    --install-authoring     装另一份：教 AI 怎么写
+    --target dsh|claude|both  装到哪，默认 dsh
     --url <base>            覆盖服务地址
   token [--show] [--rotate] 看/换读取面的访问密码（管理凭据不提供打印）
+  stop                      请求服务退出（同 quit）
   version
 `
 
@@ -97,6 +103,10 @@ func Run(args []string) int {
 		return runRename(rest)
 	case "reindex":
 		return runReindex(rest)
+	case "settings":
+		return runSettings(rest)
+	case "stop", "quit":
+		return runStop(rest)
 	case "list":
 		return runList(rest)
 	case "status":
@@ -140,6 +150,7 @@ func (s *stringsFlag) Set(v string) error {
 var boolFlagNames = map[string]bool{
 	"explain": true, "json": true, "open": true, "no-db": true, "show": true, "help": true,
 	"force": true, "rotate": true, "yes": true, "wait": true,
+	"install": true, "install-authoring": true,
 }
 
 // splitFlags 把参数拆成「flag」与「位置参数」两半边。

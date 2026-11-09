@@ -12,6 +12,15 @@ import (
 //go:embed skill_template.md
 var skillTemplate string
 
+//go:embed authoring_template.md
+var authoringTemplate string
+
+// RenderAuthoringText 返回“教 AI 怎么写”的那份说明。
+//
+// 与 /skill.md **分成两份**（ADR-017）：合成一份后，agent 在只想查东西的时候
+// 也会照写作规范去动用户的文件。这里没有占位符，原样返回。
+func RenderAuthoringText() string { return authoringTemplate }
+
 // DefaultFeatures 是「这个版本已经实现了哪些可选接口」。
 //
 // 只有**真的存在路由**的才能出现在 /skill.md 里（docs/04 末段：加了参数忘了改 skill，
@@ -33,7 +42,7 @@ func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
 	}
 	// 读取密码没开就不把密码写进文档：那是给用户看的纸，不该多一个用不上的东西。
 	tok := ""
-	if h.opts.RequireToken {
+	if h.requireToken.Load() {
 		tok = h.readToken
 	}
 	out := RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // 管理接口的请求与响应（docs/04「管理接口」）。
@@ -186,6 +188,116 @@ func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleSettings 是 `POST /api/settings`。
+//
+// 访问密码立刻生效；端口 / 绑定地址 / 记录文件位置要重启才生效（回 restartRequired）。
+func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
+	var patch SettingsPatch
+	if !decodeJSON(w, r, &patch) {
+		return
+	}
+	restart, err := h.mgr.ApplySettings(patch)
+	if err != nil {
+		writeSettingsError(w, err)
+		return
+	}
+	// 密码开关当场应用到 Handler：用户点完保存就该生效，不该等重启。
+	effective := h.mgr.Config().EffectiveRequireToken()
+	h.SetRequireToken(effective)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":              true,
+		"restartRequired": restart,
+		"effective": map[string]any{
+			"port":         h.mgr.Config().Port,
+			"host":         h.mgr.Config().Host,
+			"requireToken": effective,
+			"dbPath":       h.mgr.Config().DBPath,
+		},
+	})
+}
+
+// handleShutdown 是 `POST /api/shutdown`：优雅退出（UI 的“退出”按钮与 `kb-lite stop`）。
+func (h *Handler) handleShutdown(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	if h.opts.Shutdown != nil {
+		// 先回响应再退：否则客户端看到的是连接被断开，以为失败了。
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			h.opts.Shutdown()
+		}()
+	}
+}
+
+// skillInstallReq 是 `POST /api/skill/install` 的请求体。
+type skillInstallReq struct {
+	// Kind 是 read（教 agent 怎么查）或 authoring（教 AI 怎么写）。
+	Kind string `json:"kind"`
+	// Targets 是 dsh / claude，默认只装 dsh。
+	Targets []string `json:"targets"`
+}
+
+// handleSkillInstall 是 `POST /api/skill/install`。
+//
+// 两份 SKILL 分开装（ADR-017），落在不同的目录里，互不覆盖。
+func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
+	var req skillInstallReq
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Kind == "" {
+		req.Kind = "read"
+	}
+	if req.Kind != "read" && req.Kind != "authoring" {
+		writeError(w, http.StatusBadRequest, "bad_kind", "kind 只能是 read 或 authoring。")
+		return
+	}
+	if len(req.Targets) == 0 {
+		req.Targets = []string{"dsh"}
+	}
+
+	base := "http://" + r.Host
+	if r.Host == "" {
+		base = "http://127.0.0.1:" + strconv.Itoa(h.opts.Port)
+	}
+	var content string
+	if req.Kind == "authoring" {
+		content = RenderAuthoringText()
+	} else {
+		tok := ""
+		if h.requireToken.Load() {
+			tok = h.readToken
+		}
+		content = RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
+	}
+
+	res := SkillInstallResult{Installed: make([]SkillTarget, 0, len(req.Targets))}
+	for _, target := range req.Targets {
+		got, err := InstallSkill(req.Kind, target, content)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "install_failed", err.Error())
+			return
+		}
+		got.Kind, got.Target = req.Kind, target
+		res.Installed = append(res.Installed, got)
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// writeSettingsError 把设置校验失败翻成 400，并指向具体字段。
+func writeSettingsError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidPort):
+		writeError(w, http.StatusBadRequest, "invalid_port", "端口要在 1 到 65535 之间。")
+	case errors.Is(err, ErrPortInUse):
+		writeError(w, http.StatusBadRequest, "port_in_use", "这个端口被别的软件占用了，换一个。")
+	case errors.Is(err, ErrDirNotWrite):
+		writeError(w, http.StatusBadRequest, "dir_not_writable", "这个目录不能写入，换一个位置试试。")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+	}
 }
 
 // ---- 小工具 ----

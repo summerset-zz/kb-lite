@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/summerset-zz/kb-lite/internal/core"
@@ -41,6 +42,8 @@ type HandlerOptions struct {
 	// RequireToken 是读取面（/kb/*、/skill.md）是否需要访问密码。
 	// 调用方传的是 Config.EffectiveRequireToken()，已经含“绑局域网必定开”这条。
 	RequireToken bool
+	// Shutdown 是 `POST /api/shutdown` 的落地：由 serve 传进来（优雅退出）。
+	Shutdown func()
 }
 
 // AdminCookieName 是管理凭据的 cookie 名。同源页面靠它过 /api/*。
@@ -55,6 +58,8 @@ type Handler struct {
 	apiToken string
 	opts     HandlerOptions
 	failures *throttle
+	// requireToken 是**可热更新**的读取密码开关：设置页改完立刻生效。
+	requireToken atomic.Bool
 }
 
 // NewHandler 建一个 Handler。
@@ -66,14 +71,19 @@ func NewHandler(mgr *Manager, readToken, apiToken string, opts HandlerOptions) *
 		// 没显式说就是内存模式（测试与 --no-db 都是这样）。
 		opts.DBMode = "memory"
 	}
-	return &Handler{
+	h := &Handler{
 		mgr:       mgr,
 		readToken: readToken,
 		apiToken:  apiToken,
 		opts:      opts,
 		failures:  newThrottle(authFailureWindow, authFailureMax),
 	}
+	h.requireToken.Store(opts.RequireToken)
+	return h
 }
+
+// SetRequireToken 热更新读取密码开关（设置页保存后调用）。
+func (h *Handler) SetRequireToken(v bool) { h.requireToken.Store(v) }
 
 // Routes 返回挂好中间件的 handler。
 func (h *Handler) Routes() http.Handler {
@@ -93,6 +103,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/kbs/{name}/reindex", h.handleKBReindex)
 	mux.HandleFunc("GET /api/kbs/{name}/index", h.handleKBIndex)
 	mux.HandleFunc("GET /api/fs/list", h.handleFSList)
+	mux.HandleFunc("POST /api/settings", h.handleSettings)
+	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
+	mux.HandleFunc("POST /api/shutdown", h.handleShutdown)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
@@ -132,7 +145,7 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 					"管理接口需要管理凭据（UI 用同源 cookie，CLI 用 X-KB-Admin）。")
 				return
 			}
-		} else if h.opts.RequireToken {
+		} else if h.requireToken.Load() {
 			if !h.readTokenOK(r) {
 				if retry := h.failures.fail(clientKey(r)); retry > 0 {
 					w.Header().Set("Retry-After", strconv.Itoa(retry))
@@ -390,7 +403,7 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 // 它**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸）之外，
 // 这个服务没有兔认证的路由。
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.mgr.Status(h.opts.Port, h.opts.DBMode, h.opts.RequireToken))
+	writeJSON(w, http.StatusOK, h.mgr.Status(h.opts.Port, h.opts.DBMode, h.requireToken.Load()))
 }
 
 // handleManifest 是 `GET /kb/{name}/manifest`（docs/04）。

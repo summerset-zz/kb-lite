@@ -582,9 +582,20 @@ func runSkill(args []string) int {
 	fs := flag.NewFlagSet("skill", flag.ContinueOnError)
 	base := fs.String("url", "", "覆盖服务地址")
 	outPath := fs.String("out", "", "写到文件（UTF-8、无 BOM），而不是打到 stdout")
+	install := fs.Bool("install", false, "装到 agent 的 skill 目录（教 AI 怎么查）")
+	installAuthoring := fs.Bool("install-authoring", false, "装另一份：教 AI 怎么写")
+	targetFlag := fs.String("target", "dsh", "dsh | claude | both")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError
+	}
+
+	if *install || *installAuthoring {
+		kind := "read"
+		if *installAuthoring {
+			kind = "authoring"
+		}
+		return runSkillInstall(kind, *targetFlag)
 	}
 
 	text, code := fetchSkillText(*base)
@@ -608,6 +619,45 @@ func runSkill(args []string) int {
 	}
 
 	fmt.Print(text)
+	return exitOK
+}
+
+// runSkillInstall 走管理接口安装 SKILL（两份分开装，ADR-017）。
+func runSkillInstall(kind, target string) int {
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+	targets := []string{target}
+	if target == "both" {
+		targets = []string{"dsh", "claude"}
+	}
+	raw, err := c.admin(http.MethodPost, "/api/skill/install", map[string]any{
+		"kind": kind, "targets": targets,
+	})
+	if err != nil {
+		return fail(err)
+	}
+	var res struct {
+		Installed []struct {
+			Target string `json:"target"`
+			Path   string `json:"path"`
+			Bytes  int    `json:"bytes"`
+		} `json:"installed"`
+	}
+	_ = json.Unmarshal(raw, &res)
+	if len(res.Installed) == 0 {
+		fmt.Println("没有装到任何地方，检查一下 --target。")
+		return exitError
+	}
+	what := "「让 AI 能查知识库」的 SKILL"
+	if kind == "authoring" {
+		what = "「让 AI 把文件整理成知识库格式」的 SKILL"
+	}
+	for _, it := range res.Installed {
+		fmt.Printf("已安装%s → %s（%d 字节）\n", what, it.Path, it.Bytes)
+	}
+	fmt.Println("装好后要重启一次 AI 工具才会生效。")
 	return exitOK
 }
 
@@ -706,6 +756,116 @@ func runToken(args []string) int {
 		tok = tok[:6] + "…（用 --show 看完整的）"
 	}
 	fmt.Println(tok)
+	return exitOK
+}
+
+// ---- settings / stop ----
+
+// runSettings 查看或修改设置。改端口 / 绑定地址 / 记录文件位置要重启才生效。
+func runSettings(args []string) int {
+	fs := flag.NewFlagSet("settings", flag.ContinueOnError)
+	port := fs.Int("port", 0, "")
+	host := fs.String("host", "", "")
+	dbPath := fs.String("db", "", "")
+	password := fs.String("password", "", "on | off")
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+
+	patch := map[string]any{}
+	if *port > 0 {
+		patch["port"] = *port
+	}
+	if *host != "" {
+		patch["host"] = *host
+	}
+	if *dbPath != "" {
+		patch["dbPath"] = *dbPath
+	}
+	if *password != "" {
+		switch *password {
+		case "on", "off":
+			patch["requireToken"] = *password == "on"
+		default:
+			fmt.Fprintln(os.Stderr, "--password 只能是 on 或 off")
+			return exitError
+		}
+	}
+
+	if len(patch) == 0 {
+		raw, err := c.admin(http.MethodGet, "/api/status", nil)
+		if err != nil {
+			return fail(err)
+		}
+		var st struct {
+			Port         int    `json:"port"`
+			RequireToken bool   `json:"requireToken"`
+			DBPath       string `json:"dbPath"`
+			DBMode       string `json:"dbMode"`
+		}
+		_ = json.Unmarshal(raw, &st)
+		// host 不在 status 里，直接读配置（CLI 与 daemon 同一个文件）。
+		dir, _ := daemon.ConfigDir()
+		cfg, _ := daemon.Load(dir)
+		pw := "关闭（只有本机能访问）"
+		if st.RequireToken {
+			pw = "开启"
+		}
+		fmt.Printf("端口        %d\n", st.Port)
+		if cfg != nil {
+			fmt.Printf("绑定地址    %s\n", cfg.Host)
+		}
+		fmt.Printf("访问密码    %s\n", pw)
+		fmt.Printf("记录文件    %s（%s）\n", st.DBPath, st.DBMode)
+		return exitOK
+	}
+
+	raw, err := c.admin(http.MethodPost, "/api/settings", patch)
+	if err != nil {
+		return fail(err)
+	}
+	var resp struct {
+		RestartRequired bool `json:"restartRequired"`
+		Effective       struct {
+			Port         int    `json:"port"`
+			Host         string `json:"host"`
+			RequireToken bool   `json:"requireToken"`
+		} `json:"effective"`
+	}
+	_ = json.Unmarshal(raw, &resp)
+	fmt.Println("已保存。")
+	if resp.RestartRequired {
+		fmt.Printf("重启 kb-lite serve 之后生效（新地址 http://%s:%d）。\n", resp.Effective.Host, resp.Effective.Port)
+	}
+	if resp.Effective.RequireToken {
+		fmt.Println("访问密码已开启：AI 要带上它才连得上（kb-lite token --show 看）。")
+	} else {
+		fmt.Println("访问密码已关闭：这台电脑上的任何程序都能读你的知识库。")
+	}
+	return exitOK
+}
+
+// runStop 请求 daemon 退出（关监听、关记录文件、进程结束）。
+func runStop(args []string) int {
+	fs := flag.NewFlagSet("stop", flag.ContinueOnError)
+	flagArgs, _ := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+	if _, err := c.admin(http.MethodPost, "/api/shutdown", nil); err != nil {
+		return fail(err)
+	}
+	fmt.Println("已请求退出。")
 	return exitOK
 }
 

@@ -129,6 +129,8 @@ func runServe(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 	}
 
+	// shutdown 由 serve 自己实现：UI 的“退出”按钮与 `kb-lite stop` 都打到 /api/shutdown。
+	var shutdown func()
 	handler := daemon.NewHandler(mgr, readToken, apiToken, daemon.HandlerOptions{
 		Port:         actualPort,
 		LANExposed:   exposed,
@@ -136,11 +138,21 @@ func runServe(args []string) int {
 		RequireToken: cfg.EffectiveRequireToken(),
 		// 路由都存在了，所以 /skill.md 里 manifest 那一段会渲染出来（docs/09 v0.2）。
 		Features: daemon.DefaultFeatures,
+		Shutdown: func() {
+			if shutdown != nil {
+				shutdown()
+			}
+		},
 	})
 
 	srv := &http.Server{
 		Handler:           handler.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+	}
+	shutdown = func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
 	}
 
 	base := "http://" + net.JoinHostPort(cfg.Host, strconv.Itoa(actualPort))
@@ -156,9 +168,7 @@ func runServe(args []string) int {
 	go func() {
 		<-interrupt
 		fmt.Fprintln(os.Stderr, "\n正在退出…")
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx)
+		shutdown()
 	}()
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
