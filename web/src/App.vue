@@ -11,6 +11,7 @@ import SearchView from './views/SearchView.vue'
 import AgentView from './views/AgentView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AboutView from './views/AboutView.vue'
+import ToastHost from './components/ToastHost.vue'
 
 type Tab = 'kbs' | 'search' | 'agent' | 'settings' | 'about'
 
@@ -99,5 +100,8 @@ async function resume() {
       </main>
       <AppFooter :status="status" />
     </template>
+
+    <!-- 提示容器放在最外层：向导页、出错页也要能弹。 -->
+    <ToastHost />
   </div>
 </template>

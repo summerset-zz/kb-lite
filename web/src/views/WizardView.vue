@@ -27,10 +27,27 @@ const pickerOpen = ref(false)
 const kbPath = ref('')
 const kbName = ref('')
 
+// 已经加好的知识库：重新运行向导的人第一件事就是确认它们还在。
+const existing = computed(() => props.status.kbs ?? [])
+
+// 同一个文件夹再加一次没有意义（服务端会回“重名”）。先在界面上认出来。
+const duplicateOf = computed(() => {
+  const p = normPath(kbPath.value)
+  if (!p) return ''
+  return existing.value.find((kb) => normPath(kb.rootPath) === p)?.name ?? ''
+})
+
+function normPath(p: string): string {
+  const t = p.trim().replace(/[\\/]+$/, '')
+  // Windows 路径不分大小写；别的平台分了，就别乱合并。
+  return t.includes('\\') ? t.toLowerCase() : t
+}
+
 const canNext = computed(() => {
   if (step.value === 0) return dbCustom.value ? dbPath.value.trim().length > 0 : true
   if (step.value === 1) return port.value > 0 && port.value < 65536
-  return true
+  // 已经有知识库的人不需要再加一个，也能往下走。
+  return kbPath.value.trim().length > 0 || existing.value.length > 0
 })
 
 function onPick(path: string) {
@@ -48,7 +65,10 @@ async function finish() {
     //  2. 再一次把端口、范围、记录文件位置和「向导已完成」一起提交。
     //     如果端口真的换了，服务会当场上线新地址、旧地址立刻失效，
     //     所以这一次提交必须是**最后一次**对旧地址的调用，之后直接跳过去。
-    if (kbPath.value) await api.createKB(kbName.value.trim(), kbPath.value)
+    // 已经选过的文件夹（重复跑向导时会碰到）不再建一次，否则只会拿到一句“重名”。
+    if (kbPath.value.trim() && !duplicateOf.value) {
+      await api.createKB(kbName.value.trim(), kbPath.value.trim())
+    }
 
     const resp = await api.settings({
       port: port.value,
@@ -184,10 +204,21 @@ const mcpText = computed(() =>
       </section>
 
       <section v-else-if="step === 2" class="mt-6">
-        <h2 class="font-medium">{{ s.wizard.step3 }}</h2>
-        <p class="muted text-sm mt-1">{{ s.wizard.pickFolderHint }}</p>
+        <h2 class="font-medium">{{ existing.length ? s.wizard.step3Again : s.wizard.step3 }}</h2>
+        <p class="muted text-sm mt-1">
+          {{ existing.length ? s.wizard.step3AgainHint : s.wizard.pickFolderHint }}
+        </p>
 
-        <div class="mt-4 flex items-center gap-2 flex-wrap">
+        <ul v-if="existing.length" class="mt-4 space-y-2">
+          <li v-for="kb in existing" :key="kb.id" class="card px-3 py-2">
+            <p class="text-sm">{{ kb.name }}</p>
+            <p class="mono text-xs muted break-all mt-0.5">{{ kb.rootPath }}</p>
+          </li>
+        </ul>
+
+        <p v-if="existing.length" class="text-sm mt-5 mb-2">{{ s.wizard.addAnother }}</p>
+
+        <div class="flex items-center gap-2 flex-wrap" :class="existing.length ? '' : 'mt-4'">
           <button class="btn" type="button" @click="pickerOpen = true">
             {{ s.wizard.pickFolder }}
           </button>
@@ -198,6 +229,10 @@ const mcpText = computed(() =>
           <label class="text-sm w-16" for="wizard-name">{{ s.wizard.name }}</label>
           <input id="wizard-name" v-model="kbName" class="input w-48" />
         </div>
+
+        <p v-if="duplicateOf" class="note mt-3 text-sm">
+          {{ s.wizard.alreadyAdded(duplicateOf) }}
+        </p>
 
         <div v-if="pickerOpen" class="mt-4">
           <DirPicker :start="kbPath" @pick="onPick" @cancel="pickerOpen = false" />
@@ -246,10 +281,10 @@ const mcpText = computed(() =>
           v-else-if="step === 2"
           class="btn btn-primary"
           type="button"
-          :disabled="busy || !kbPath"
+          :disabled="busy || !canNext"
           @click="finish"
         >
-          {{ busy ? s.common.loading : s.common.start }}
+          {{ busy ? s.common.loading : kbPath ? s.common.start : s.wizard.startWithout }}
         </button>
         <button v-else class="btn btn-primary" type="button" @click="emit('done')">
           {{ s.common.start }}

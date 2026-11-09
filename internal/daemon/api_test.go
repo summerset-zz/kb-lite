@@ -289,6 +289,28 @@ func TestFSList(t *testing.T) {
 	}
 }
 
+// TestFSListWithoutPath 守目录选择器的第一屏：不给 path 也要有东西可选。
+//
+// 早先这种情况回 400「缺少 path 参数」，界面上的表现是点了「选一个文件夹」什么都不出来，
+// 下面还挂着一句用户根本看不懂的话。
+func TestFSListWithoutPath(t *testing.T) {
+	srv := newTestServer(t)
+
+	status, body, raw := adminReq(t, srv, http.MethodGet, "/api/fs/list", nil)
+	if status != http.StatusOK {
+		t.Fatalf("不带 path 时 status = %d：%s", status, raw)
+	}
+	// Windows 给盘符，其它平台给家目录：两种都算给了起点。
+	drives, _ := body["drives"].([]any)
+	path, _ := body["path"].(string)
+	if len(drives) == 0 && path == "" {
+		t.Fatalf("既没有盘符也没有目录，界面还是空的：%s", raw)
+	}
+	if _, ok := body["dirs"].([]any); !ok {
+		t.Errorf("dirs 应当是数组（哪怕是空的）：%s", raw)
+	}
+}
+
 // ---- 小工具 ----
 
 func strPtr(s string) *string { return &s }

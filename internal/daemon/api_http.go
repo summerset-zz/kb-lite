@@ -211,12 +211,12 @@ func (h *Handler) handleAuthToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleFSList 是 `GET /api/fs/list?path=`：给 UI 的目录选择器。
+//
+// path 为空**不是错误**：选择器第一次打开时手上没有任何路径，那时候给它起点
+// （Windows 是盘符列表，其它平台是家目录）。早先这里回 400「缺少 path 参数」，
+// 界面上的表现就是点了按钮什么都不出来，下面还挂着一句看不懂的话。
 func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimSpace(r.URL.Query().Get("path"))
-	if p == "" {
-		writeError(w, http.StatusBadRequest, "invalid_path", "缺少 path 参数。")
-		return
-	}
 	resp, err := ListDirs(p)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_path", "这个目录打不开："+err.Error())

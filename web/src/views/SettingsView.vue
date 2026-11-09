@@ -4,11 +4,15 @@ import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { StartupInfo, Status, UpdateInfo } from '../types'
 import { useStatus } from '../useStatus'
+import { useToast } from '../toast'
 import ModalShell from '../components/ModalShell.vue'
 import DirPicker from '../components/DirPicker.vue'
 
 const props = defineProps<{ status: Status }>()
 const { refresh } = useStatus()
+// 保存成功的反馈走提示条（浮在页面底部，自己消失）——
+// 以前成功什么也不说，用户只能看到页面没变。
+const toast = useToast()
 
 const port = ref(props.status.port)
 const lan = ref(props.status.lanExposed)
@@ -17,7 +21,6 @@ const dbPath = ref(props.status.dbPath)
 
 const busy = ref('')
 const error = ref('')
-const notice = ref('')
 // 端口当场搬走时记下新地址：旧页面之后每个请求都会失败，得让用户一键跳过去。
 const movedTo = ref('')
 
@@ -60,7 +63,7 @@ async function toggleStartup() {
   error.value = ''
   try {
     startup.value = await api.setStartup(next)
-    notice.value = next ? '已开启开机自启。' : '已关闭开机自启。'
+    toast.ok(next ? s.settings.startupEnabled : s.settings.startupDisabled)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
   } finally {
@@ -75,6 +78,7 @@ async function createShortcut() {
   try {
     const resp = await api.shortcut()
     shortcutPath.value = resp.path
+    toast.ok(s.settings.shortcutCreated)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
   } finally {
@@ -114,7 +118,6 @@ async function copy(text: string, key: string) {
 async function save() {
   busy.value = 'save'
   error.value = ''
-  notice.value = ''
   movedTo.value = ''
   try {
     const resp = await api.settings({
@@ -130,7 +133,11 @@ async function save() {
     if (resp.moved && resp.effective.port !== Number(location.port)) {
       movedTo.value = `http://${location.hostname}:${resp.effective.port}`
     }
-    notice.value = resp.restartRequired ? s.settings.restartNeeded : '已保存。'
+    if (resp.restartRequired) {
+      toast.warn(s.settings.restartNeeded)
+    } else {
+      toast.ok(s.common.saved)
+    }
     await refresh()
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
@@ -145,7 +152,7 @@ async function rotate() {
   try {
     const resp = await api.authToken('rotate')
     token.value = resp.token
-    notice.value = '新密码已经生效，旧的立刻不能用了。'
+    toast.ok(s.settings.rotated)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
   } finally {
@@ -168,11 +175,14 @@ async function rerunWizard() {
 async function togglePause() {
   busy.value = 'pause'
   error.value = ''
-  notice.value = ''
   try {
     const next = !props.status.paused
     await api.setPaused(next)
-    notice.value = next ? s.settings.paused : '已恢复，AI 现在可以查了。'
+    if (next) {
+      toast.warn(s.settings.paused)
+    } else {
+      toast.ok(s.settings.resumed)
+    }
     await refresh()
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
@@ -281,7 +291,6 @@ function setTheme(v: string) {
         <p v-else class="muted text-sm mt-2">{{ s.settings.passwordOffHint }}</p>
       </div>
 
-      <p v-if="notice" class="text-sm" :style="{ color: 'var(--accent)' }">{{ notice }}</p>
       <p v-if="movedTo" class="note text-sm">
         {{ s.settings.moved }} 新地址是 <span class="mono">{{ movedTo }}</span>。
         <a :href="movedTo" class="underline">{{ s.settings.moveNow }}</a>

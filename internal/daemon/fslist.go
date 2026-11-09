@@ -47,7 +47,13 @@ func statDir(p string) (bool, error) {
 // ListDirs 列出 `p` 下的子目录。
 //
 // 只列目录不列文件；跳过 `.` 开头的目录与 node_modules 这类（用户不会想把它们加进来）。
+//
+// `p` 为空时返回**起点**（见 startList）：目录选择器第一次打开时手上没有任何路径，
+// 回一句“缺少 path 参数”只会让界面空着不动。
 func ListDirs(p string) (*FSListResp, error) {
+	if strings.TrimSpace(p) == "" {
+		return startList()
+	}
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		return nil, err
@@ -90,6 +96,22 @@ func ListDirs(p string) (*FSListResp, error) {
 	}
 	sort.Slice(resp.Dirs, func(i, j int) bool { return resp.Dirs[i].Name < resp.Dirs[j].Name })
 	return resp, nil
+}
+
+// startList 是「手上还没有路径」时的起点。
+//
+// Windows 先给盘符（用户最可能想说 D:\ 这种），其它平台从家目录开始。
+// 两个都没有才退回文件系统根。
+func startList() (*FSListResp, error) {
+	if drives := listDrives(); len(drives) > 0 {
+		return &FSListResp{Dirs: []FSDir{}, Drives: drives}, nil
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		if resp, err := ListDirs(home); err == nil {
+			return resp, nil
+		}
+	}
+	return ListDirs(string(filepath.Separator))
 }
 
 // countMarkdown 递归数 markdown，超过 limit 就停（返回 limit）。
