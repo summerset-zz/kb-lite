@@ -24,7 +24,7 @@ type KBIndex struct {
 	Sections int
 	Bytes    int64
 	// Warnings 是扫描 / 解码阶段记下的问题，UI 里可看（docs/02「限制与告警」）。
-	Warnings []string
+	Warnings []Warning
 	// Skipped 是被**整篇跳过**的文件与原因（frontmatter 要求跳过 / 正文为空）。
 	// 跳过的东西必须能看见 —— 静默丢弃比多一条噪音糟得多（docs/02「整篇跳过」）。
 	Skipped   []SkippedFile
@@ -178,14 +178,14 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 
 	var (
 		mu       sync.Mutex
-		warnings = append([]string{}, scanned.Warnings...)
+		warnings = append([]Warning{}, scanned.Warnings...)
 		skipped  []SkippedFile
 		done     int64
 		total    = len(files)
 	)
-	addWarn := func(msg string) {
+	addWarn := func(kind, msg string) {
 		mu.Lock()
-		warnings = append(warnings, msg)
+		warnings = append(warnings, Warning{Kind: kind, Message: msg})
 		mu.Unlock()
 	}
 
@@ -246,7 +246,12 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 		ki.Sections += len(e.Sections)
 		ki.Bytes += files[i].Size
 	}
-	sort.Strings(warnings)
+	sort.Slice(warnings, func(i, j int) bool {
+		if warnings[i].Kind != warnings[j].Kind {
+			return warnings[i].Kind < warnings[j].Kind
+		}
+		return warnings[i].Message < warnings[j].Message
+	})
 	ki.Warnings = warnings
 	sort.Slice(skipped, func(i, j int) bool { return skipped[i].RelPath < skipped[j].RelPath })
 	ki.Skipped = skipped
@@ -255,21 +260,23 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 
 // readEntry 返回条目与跳过原因（原因为空表示没跳过）。
 // 读不出来 / 解码失败不是「跳过」而是「告警」：它们属于意外，不属于用户的意图。
-func readEntry(f ScannedFile, opts BuildOptions, addWarn func(string)) (*core.Entry, string) {
+func readEntry(f ScannedFile, opts BuildOptions, addWarn func(kind, msg string)) (*core.Entry, string) {
 	data, err := os.ReadFile(f.AbsPath)
 	if err != nil {
-		addWarn(f.RelPath + ": 读取失败（" + err.Error() + "）")
+		addWarn(WarnRead, f.RelPath+": 读取失败（"+err.Error()+"）")
 		return nil, ""
 	}
 	text, warn := Decode(data)
 	if warn != "" {
-		addWarn(f.RelPath + ": " + warn)
+		addWarn(WarnEncoding, f.RelPath+": "+warn)
 		return nil, ""
 	}
 
 	res := core.BuildEntry(f.RelPath, text, core.SliceOptions{MaxSectionChars: opts.MaxSectionChars})
 	for _, w := range res.Warnings {
-		addWarn(f.RelPath + ": " + w)
+		// core 目前只会报 frontmatter 相关的问题（不合法 / 宽松解析）。
+		// 它们**不阻止**这篇被索引：正文已经救回来了，把类别说准很重要。
+		addWarn(WarnFrontmatter, f.RelPath+": "+w)
 	}
 	if res.Skipped {
 		return nil, res.SkipReason

@@ -117,8 +117,11 @@ func TestRebuildRecordsWarnings(t *testing.T) {
 	if len(k.Warnings) == 0 {
 		t.Fatal("frontmatter 解析失败应当记一条 warn")
 	}
-	if !strings.Contains(k.Warnings[0], "bad.md") {
-		t.Errorf("warn 没带文件名：%v", k.Warnings)
+	if k.Warnings[0].Kind != WarnFrontmatter {
+		t.Errorf("告警类别 = %q，想要 %q", k.Warnings[0].Kind, WarnFrontmatter)
+	}
+	if !strings.Contains(k.Warnings[0].Message, "bad.md") {
+		t.Errorf("warn 没带文件名：%+v", k.Warnings)
 	}
 }
 

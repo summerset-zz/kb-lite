@@ -63,8 +63,11 @@ func TestScanMaxFileBytes(t *testing.T) {
 	if len(res.Files) != 1 || res.Files[0].RelPath != "small.md" {
 		t.Fatalf("文件 = %+v", res.Files)
 	}
-	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "超过上限") {
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0].Message, "超过上限") {
 		t.Errorf("warnings = %v", res.Warnings)
+	}
+	if len(res.Warnings) == 1 && res.Warnings[0].Kind != WarnTooLarge {
+		t.Errorf("告警类别 = %q，想要 %q", res.Warnings[0].Kind, WarnTooLarge)
 	}
 }
 

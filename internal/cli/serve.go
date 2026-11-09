@@ -154,7 +154,11 @@ func printIndexStats(mgr *daemon.Manager, took time.Duration) {
 		fmt.Printf("已索引「%s」：%d 篇 / %d 节 / %s\n",
 			kb.KB.Name, len(kb.Entries), kb.Sections, formatBytes(kb.Bytes))
 		if len(kb.Warnings) > 0 {
-			fmt.Printf("  %d 条告警（跳过的大文件 / 编码失败之类）\n", len(kb.Warnings))
+			warnings := make([]warningDTO, 0, len(kb.Warnings))
+			for _, w := range kb.Warnings {
+				warnings = append(warnings, warningDTO{Kind: w.Kind, Message: w.Message})
+			}
+			printWarnings(warnings, "  ")
 		}
 	}
 	for _, st := range mgr.States() {

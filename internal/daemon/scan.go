@@ -61,7 +61,7 @@ type ScannedFile struct {
 // ScanResult 是一次扫描的结果。
 type ScanResult struct {
 	Files    []ScannedFile
-	Warnings []string
+	Warnings []Warning
 }
 
 // Scan 遍历目录，按 docs/02「文件发现与忽略」的规则给出文件清单。
@@ -105,7 +105,7 @@ func Scan(opts ScanOptions) (ScanResult, error) {
 		name := d.Name()
 
 		if walkErr != nil {
-			res.Warnings = append(res.Warnings, relPosix+": 无法读取（"+walkErr.Error()+"）")
+			res.Warnings = append(res.Warnings, Warning{WarnRead, relPosix + ": 无法读取（" + walkErr.Error() + "）"})
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
@@ -134,11 +134,11 @@ func Scan(opts ScanOptions) (ScanResult, error) {
 
 		fi, statErr := d.Info()
 		if statErr != nil {
-			res.Warnings = append(res.Warnings, relPosix+": 读不到文件信息（"+statErr.Error()+"）")
+			res.Warnings = append(res.Warnings, Warning{WarnRead, relPosix + ": 读不到文件信息（" + statErr.Error() + "）"})
 			return nil
 		}
 		if fi.Size() > maxBytes {
-			res.Warnings = append(res.Warnings, relPosix+": 文件超过上限，已跳过")
+			res.Warnings = append(res.Warnings, Warning{WarnTooLarge, relPosix + ": 文件超过上限，已跳过"})
 			return nil
 		}
 
@@ -151,7 +151,7 @@ func Scan(opts ScanOptions) (ScanResult, error) {
 
 	// 固定顺序：切片的编号、内存索引、以及 search 的排序都依赖这个顺序是确定的。
 	sort.Slice(res.Files, func(i, j int) bool { return res.Files[i].RelPath < res.Files[j].RelPath })
-	sort.Strings(res.Warnings)
+	sort.Slice(res.Warnings, func(i, j int) bool { return res.Warnings[i].Message < res.Warnings[j].Message })
 	return res, nil
 }
 

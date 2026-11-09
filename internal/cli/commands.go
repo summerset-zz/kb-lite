@@ -738,6 +738,37 @@ type skippedDTO struct {
 	Reason string `json:"reason"`
 }
 
+// warningDTO 带类别：调用方要能一眼看出「这些告警影不影响索引可用」。
+// 文件过大 / 编码失败 = 那篇没进去；frontmatter 不合法 = 正文已经救回来了。
+type warningDTO struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+}
+
+// printWarnings 按类别汇总，再列出前几条明细。
+func printWarnings(warnings []warningDTO, indent string) {
+	if len(warnings) == 0 {
+		return
+	}
+	counts := map[string]int{}
+	for _, w := range warnings {
+		counts[w.Kind]++
+	}
+	parts := make([]string, 0, len(counts))
+	for kind, n := range counts {
+		parts = append(parts, fmt.Sprintf("%s %d", daemon.WarningLabel(kind), n))
+	}
+	sort.Strings(parts)
+	fmt.Printf("%s⚠ %d 条告警：%s\n", indent, len(warnings), strings.Join(parts, " / "))
+	for i, w := range warnings {
+		if i >= 3 {
+			fmt.Printf("%s    …\n", indent)
+			break
+		}
+		fmt.Printf("%s    %s\n", indent, w.Message)
+	}
+}
+
 type statusKBDTO struct {
 	Name     string           `json:"name"`
 	ID       string           `json:"id"`
@@ -747,7 +778,7 @@ type statusKBDTO struct {
 	Entries  int              `json:"entries"`
 	Sections int              `json:"sections"`
 	Bytes    int64            `json:"bytes"`
-	Warnings []string         `json:"warnings,omitempty"`
+	Warnings []warningDTO     `json:"warnings,omitempty"`
 	Skipped  []skippedDTO     `json:"skipped,omitempty"`
 	Items    []statusEntryDTO `json:"items,omitempty"`
 }
@@ -795,7 +826,10 @@ func runStatus(args []string) int {
 			dto.Entries = len(kb.Entries)
 			dto.Sections = kb.Sections
 			dto.Bytes = kb.Bytes
-			dto.Warnings = kb.Warnings
+			dto.Warnings = nil
+			for _, w := range kb.Warnings {
+				dto.Warnings = append(dto.Warnings, warningDTO{Kind: w.Kind, Message: w.Message})
+			}
 			for _, s := range kb.Skipped {
 				dto.Skipped = append(dto.Skipped, skippedDTO{Path: s.RelPath, Reason: s.Reason})
 			}
@@ -837,9 +871,7 @@ func runStatus(args []string) int {
 			fmt.Printf("%s  %s\n", padRight(kb.Name, 12), kb.State)
 		}
 		fmt.Printf("  %s\n", kb.RootPath)
-		for _, w := range kb.Warnings {
-			fmt.Printf("  ⚠ %s\n", w)
-		}
+		printWarnings(kb.Warnings, "  ")
 		if len(kb.Skipped) > 0 {
 			fmt.Printf("  跳过 %d 篇：%s\n", len(kb.Skipped), skipSummary(kb.Skipped))
 			for i, s := range kb.Skipped {
