@@ -14,3 +14,8 @@ import (
 func openSQLite(path string) (*sql.DB, error) {
 	return sql.Open("sqlite", path)
 }
+
+// SQLiteAvailable 报告这个二进制里有没有 SQLite 驱动（doctor 用）。
+//
+// 没有时一切照常，只是每次启动都要重新切片（docs/02「降级」）。
+func SQLiteAvailable() bool { return true }

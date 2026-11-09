@@ -9,3 +9,6 @@ import "database/sql"
 func openSQLite(string) (*sql.DB, error) {
 	return nil, ErrDBUnavailable
 }
+
+// SQLiteAvailable 报告这个二进制里有没有 SQLite 驱动（doctor 用）。
+func SQLiteAvailable() bool { return false }

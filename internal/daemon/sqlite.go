@@ -255,6 +255,28 @@ func (s *Store) Path() string { return s.path }
 // ReadOnly 表示这是一条只读连接。
 func (s *Store) ReadOnly() bool { return s.readOnly }
 
+// StoredPaths 返回某个 KB 在缓存里登记过的相对路径（doctor 用）。
+//
+// 只读、只取一列：doctor 要回答“索引里有多少条记录的源文件已经不见了”，
+// 不需要把正文全部读出来。
+func (s *Store) StoredPaths(kbID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT rel_path FROM entry WHERE kb_id = ?`, kbID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // LoadKB 读出一个 KB 的全部缓存。
 func (s *Store) LoadKB(kbID string) (*kbCache, error) {
 	c := &kbCache{Entries: map[string]cachedEntry{}, Skipped: map[string]cachedSkip{}}

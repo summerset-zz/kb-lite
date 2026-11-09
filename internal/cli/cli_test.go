@@ -142,6 +142,47 @@ func capture(t *testing.T, fn func() int) (string, int) {
 	return <-done, code
 }
 
+// doctor 在一切正常时退出 0，并且把每一项都写出来。
+func TestDoctorAllGood(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(daemon.ConfigDirEnv, dir)
+
+	kbRoot := filepath.Join(dir, "kb")
+	mustWrite(t, filepath.Join(kbRoot, "a.md"), "# 甲\n\n正文\n")
+	offlineConfig(t, dir, kbRoot)
+
+	out, code := capture(t, func() int { return Run([]string{"doctor"}) })
+	if code != exitOK {
+		t.Fatalf("一切都好时退出码应当是 0，实际 %d：\n%s", code, out)
+	}
+	for _, want := range []string{"配置", "端口", "记录文件", "SQLite", "知识库 笔记", "没发现问题"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("输出里应该有 %q：\n%s", want, out)
+		}
+	}
+}
+
+// 知识库目录被删掉时，doctor 要说出来是哪一条，并给下一步。
+func TestDoctorReportsMissingRoot(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(daemon.ConfigDirEnv, dir)
+
+	cfg := daemon.DefaultConfig(dir)
+	cfg.Port = closedPort(t)
+	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: filepath.Join(dir, "这里没有了"), Enabled: true}}
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	out, code := capture(t, func() int { return Run([]string{"doctor"}) })
+	if code != exitError {
+		t.Fatalf("有问题时退出码应当是 1，实际 %d：\n%s", code, out)
+	}
+	if !strings.Contains(out, "找不到这个文件夹") {
+		t.Errorf("应当指出目录不见了：\n%s", out)
+	}
+}
+
 func TestSearchOutput(t *testing.T) {
 	setup(t)
 	out, code := capture(t, func() int { return Run([]string{"search", "笔记", "上线"}) })
