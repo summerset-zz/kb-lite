@@ -1,0 +1,42 @@
+# CHANGELOG
+
+本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号按 [SemVer](https://semver.org/lang/zh-CN/)。
+`0.x` 期间允许破坏性变更，但必须写在这里。
+
+## [Unreleased]
+
+## [0.1.0] - 2026-11-09
+
+第一个可用版本：**core + daemon + CLI + `/skill.md`**，没有 UI（按 `docs/09` 的顺序）。
+
+### Added
+
+- **切片**（`internal/core/slice.go`）：逐行 ATX 扫描，代码围栏内不认标题；章节编号全局扁平、`0` 为导言、空节保留；标题取值链与「低信息量文件名」清单（`readme` / `index` / `untitled` / 语言码）按 `docs/02` 实现。
+- **检索**（`internal/core/search.go`）：关键词 × 字段位置的加权计数，七档权重与 `docs/03` 逐字一致；ASCII 标识符手写词边界（RE2 无 lookbehind，不用 `\b`）；CJK bigram 只加分、不参与 `strong`；多查询各自算分再按 `rel_path` 合并相加。
+- **frontmatter**（`internal/core/frontmatter.go`）：`name`/`description`/`keywords` 别名；严格 YAML 失败时按行宽松解析（`in: a TTF` 这类裸冒号不再整篇丢弃）。
+- **daemon**：`config.json`（`enabled` 默认 true、原子写、token 32 字节 hex 0600）、目录扫描（BOM / 严格 UTF-8 / GB18030 回退 / U+FFFD 复查）、`atomic.Pointer` 快照索引、worker pool + 按索引位回填保证并发确定性。
+- **HTTP**（`docs/04`）：`GET /skill.md`、`GET /kb/{name}/`，子资源 `/section` `/nearby` `/toc`；中间件顺序 Host(421) → Sec-Fetch-Site(403) → Origin(403) → token(401/429)；**不发任何 CORS 头**。
+- **CLI**：`serve` / `add` / `list` / `remove` / `status` / `search` / `toc` / `read` / `skill` / `token` / `version`；退出码 0/1/2/3/4；flags 可跟在位置参数之后。
+- **离线降级**：`search` / `toc` / `read` / `skill` 在服务没起时自己建内存索引，行为与走 HTTP 完全一致（同一份 `AnswerSection`）。
+- **`skill --out`**：自己写 UTF-8 无 BOM（PowerShell 的 `>`/`Out-File` 会写 UTF-16 或带 BOM，打断 frontmatter）；离线路径也会生成 token。
+
+### Changed
+
+- **语言选型 TS → Go**（ADR-013）：用户侧零运行时安装，单机交叉编译五个平台，产物约 8 MB。
+- 正文为空（只含 frontmatter）的条目整篇跳过，不再产出一个只有标题的空壳。
+- 告警带类别（`too-large` / `encoding` / `frontmatter` / `read`），CLI 按类别汇总。
+
+### Validated
+
+- `go vet ./...` 与 `go test ./...` 干净；五个目标平台在 Windows 上交叉编译通过。
+- 真实语料：fontcover-content **213 篇 / 2059 节 / 1.5 MB**（232 个 md = 213 进索引 + 19 篇空正文跳过），fontcover-v2/docs 34 篇 / 485 节。
+- **agent 验收通过**：DeepSeek Harness 只读 `skill.md`，一次多词查询后按 `n=` 读节，引用了路径与节号，并识破了一处「`unicode-range` 其实是 OS/2 表的 `ulUnicodeRange`」的假阳性。
+
+### Known limitations
+
+- `GB18030` 搜不到文中写作 `GB 18030` 的地方（不做模糊匹配，见 `docs/03`「刻意不做」）。
+- `skill.md` 里的端口/token 是生成时的快照：`add` / 改端口 / `token --rotate` 之后要重新 `skill --out`（v0.2 提供 `kb-lite skill --install`）。
+- 无 SQLite、无增量索引、无 UI。
+
+[Unreleased]: https://github.com/summerset-zz/kb-lite/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/summerset-zz/kb-lite/releases/tag/v0.1.0
