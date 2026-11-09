@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"io"
 	"net"
 	"net/http"
@@ -199,6 +200,47 @@ func TestSearchFallsBackOffline(t *testing.T) {
 	}
 	if !strings.Contains(out, "离线也能用") {
 		t.Errorf("离线索引没命中：\n%s", out)
+	}
+}
+
+// skill --out 必须写出「UTF-8 无 BOM、且带 token」的文件。
+//
+// 这两条都是踩过的坑：带 BOM 会让 YAML frontmatter 失效（skill 读不出来），
+// 没 token 则文档能用却调不通（离线时 token 可能还没被 serve 创建过）。
+func TestSkillOutWritesUTF8WithoutBOMAndWithToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(daemon.ConfigDirEnv, dir)
+
+	kbRoot := filepath.Join(dir, "kb")
+	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 甲\n---\n\n正文\n")
+	cfg := daemon.DefaultConfig(dir)
+	cfg.KBs = []daemon.KB{{ID: "k1", Name: "笔记", RootPath: kbRoot, Enabled: true}}
+	if err := cfg.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	outPath := filepath.Join(dir, "skills", "kb-lite", "SKILL.md")
+	if code := Run([]string{"skill", "--out", outPath}); code != exitOK {
+		t.Fatalf("退出码 = %d", code)
+	}
+
+	b, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.HasPrefix(b, []byte{0xEF, 0xBB, 0xBF}) {
+		t.Fatal("不能带 UTF-8 BOM —— 会让 frontmatter 失效")
+	}
+	if !bytes.HasPrefix(b, []byte("---\r\nname: kb-lite")) && !bytes.HasPrefix(b, []byte("---\nname: kb-lite")) {
+		t.Fatalf("开头不是 frontmatter：%q", string(b[:40]))
+	}
+
+	tok := readToken(dir)
+	if tok == "" {
+		t.Fatal("离线渲染 skill 时应当顺手生成 token")
+	}
+	if !bytes.Contains(b, []byte(tok)) {
+		t.Error("文档里应当带上 token，否则拿到手也调不通")
 	}
 }
 

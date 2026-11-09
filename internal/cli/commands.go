@@ -487,48 +487,81 @@ func printMiss(resp *sectionRespDTO) {
 func runSkill(args []string) int {
 	fs := flag.NewFlagSet("skill", flag.ContinueOnError)
 	base := fs.String("url", "", "覆盖服务地址")
+	outPath := fs.String("out", "", "写到文件（UTF-8、无 BOM），而不是打到 stdout")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError
 	}
-	c, cerr := newClient()
-	if cerr == nil {
-		if *base != "" {
-			c.base = strings.TrimRight(*base, "/")
+
+	text, code := fetchSkillText(*base)
+	if code != exitOK {
+		return code
+	}
+
+	if *outPath != "" {
+		// 自己写文件，而不是让用户 `> SKILL.md`：PowerShell 的 `>` 会写成 UTF-16，
+		// `Out-File -Encoding utf8` 又会带 BOM —— 两者都会让 YAML frontmatter 失效。
+		if err := os.MkdirAll(filepath.Dir(*outPath), 0o755); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return exitError
 		}
-		if body, err := c.get("/skill.md", nil); err == nil {
-			fmt.Print(string(body))
-			return exitOK
-		} else {
-			var down daemonDownError
-			if !errors.As(err, &down) {
-				return fail(err)
-			}
+		if err := os.WriteFile(*outPath, []byte(text), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return exitError
+		}
+		fmt.Fprintf(os.Stderr, "已写入 %s（%d 字节）\n", *outPath, len(text))
+		return exitOK
+	}
+
+	fmt.Print(text)
+	return exitOK
+}
+
+// fetchSkillText 优先问 daemon 要，连不上就自己渲染（两边共用 daemon.RenderSkillText）。
+func fetchSkillText(base string) (string, int) {
+	if c, err := newClient(); err == nil {
+		if base != "" {
+			c.base = strings.TrimRight(base, "/")
+		}
+		body, err := c.get("/skill.md", nil)
+		if err == nil {
+			return string(body), exitOK
+		}
+		var down daemonDownError
+		if !errors.As(err, &down) {
+			return "", fail(err)
 		}
 	}
 
-	// 离线：自己建一遍索引再渲染，与 handler 共用 daemon.RenderSkillText。
 	dir, err := daemon.ConfigDir()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return exitError
+		return "", exitError
 	}
 	cfg, err := daemon.Load(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return exitError
+		return "", exitError
 	}
 	mgr, err := buildLocalIndex()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return exitError
+		return "", exitError
 	}
+
+	// 离线时**要保证 token 存在**：文档里没有 token 就是一份不能用的说明。
+	// 这里建的和 serve 之后用的是同一个文件，不冲突。
+	token, err := daemon.LoadOrCreateToken(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return "", exitError
+	}
+
 	serviceBase := "http://127.0.0.1:" + strconv.Itoa(cfg.Port)
-	if *base != "" {
-		serviceBase = strings.TrimRight(*base, "/")
+	if base != "" {
+		serviceBase = strings.TrimRight(base, "/")
 	}
-	fmt.Print(daemon.RenderSkillText(mgr.Index(), serviceBase, readToken(dir), nil))
-	return exitOK
+	return daemon.RenderSkillText(mgr.Index(), serviceBase, token, nil), exitOK
 }
 
 // ---- token ----

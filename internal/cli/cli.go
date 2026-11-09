@@ -55,6 +55,8 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --offset <n>  --max-chars <n>
 
   skill                     打印 /skill.md（可直接重定向成 SKILL.md）
+    --out <path>            写到文件（UTF-8、无 BOM），已存在的目录会自动创建
+    --url <base>            覆盖服务地址
   token [--show]            显示 token
   version
 `

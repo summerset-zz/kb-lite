@@ -68,8 +68,11 @@ kb-lite manifest <name> [--budget 2000] [--prefix <p>]
 ## 其它
 
 ```
-kb-lite skill [--url <base>] [--kb <name>]
+kb-lite skill [--url <base>] [--kb <name>] [--out <path>]
    # 打印 /skill.md 的内容，可直接重定向成 SKILL.md
+   # --out 由进程自己写文件（UTF-8 无 BOM）—— 不要用 shell 的 `>`：
+   #   PowerShell 的 `>` 会写成 UTF-16，`Out-File -Encoding utf8` 会带 BOM，
+   #   两者都会让 YAML frontmatter 失效，skill 就读不出来了。
 kb-lite token [--show] [--rotate]
 kb-lite sync <name> [--wait]
    # git -C <root> pull --ff-only，然后 reindex。
