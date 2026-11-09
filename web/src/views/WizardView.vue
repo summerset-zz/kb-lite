@@ -9,7 +9,7 @@ import CopyBlock from '../components/CopyBlock.vue'
 
 const props = defineProps<{ status: Status }>()
 const emit = defineEmits<{ done: [] }>()
-const { refresh } = useStatus()
+const { status: shared, refresh } = useStatus()
 
 const step = ref(0)
 const busy = ref(false)
@@ -84,6 +84,11 @@ async function finish() {
       return
     }
     port.value = resp.effective.port
+    await refresh()
+    // 服务端已经收下了，本地也立刻记住“向导做完了”。
+    // 不看紧着的那次刷新结果：万一它拿到旧数据（或者被另一个还在跑的旧实例应答），
+    // 用户刚填完三步又会被扔回第一步。
+    if (shared.value) shared.value.setupCompleted = true
     step.value = 3
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic

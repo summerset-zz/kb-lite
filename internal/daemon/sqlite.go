@@ -430,6 +430,12 @@ func (s *Store) SaveKB(kbID string, w kbWrite, meta map[string]fileMeta, now tim
 
 	for _, ce := range w.Upsert {
 		e := ce.Entry
+		// 空条目一律不写：这里曾经因为上层的一个 nil 直接 panic，而 panic 发生在
+		// 后台整理 goroutine 里 —— 一个坏文件就能把整个服务干掉。缓存的写入不值得
+		// 为此担风险：这条没写成，下次重新切片就好。
+		if e == nil {
+			continue
+		}
 		tags, err := json.Marshal(e.Tags)
 		if err != nil {
 			return fail(err)

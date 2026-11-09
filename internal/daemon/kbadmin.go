@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -268,6 +269,15 @@ func (m *Manager) ReindexAsync(name string, force bool) (already bool, err error
 			m.jobMu.Lock()
 			m.running = ""
 			m.jobMu.Unlock()
+		}()
+		// 整理在后台 goroutine 里跑，**一旦 panic 整个进程就没了**，用户看到的是
+		// “服务突然消失”。这里兵到底：panic 也变成这个知识库的一次失败，
+		// 界面会显示“这次没整理成”，但服务继续活着。
+		defer func() {
+			if r := recover(); r != nil {
+				m.setState(KBState{Name: kb.Name, ID: kb.ID, State: "error",
+					Error: fmt.Sprintf("整理时崩了：%v（这是一条 bug，麻烦把这个知识库的目录告诉作者）", r)})
+			}
 		}()
 
 		ki, buildErr := buildKBIndex(kb, opts, func(done, total int) {

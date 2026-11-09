@@ -389,7 +389,9 @@ func parseEntry(f ScannedFile, data []byte, opts BuildOptions) (*core.Entry, str
 	var warns []Warning
 	text, warn := Decode(data)
 	if warn != "" {
-		return nil, "", []Warning{{WarnEncoding, f.RelPath + ": " + warn}}
+		// **必须给跳过原因**。曾经这里返回的是 `nil, ""`（“没跳过、但也没有条目”），
+		// 调用方于是把 nil 条目写进待落盘的列表，Store.SaveKB 解引用它就把整个进程带走了。
+		return nil, "编码认不出来，没有收录", []Warning{{WarnEncoding, f.RelPath + ": " + warn}}
 	}
 
 	res := core.BuildEntry(f.RelPath, text, core.SliceOptions{MaxSectionChars: opts.MaxSectionChars})
