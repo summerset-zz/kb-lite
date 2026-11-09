@@ -34,12 +34,8 @@ const (
 	tpmRightButton = 0x0002
 	tpmReturnCmd   = 0x0100
 
-	idiApplication = 32512
-
 	mfString    = 0x0000
 	mfSeparator = 0x0800
-	mfGrayed    = 0x0001
-	mfDefault   = 0x1000
 
 	cfUnicodeText = 13
 	gmemMoveable  = 0x0042
@@ -455,18 +451,19 @@ func tipText(st State) string {
 
 // ---- 图标位图 ----
 
-type rgb struct{ r, g, b byte }
+type bgr struct{ b, g, r byte }
 
 var (
-	colorRun   = rgb{0x5f, 0x6f, 0x3f} // 与服务的主色一致（#3f6f5f，按 BGR 存）
-	colorPause = rgb{0x8f, 0x8f, 0x8f}
+	// 服务主色 #3f6f5f，暂停用中性灰。注意内存里是 BGRA，字段名就是按字节序写的。
+	colorRun   = bgr{b: 0x5f, g: 0x6f, r: 0x3f}
+	colorPause = bgr{b: 0x8f, g: 0x8f, r: 0x8f}
 )
 
 // makeIcon 在内存里画一个 16x16 的圆形图标，不依赖任何图片文件。
 //
 // ICONIMAGE 的结构是 BITMAPINFOHEADER + 反序的 32 位像素（BGRA）+ 1 位 AND 掩码。
 // 用 CreateIconFromResourceEx 直接吃这块内存，省掉 .ico 资源与 GDI 那一套。
-func makeIcon(c rgb) uintptr {
+func makeIcon(c bgr) uintptr {
 	const size = 16
 	const headerSize = 40
 	const maskRowBytes = 4 // 16 位深/行，按 4 字节对齐
@@ -499,9 +496,9 @@ func makeIcon(c rgb) uintptr {
 			dy := float64(y) - center
 			off := headerSize + (row*size+x)*4
 			if dx*dx+dy*dy <= radius*radius {
-				buf[off] = c.r
+				buf[off] = c.b
 				buf[off+1] = c.g
-				buf[off+2] = c.b
+				buf[off+2] = c.r
 				buf[off+3] = 0xff
 			}
 		}
