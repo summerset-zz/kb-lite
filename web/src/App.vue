@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { useStatus } from '../useStatus'
-import { s } from '../strings'
-import AppHeader from '../components/AppHeader.vue'
-import AppFooter from '../components/AppFooter.vue'
-import WizardView from '../views/WizardView.vue'
-import KBListView from '../views/KBListView.vue'
-import SettingsView from '../views/SettingsView.vue'
-import AboutView from '../views/AboutView.vue'
 import { ref } from 'vue'
+import { useStatus } from './useStatus'
+import { s } from './strings'
+import AppHeader from './components/AppHeader.vue'
+import AppFooter from './components/AppFooter.vue'
+import WizardView from './views/WizardView.vue'
+import KBListView from './views/KBListView.vue'
+import SettingsView from './views/SettingsView.vue'
+import AboutView from './views/AboutView.vue'
 
 type Tab = 'kbs' | 'settings' | 'about'
 

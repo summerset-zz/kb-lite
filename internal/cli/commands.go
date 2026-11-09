@@ -832,6 +832,7 @@ func runSettings(args []string) int {
 	}
 	var resp struct {
 		RestartRequired bool `json:"restartRequired"`
+		Moved           bool `json:"moved"`
 		Effective       struct {
 			Port         int    `json:"port"`
 			Host         string `json:"host"`
@@ -840,8 +841,12 @@ func runSettings(args []string) int {
 	}
 	_ = json.Unmarshal(raw, &resp)
 	fmt.Println("已保存。")
+	if resp.Moved {
+		// 端口与绑定地址当场就生效了，不用重启（docs/04）。
+		fmt.Printf("新地址已经上线：http://%s:%d\n", resp.Effective.Host, resp.Effective.Port)
+	}
 	if resp.RestartRequired {
-		fmt.Printf("重启 kb-lite serve 之后生效（新地址 http://%s:%d）。\n", resp.Effective.Host, resp.Effective.Port)
+		fmt.Printf("记录文件位置要重启才生效（重启后是 http://%s:%d）。\n", resp.Effective.Host, resp.Effective.Port)
 	}
 	if resp.Effective.RequireToken {
 		fmt.Println("访问密码已开启：AI 要带上它才连得上（kb-lite token --show 看）。")

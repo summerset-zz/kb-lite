@@ -1,18 +1,14 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"time"
 
 	"github.com/summerset-zz/kb-lite/internal/daemon"
@@ -109,7 +105,17 @@ func runServe(args []string) int {
 	}
 	printIndexStats(mgr, time.Since(started))
 
-	ln, actualPort, err := listenLoop(cfg.Host, cfg.Port)
+	// 监听交给 daemon.Server：设置页改端口或绑定地址时它会当场重开（docs/06 §5.4）。
+	var srv *daemon.Server
+	srv = daemon.NewServer(mgr, readToken, apiToken, daemon.HandlerOptions{
+		DBMode:       dbMode,
+		RequireToken: cfg.EffectiveRequireToken(),
+		// 路由都存在了，所以 /skill.md 里 manifest 那一段会渲染出来（docs/09 v0.2）。
+		Features: daemon.DefaultFeatures,
+		Shutdown: func() { srv.Shutdown() },
+	})
+
+	actualPort, err := srv.Start(cfg.Host, cfg.Port)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "起不来：", err)
 		return exitExternal
@@ -122,8 +128,7 @@ func runServe(args []string) int {
 		}
 	}
 
-	exposed := !daemon.IsLoopbackHost(cfg.Host)
-	if exposed {
+	if exposed := !daemon.IsLoopbackHost(cfg.Host); exposed {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintf(os.Stderr, "!!! 警告：服务绑到了 %s，同一个网络里的人都能访问。\n", cfg.Host)
 		fmt.Fprintln(os.Stderr, "!!! 这个模式下 Host 校验会被放开（docs/07 第 1 条），确认过网络环境才这么做。")
@@ -131,32 +136,7 @@ func runServe(args []string) int {
 	}
 
 	// shutdown 由 serve 自己实现：UI 的“退出”按钮与 `kb-lite stop` 都打到 /api/shutdown。
-	var shutdown func()
-	handler := daemon.NewHandler(mgr, readToken, apiToken, daemon.HandlerOptions{
-		Port:         actualPort,
-		LANExposed:   exposed,
-		DBMode:       dbMode,
-		RequireToken: cfg.EffectiveRequireToken(),
-		// 路由都存在了，所以 /skill.md 里 manifest 那一段会渲染出来（docs/09 v0.2）。
-		Features: daemon.DefaultFeatures,
-		Shutdown: func() {
-			if shutdown != nil {
-				shutdown()
-			}
-		},
-	})
-
-	srv := &http.Server{
-		Handler:           handler.Routes(),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	shutdown = func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(ctx)
-	}
-
-	base := "http://" + net.JoinHostPort(cfg.Host, strconv.Itoa(actualPort))
+	base := srv.Addr()
 	printBanner(base, dir, len(mgr.Index().KBs), cfg.EffectiveRequireToken())
 
 	if *openBrowserFlag {
@@ -169,27 +149,14 @@ func runServe(args []string) int {
 	go func() {
 		<-interrupt
 		fmt.Fprintln(os.Stderr, "\n正在退出…")
-		shutdown()
+		srv.Shutdown()
 	}()
 
-	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Wait(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
 	return exitOK
-}
-
-// listenLoop 从 startPort 往上找第一个能绑的端口（docs/04：被占时自动 +1）。
-func listenLoop(host string, startPort int) (net.Listener, int, error) {
-	var lastErr error
-	for p := startPort; p < startPort+20; p++ {
-		ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(p)))
-		if err == nil {
-			return ln, p, nil
-		}
-		lastErr = err
-	}
-	return nil, 0, fmt.Errorf("端口 %d–%d 全被占用：%v", startPort, startPort+19, lastErr)
 }
 
 func printIndexStats(mgr *daemon.Manager, took time.Duration) {

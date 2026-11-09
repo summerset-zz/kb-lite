@@ -97,11 +97,13 @@ export const api = {
     requireToken?: boolean
     setupCompleted?: boolean
   }) =>
-    request<{ ok: boolean; restartRequired: boolean; effective: Record<string, unknown> }>(
-      'POST',
-      '/api/settings',
-      patch,
-    ),
+    request<{
+      ok: boolean
+      restartRequired: boolean
+      /** moved 为真表示端口/绑定地址已经当场重开，页面要换到新地址去。 */
+      moved: boolean
+      effective: { port: number; host: string; requireToken: boolean; dbPath: string }
+    }>('POST', '/api/settings', patch),
 
   installSkill: (kind: 'read' | 'authoring', targets: string[]) =>
     request<{ installed: SkillTarget[] }>('POST', '/api/skill/install', { kind, targets }),

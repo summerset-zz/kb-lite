@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { s } from '../strings'
 import type { Status } from '../types'
 
@@ -7,6 +7,18 @@ const props = defineProps<{ status: Status }>()
 const tab = defineModel<'kbs' | 'settings' | 'about'>('tab', { required: true })
 
 const base = computed(() => `http://${location.hostname}:${props.status.port}`)
+
+// 模板里只能访问组件实例上的东西，`navigator` 得包一层。
+const copied = ref(false)
+async function copyBase() {
+  try {
+    await navigator.clipboard.writeText(base.value)
+    copied.value = true
+    window.setTimeout(() => (copied.value = false), 1600)
+  } catch {
+    copied.value = false
+  }
+}
 
 const tabs = [
   { id: 'kbs' as const, label: s.nav.kbs },
@@ -26,9 +38,9 @@ const tabs = [
           class="btn btn-ghost btn-sm mono"
           type="button"
           :title="s.common.copy"
-          @click="navigator.clipboard.writeText(base)"
+          @click="copyBase"
         >
-          {{ base }}
+          {{ copied ? s.common.copied : base }}
         </button>
       </div>
       <nav class="flex gap-1 -mb-px">

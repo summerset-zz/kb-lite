@@ -18,6 +18,8 @@ const dbPath = ref(props.status.dbPath)
 const busy = ref('')
 const error = ref('')
 const notice = ref('')
+// 端口当场搬走时记下新地址：旧页面之后每个请求都会失败，得让用户一键跳过去。
+const movedTo = ref('')
 
 // ---- 访问密码 ----
 const token = ref('')
@@ -55,6 +57,7 @@ async function save() {
   busy.value = 'save'
   error.value = ''
   notice.value = ''
+  movedTo.value = ''
   try {
     const resp = await api.settings({
       port: port.value,
@@ -63,6 +66,12 @@ async function save() {
       requireToken: lan.value ? true : requireToken.value,
     })
     requireToken.value = lan.value ? true : requireToken.value
+    port.value = resp.effective.port
+
+    // 端口已经当场重开：旧地址马上就不能用了，得把用户引到新地址去。
+    if (resp.moved && resp.effective.port !== Number(location.port)) {
+      movedTo.value = `http://${location.hostname}:${resp.effective.port}`
+    }
     notice.value = resp.restartRequired ? s.settings.restartNeeded : '已保存。'
     await refresh()
   } catch (e) {
@@ -199,6 +208,10 @@ function setTheme(v: string) {
       </div>
 
       <p v-if="notice" class="text-sm" :style="{ color: 'var(--accent)' }">{{ notice }}</p>
+      <p v-if="movedTo" class="note text-sm">
+        {{ s.settings.moved }} 新地址是 <span class="mono">{{ movedTo }}</span>。
+        <a :href="movedTo" class="underline">{{ s.settings.moveNow }}</a>
+      </p>
       <p v-if="error" class="note text-sm">{{ error }}</p>
 
       <div class="flex items-center gap-2 pt-1">

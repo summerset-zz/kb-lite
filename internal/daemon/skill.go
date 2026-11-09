@@ -38,7 +38,7 @@ var DefaultFeatures = map[string]bool{"manifest": true}
 func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
 	base := "http://" + r.Host
 	if r.Host == "" {
-		base = "http://127.0.0.1:" + strconv.Itoa(h.opts.Port)
+		base = "http://127.0.0.1:" + strconv.Itoa(h.Port())
 	}
 	// 读取密码没开就不把密码写进文档：那是给用户看的纸，不该多一个用不上的东西。
 	tok := ""

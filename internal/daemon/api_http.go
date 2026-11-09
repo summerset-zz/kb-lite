@@ -227,29 +227,63 @@ func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 
 // handleSettings 是 `POST /api/settings`。
 //
-// 访问密码立刻生效；端口 / 绑定地址 / 记录文件位置要重启才生效（回 restartRequired）。
+// 三种改动的生效方式不一样（docs/04）：
+//   - 访问密码：当场生效；
+//   - 端口与绑定地址：**当场重开监听**（Reload），响应里回 moved 与新端口，UI 据此跳转；
+//   - 记录文件位置：仍要重启（换库要重开 SQLite，不在这一版里做）。
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	var patch SettingsPatch
 	if !decodeJSON(w, r, &patch) {
 		return
 	}
+
+	before := *h.mgr.Config()
 	restart, err := h.mgr.ApplySettings(patch)
 	if err != nil {
 		writeSettingsError(w, err)
 		return
 	}
+	after := *h.mgr.Config()
+
 	// 密码开关当场应用到 Handler：用户点完保存就该生效，不该等重启。
-	effective := h.mgr.Config().EffectiveRequireToken()
+	effective := after.EffectiveRequireToken()
 	h.SetRequireToken(effective)
 
+	// 换位置要重启：它是缓存，重开 store 属于另一件事。
+	restart = restart && after.DBPath != before.DBPath
+
+	moved := false
+	if after.Host != before.Host || after.Port != before.Port {
+		if h.opts.Reload == nil {
+			restart = true
+		} else {
+			actual, err := h.opts.Reload(after.Host, after.Port)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "reload_failed",
+					"新端口监听不上："+err.Error()+"。已经改回原来的地址，服务没停。")
+				return
+			}
+			moved = true
+			// 端口被占时自动 +1，写回配置，否则下次启动还是撞同一个端口。
+			if actual != after.Port {
+				_ = h.mgr.UpdateConfig(func(c *Config) error {
+					c.Port = actual
+					return nil
+				})
+			}
+		}
+	}
+
+	cfg := h.mgr.Config()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":              true,
 		"restartRequired": restart,
+		"moved":           moved,
 		"effective": map[string]any{
-			"port":         h.mgr.Config().Port,
-			"host":         h.mgr.Config().Host,
+			"port":         cfg.Port,
+			"host":         cfg.Host,
 			"requireToken": effective,
-			"dbPath":       h.mgr.Config().DBPath,
+			"dbPath":       cfg.DBPath,
 		},
 	})
 }
@@ -295,7 +329,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 
 	base := "http://" + r.Host
 	if r.Host == "" {
-		base = "http://127.0.0.1:" + strconv.Itoa(h.opts.Port)
+		base = "http://127.0.0.1:" + strconv.Itoa(h.Port())
 	}
 	var content string
 	if req.Kind == "authoring" {
@@ -303,7 +337,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 	} else {
 		tok := ""
 		if h.requireToken.Load() {
-			tok = h.readToken
+			tok = h.ReadToken()
 		}
 		content = RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
 	}

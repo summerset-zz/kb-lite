@@ -42,15 +42,27 @@ async function finish() {
   busy.value = true
   error.value = ''
   try {
-    // 先落配置（端口、范围、记录文件位置），再建第一个知识库，最后标记向导已完成。
-    await api.settings({
+    // 顺序有讲究：
+    //  1. 先建第一个知识库（此刻还在旧地址上，请求能到）；
+    //  2. 再一次把端口、范围、记录文件位置和「向导已完成」一起提交。
+    //     如果端口真的换了，服务会当场上线新地址、旧地址立刻失效，
+    //     所以这一次提交必须是**最后一次**对旧地址的调用，之后直接跳过去。
+    if (kbPath.value) await api.createKB(kbName.value.trim(), kbPath.value)
+
+    const resp = await api.settings({
       port: port.value,
       host: lan.value ? '0.0.0.0' : '127.0.0.1',
       dbPath: dbCustom.value ? dbPath.value.trim() : undefined,
       requireToken: lan.value ? true : undefined,
+      setupCompleted: true,
     })
-    if (kbPath.value) await api.createKB(kbName.value.trim(), kbPath.value)
-    await api.settings({ setupCompleted: true })
+
+    if (resp.moved && resp.effective.port !== Number(location.port)) {
+      const target = `http://${location.hostname}:${resp.effective.port}/`
+      location.replace(target)
+      return
+    }
+    port.value = resp.effective.port
     step.value = 3
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic

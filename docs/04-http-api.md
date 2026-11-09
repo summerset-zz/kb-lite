@@ -131,13 +131,15 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 字段都可选，没传的不动。行为：
 
 - 先校验（端口真 bind 一次 / 目录真建一个临时文件再删 / `host` 非回环时把 `requireToken` 改成 `true`），
-  失败 `400` 并指向具体字段（`invalid_port` / `port_in_use` / `dir_not_writable`）；
+  失败 `400` 并指向具体字段（`invalid_port` / `port_in_use` / `dir_not_writable`）。**校验全部通过才落盘**，
+  中途失败等于什么都没改。
 - 落盘 `config.json`（原子写）；
 - **访问密码当场生效**：响应回来后 `/kb/*` 就按新开关判定；
-- **端口 / 绑定地址 / 记录文件位置要重启**：这一版不做热重开监听，响应里回
-  `{"ok":true,"restartRequired":true,"effective":{port,host,requireToken,dbPath}}`，
-  UI 拿 `effective` 提示用户“重启后是新地址”。热重开排在 UI 那一刀。
-- 记录文件位置变更 = **在新位置重建**（它是缓存），旧文件不自动删，用户想要就自己删。
+- **端口与绑定地址当场重开监听**（"热重开"）：先把新地址真的绑上，成功了再关旧的。
+  绑不上就回 `500 reload_failed`，配置回滚，旧地址继续服务 —— 否则用户连「改回去」都做不到。
+  响应里回 `"moved": true` 与 `effective.port`，UI 据此提示新地址并跳过去。
+  端口被占时沿用「自动 +1」并写回 `config.json`。
+- **记录文件位置仍需重启**（换库要重开 SQLite，不在这一版里），这是唯一的 `restartRequired` 来源。
 
 > ⚠️ 不能“保存时直接把 `index.db` 建了”。Windows 上它正被 daemon 持有。探写权限要用临时文件。
 

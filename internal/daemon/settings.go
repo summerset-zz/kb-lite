@@ -28,11 +28,10 @@ type SettingsPatch struct {
 	SetupCompleted *bool `json:"setupCompleted"`
 }
 
-// ApplySettings 落盘设置，并告诉调用方哪些改动要重启才生效。
+// ApplySettings 落盘设置，并告诉调用方还有哪些改动要重启才生效。
 //
-// 访问密码可以**立刻生效**（Handler 里是原子开关）；端口、绑定地址、记录文件位置
-// 都要重新监听或换库，所以只落盘 + 回一个 restartRequired，让 UI 提示用户。
-// 这一版的取舍写进了 docs/04。
+// 访问密码可以**立刻生效**（Handler 里是原子开关）；端口与绑定地址由 Handler 当场
+// 重开监听（`HandlerOptions.Reload`）。只有记录文件位置得重启，因为换库要重开 SQLite。
 func (m *Manager) ApplySettings(p SettingsPatch) (restart bool, err error) {
 	if p.Port != nil && (*p.Port < 1 || *p.Port > 65535) {
 		return false, ErrInvalidPort
@@ -40,46 +39,52 @@ func (m *Manager) ApplySettings(p SettingsPatch) (restart bool, err error) {
 
 	portChanged := false
 	err = m.UpdateConfig(func(c *Config) error {
-		probeHost := strings.TrimSpace(c.Host)
+		// 先在一份副本上把所有校验跑完，**全部通过才落到 c 上**。
+		// 否则端口已经写进内存、目录探测再失败，配置就与磁盘不一致了（docs/06 §5.4 第 5 步）。
+		next := *c
+
+		probeHost := strings.TrimSpace(next.Host)
 		if probeHost == "" {
 			probeHost = DefaultHost
 		}
-		if p.Port != nil && *p.Port != c.Port {
+		if p.Port != nil && *p.Port != next.Port {
 			if !portFree(probeHost, *p.Port) {
 				return fmt.Errorf("%w：%d", ErrPortInUse, *p.Port)
 			}
-			c.Port = *p.Port
+			next.Port = *p.Port
 			portChanged = true
 		}
-		if p.Host != nil && *p.Host != c.Host {
+		if p.Host != nil && *p.Host != next.Host {
 			h := strings.TrimSpace(*p.Host)
 			if h == "" {
 				h = DefaultHost
 			}
-			c.Host = h
+			next.Host = h
 			portChanged = true // 监听地址变了也要重开
 		}
-		if p.DBPath != nil && *p.DBPath != c.DBPath {
+		if p.DBPath != nil && *p.DBPath != next.DBPath {
 			if err := probeWritable(*p.DBPath); err != nil {
 				return err
 			}
-			c.DBPath = *p.DBPath
+			next.DBPath = *p.DBPath
 		}
 		if p.RequireToken != nil {
-			c.RequireToken = *p.RequireToken
+			next.RequireToken = *p.RequireToken
 		}
 		if p.SetupCompleted != nil {
-			c.SetupCompleted = *p.SetupCompleted
+			next.SetupCompleted = *p.SetupCompleted
 		}
 		// 手写的配置可能没有 host：先补默认，后面的探测与判定才有意义。
-		if strings.TrimSpace(c.Host) == "" {
-			c.Host = DefaultHost
+		if strings.TrimSpace(next.Host) == "" {
+			next.Host = DefaultHost
 		}
 		// 硬不变式（ADR-015）：绑了非回环地址就必须要密码。这里直接改回真，不报错，
 		// 因为用户的本意显然不是“把自己的知识库公开给局域网”。
-		if !IsLoopbackHost(c.Host) {
-			c.RequireToken = true
+		if !IsLoopbackHost(next.Host) {
+			next.RequireToken = true
 		}
+
+		*c = next
 		return nil
 	})
 	if err != nil {

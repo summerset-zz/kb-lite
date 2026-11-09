@@ -44,6 +44,9 @@ type HandlerOptions struct {
 	RequireToken bool
 	// Shutdown 是 `POST /api/shutdown` 的落地：由 serve 传进来（优雅退出）。
 	Shutdown func()
+	// Reload 是热重开监听：改端口或绑定地址后由 serve 重新 bind 并 Serve。
+	// 返回**实际**端口（被占时会 +1）。为 nil 时旧行为不变：只落盘并回 restartRequired。
+	Reload func(host string, port int) (int, error)
 }
 
 // AdminCookieName 是管理凭据的 cookie 名。同源页面靠它过 /api/*。
@@ -62,6 +65,9 @@ type Handler struct {
 	failures *throttle
 	// requireToken 是**可热更新**的读取密码开关：设置页改完立刻生效。
 	requireToken atomic.Bool
+	// port 与 lanExposed 跟着监听一起变（设置页改完当场重开），所以不能用 opts 里的副本。
+	port       atomic.Int32
+	lanExposed atomic.Bool
 }
 
 // NewHandler 建一个 Handler。
@@ -81,8 +87,22 @@ func NewHandler(mgr *Manager, readToken, apiToken string, opts HandlerOptions) *
 		failures:  newThrottle(authFailureWindow, authFailureMax),
 	}
 	h.requireToken.Store(opts.RequireToken)
+	h.port.Store(int32(opts.Port))
+	h.lanExposed.Store(opts.LANExposed)
 	return h
 }
+
+// SetBinding 更新“当前实际监听在哪”。重新 bind 之后由 serve 调用。
+func (h *Handler) SetBinding(port int, lanExposed bool) {
+	h.port.Store(int32(port))
+	h.lanExposed.Store(lanExposed)
+}
+
+// Port 返回当前实际监听的端口。
+func (h *Handler) Port() int { return int(h.port.Load()) }
+
+// LANExposed 返回当前是否绑在非回环地址上。
+func (h *Handler) LANExposed() bool { return h.lanExposed.Load() }
 
 // SetRequireToken 热更新读取密码开关（设置页保存后调用）。
 func (h *Handler) SetRequireToken(v bool) { h.requireToken.Store(v) }
@@ -200,7 +220,7 @@ func isReadPath(p string) bool {
 // 再卡死 Host 会让这个开关变成没用的摆设；代价是失去 DNS rebinding 防线，所以那种模式下
 // 启动时会打印醒目警告（docs/07 第 1 条）。
 func (h *Handler) hostAllowed(host string) bool {
-	if h.opts.LANExposed {
+	if h.LANExposed() {
 		return true
 	}
 	for _, ok := range h.selfHosts() {
@@ -212,12 +232,12 @@ func (h *Handler) hostAllowed(host string) bool {
 }
 
 func (h *Handler) selfHosts() []string {
-	port := strconv.Itoa(h.opts.Port)
+	port := strconv.Itoa(h.Port())
 	return []string{"127.0.0.1:" + port, "localhost:" + port, "[::1]:" + port}
 }
 
 func (h *Handler) originAllowed(origin string) bool {
-	if h.opts.LANExposed {
+	if h.LANExposed() {
 		return true
 	}
 	for _, host := range h.selfHosts() {
