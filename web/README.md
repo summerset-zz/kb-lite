@@ -12,10 +12,24 @@ pnpm install
 pnpm dev         # 起 vite（http://127.0.0.1:5199），代理 /api、/kb、/skill.md、/authoring.md 到 http://127.0.0.1:7331
 pnpm typecheck   # 只检查类型，只读
 pnpm build       # vue-tsc + vite build + 同步到 internal/daemon/static/
+
+pnpm serve       # 本地看真实效果：停旧进程 → 构建界面 → 编译 → 起服务（前台）
+pnpm serve --no-web    # 只改了 Go，跳过界面构建，快很多
+pnpm serve --no-tray   # 不起托盘
+pnpm serve --keep      # 不先停旧进程（它会因为端口被占自动 +1）
 ```
 
 `pnpm dev` 之前先起 daemon（`go run ./cmd/kb-lite serve`）。vite 的代理写在
 `vite.config.ts` 里，daemon 换过端口就要跟着改。
+
+### `pnpm serve` 为什么是这个顺序
+
+1. **先停旧进程**。Windows 上正被运行的 exe 不能覆盖，不停掉 `go build` 会报“拒绝访问”；
+   而且不停掉的话新进程会因为端口被占自动 +1，浏览器却还停在旧地址。
+   没有服务在跑时 `quit` 会以“连不上服务”退出，这是正常的，脚本不计为失败。
+2. **界面构建排在编译之前**。`web/dist` 是在编译时被 `//go:embed` 打进二进制的，
+   反过来就又是旧界面。
+3. 最后前台起服务，stdio 直通，所以 Ctrl+C、横幅、日志跟直接跑 exe 一模一样。
 
 > 端口是显式写的 **5199**，不用 vite 默认的 5173（本机上常被别的项目占着），
 > 并且开了 `strictPort`：被占时直接报错，不会默默顺延到别的端口。
