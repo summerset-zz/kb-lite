@@ -26,6 +26,8 @@ kb-lite serve
 
 ```
 kb-lite add <dir> [--name <n>] [--include <glob>]… [--ignore <glob>]…
+   # daemon 在跑：存进配置并**立刻开始整理**
+   # daemon 没跑：退回直接改配置，下次 serve 生效（过渡行为，向导出来后收紧）
 kb-lite list [--json]
 kb-lite remove <name> [--yes]
 kb-lite enable <name>
@@ -33,7 +35,7 @@ kb-lite disable <name>
 kb-lite rename <old> <new>
 
 kb-lite reindex [name] [--force] [--wait]
-   # 不传 name = 全部 KB；--wait 阻塞到完成并打印统计
+   # 不传 name = 全部 KB（一个接一个，全局只允许一个任务）；--wait 阻塞到完成并打印统计
 kb-lite status [--json]
 kb-lite settings [--port <n>] [--host <addr>] [--db <path>] [--password on|off]
    # 改完立即生效（需要时自己重新监听），不需要重启进程
@@ -112,8 +114,9 @@ kb-lite version
 
 | 命令 | 行为 |
 |---|---|
-| `search` / `toc` / `read` / `manifest` / `status` / `skill` | **自动降级为离线只读**：进程内扫目录，并用 SQLite（**只读连接**）按 sha1 跳过没变过的文件。SQLite 不存在或 `--no-db` 时现场全量切片（慢一点，但结果一致） |
-| `add` / `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `sync` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon**。用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
+| `search` / `toc` / `read` / `manifest` / `status` / `skill` / `list` | **自动降级为离线只读**：进程内扫目录，并用 SQLite（**只读连接**）按 sha1 跳过没变过的文件。SQLite 不存在或 `--no-db` 时现场全量切片（慢一点，但结果一致） |
+| `add` | 优先走管理接口；daemon 没跑时退回直接改 `config.json`（过渡行为） |
+| `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `sync` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon**。用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
 
 > `settings` / `skill --install` 之所以也必须走 daemon：它们要改的是**正在运行的那份配置**，
 > 自己改 `config.json` 会和内存里的状态对不上（端口、监听地址、skill 渲染日期）。

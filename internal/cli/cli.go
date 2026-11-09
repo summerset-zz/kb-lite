@@ -34,10 +34,17 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --force                 忽略缓存，全部重新切片
     --log-level <l>         error|warn|info|debug
 
-  add <dir>                 添加知识库（重启 serve 后生效）
+  add <dir>                 添加知识库（daemon 在跑时立刻开始整理）
     --name <n>              展示名，默认取目录名
     --ignore <glob>...      额外忽略，可重复（.git / node_modules 永远忽略）
     --include <glob>...     覆盖默认的 **/*.md|markdown|txt
+
+  remove <name> [--yes]     从列表里移除（**不删目录里的文件**）
+  enable <name>             重新启用
+  disable <name>            关闭（索引留着，重新启用不用重切）
+  rename <old> <new>        改显示名（条目不用重切）
+  reindex [name] [--force] [--wait]
+                            重新整理；不传名字就是全部
 
   list                      列出已配置的知识库
 
@@ -80,6 +87,16 @@ func Run(args []string) int {
 		return runServe(rest)
 	case "add":
 		return runAdd(rest)
+	case "remove":
+		return runRemove(rest)
+	case "enable":
+		return runEnable(rest, true)
+	case "disable":
+		return runEnable(rest, false)
+	case "rename":
+		return runRename(rest)
+	case "reindex":
+		return runReindex(rest)
 	case "list":
 		return runList(rest)
 	case "status":
@@ -122,7 +139,7 @@ func (s *stringsFlag) Set(v string) error {
 // boolFlagNames 是**不带值**的开关。用来把 `--limit 5` 的 5 正确地算在 flag 这一边。
 var boolFlagNames = map[string]bool{
 	"explain": true, "json": true, "open": true, "no-db": true, "show": true, "help": true,
-	"force": true, "rotate": true,
+	"force": true, "rotate": true, "yes": true, "wait": true,
 }
 
 // splitFlags 把参数拆成「flag」与「位置参数」两半边。

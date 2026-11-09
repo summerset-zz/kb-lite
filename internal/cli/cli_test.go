@@ -14,7 +14,10 @@ import (
 	"github.com/summerset-zz/kb-lite/internal/daemon"
 )
 
-const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const (
+	testToken      = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	testAdminToken = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+)
 
 // setup 起一个真的服务，并把配置目录/端口/token 都摆好，让 CLI 能连上。
 func setup(t *testing.T) string {
@@ -50,12 +53,15 @@ func setup(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, daemon.ReadTokenFileName), []byte(testToken+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, daemon.APITokenFileName), []byte(testAdminToken+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	mgr := daemon.NewManager(cfg, daemon.BuildOptions{Workers: 1})
+	mgr := daemon.NewManager(cfg, daemon.BuildOptions{Workers: 1, ConfigDir: dir})
 	if err := mgr.Rebuild(); err != nil {
 		t.Fatal(err)
 	}
-	h := daemon.NewHandler(mgr, testToken, "", daemon.HandlerOptions{Port: port})
+	h := daemon.NewHandler(mgr, testToken, testAdminToken, daemon.HandlerOptions{Port: port})
 	srv := &httptest.Server{Listener: ln, Config: &http.Server{Handler: h.Routes()}}
 	srv.Start()
 	t.Cleanup(srv.Close)

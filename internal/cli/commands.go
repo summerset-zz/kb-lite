@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -707,13 +709,12 @@ func runToken(args []string) int {
 	return exitOK
 }
 
-// ---- add / list（纯配置操作）----
+// ---- add / remove / enable / disable / rename / reindex ----
 
-// runAdd 只改 config.json，不碰索引。
+// runAdd 优先走管理接口（daemon 在跑时由它负责整理），daemon 没跑就退回改配置。
 //
-// docs/01 说 CLI 不要直接读写索引（会和 daemon 抢锁、逻辑实现两遍），但 config.json 是例外：
-// v0.1 还没有管理接口（那是 v0.3），不然用户连「把目录加进来」都做不到。
-// daemon 只在启动时读配置，所以改完要重启 —— 这一点会明确打印出来。
+// 回落是过渡期的妥协：v0.3 的向导还没做，用户第一次用时手上没有服务可调。
+// 等 UI 出来，`add` 会像 docs/05 写的那样直接要 daemon（退出码 4）。
 func runAdd(args []string) int {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	name := fs.String("name", "", "")
@@ -739,7 +740,46 @@ func runAdd(args []string) int {
 		fmt.Fprintf(os.Stderr, "不是一个目录：%s\n", root)
 		return exitError
 	}
+	kbName := *name
+	if kbName == "" {
+		kbName = filepath.Base(root)
+	}
 
+	// 1) daemon 在跑：交给它，建完立刻开始整理。
+	if c, err := newClient(); err == nil && c.apiToken != "" {
+		raw, apiErr := c.admin(http.MethodPost, "/api/kbs", map[string]any{
+			"name": kbName, "rootPath": root, "ignore": ignore, "include": include,
+		})
+		if apiErr == nil {
+			printCreatedKB(raw)
+			return exitOK
+		}
+		var down daemonDownError
+		if !errors.As(apiErr, &down) {
+			return fail(apiErr)
+		}
+	}
+
+	// 2) 没在跑：直接改配置，等下次 serve 生效。
+	return runAddOffline(root, kbName, ignore, include)
+}
+
+func printCreatedKB(raw []byte) {
+	var resp struct {
+		Name    string `json:"name"`
+		State   string `json:"state"`
+		Warning string `json:"warning"`
+	}
+	_ = json.Unmarshal(raw, &resp)
+	name := resp.Name
+	fmt.Printf("已添加「%s」，正在整理。\n", name)
+	if resp.Warning != "" {
+		fmt.Printf("  注意：%s\n", resp.Warning)
+	}
+	fmt.Printf("看进度：kb-lite reindex %s --wait\n", name)
+}
+
+func runAddOffline(root, kbName string, ignore, include []string) int {
 	dir, err := daemon.ConfigDir()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -751,10 +791,6 @@ func runAdd(args []string) int {
 		return exitError
 	}
 
-	kbName := *name
-	if kbName == "" {
-		kbName = filepath.Base(root)
-	}
 	for _, kb := range cfg.KBs {
 		if kb.Name == kbName {
 			fmt.Fprintf(os.Stderr, "已经有同名知识库了：%s（用 --name 换个名字）\n", kbName)
@@ -794,6 +830,221 @@ func runAdd(args []string) int {
 		fmt.Println("下一步：kb-lite serve")
 	}
 	return exitOK
+}
+
+// runRemove 删掉关联与索引条目，**不动目录里的文件**。
+func runRemove(args []string) int {
+	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "")
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 1 {
+		fmt.Fprintln(os.Stderr, "用法：kb-lite remove <名字> [--yes]")
+		return exitError
+	}
+	name := rest[0]
+
+	if !*yes {
+		fmt.Printf("要把「%s」从列表里移除吗？只会删掉登记信息和整理结果，目录里的文件一个都不会动。[y/N] ", name)
+		if !confirmStdin() {
+			fmt.Println("已取消。")
+			return exitOK
+		}
+	}
+
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+	raw, err := c.admin(http.MethodDelete, "/api/kbs/"+url.PathEscape(name), nil)
+	if err != nil {
+		return fail(err)
+	}
+	var resp struct {
+		Removed struct {
+			Entries  int `json:"entries"`
+			Sections int `json:"sections"`
+		} `json:"removed"`
+	}
+	_ = json.Unmarshal(raw, &resp)
+	fmt.Printf("已移除「%s」，删掉 %d 条索引记录 / %d 节。目录里的文件没有动。\n",
+		name, resp.Removed.Entries, resp.Removed.Sections)
+	return exitOK
+}
+
+// runEnable / runDisable：禁用的知识库检索面回 503，索引留着。
+func runEnable(args []string, enabled bool) int {
+	verb, action := "启用", "enable"
+	if !enabled {
+		verb, action = "关闭", "disable"
+	}
+	fs := flag.NewFlagSet(action, flag.ContinueOnError)
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 1 {
+		fmt.Fprintf(os.Stderr, "用法：kb-lite %s <名字>\n", action)
+		return exitError
+	}
+	name := rest[0]
+
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+	if _, err := c.admin(http.MethodPost, "/api/kbs/"+url.PathEscape(name)+"/"+action, nil); err != nil {
+		return fail(err)
+	}
+	if enabled {
+		fmt.Printf("已启用「%s」。\n", name)
+	} else {
+		fmt.Printf("已%s「%s」。索引还留着，重新启用不用重新整理。\n", verb, name)
+	}
+	return exitOK
+}
+
+// runRename 只改显示名，条目不用重切。
+func runRename(args []string) int {
+	fs := flag.NewFlagSet("rename", flag.ContinueOnError)
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "用法：kb-lite rename <旧名字> <新名字>")
+		return exitError
+	}
+	oldName, newName := rest[0], rest[1]
+
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+	raw, err := c.admin(http.MethodPatch, "/api/kbs/"+url.PathEscape(oldName), map[string]string{"name": newName})
+	if err != nil {
+		return fail(err)
+	}
+	var resp struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(raw, &resp)
+	fmt.Printf("已改名：「%s」→「%s」。\n", oldName, resp.Name)
+	return exitOK
+}
+
+// runReindex 触发整理。不传名字就是全部知识库（一个接一个，全局只允许一个任务）。
+func runReindex(args []string) int {
+	fs := flag.NewFlagSet("reindex", flag.ContinueOnError)
+	force := fs.Bool("force", false, "")
+	wait := fs.Bool("wait", false, "")
+	flagArgs, rest := splitFlags(args, boolFlagNames)
+	if err := fs.Parse(flagArgs); err != nil {
+		return exitError
+	}
+
+	c, err := newClient()
+	if err != nil {
+		return fail(err)
+	}
+
+	names := rest
+	if len(names) == 0 {
+		raw, listErr := c.admin(http.MethodGet, "/api/kbs", nil)
+		if listErr != nil {
+			return fail(listErr)
+		}
+		var resp struct {
+			KBs []struct {
+				Name string `json:"name"`
+			} `json:"kbs"`
+		}
+		_ = json.Unmarshal(raw, &resp)
+		for _, kb := range resp.KBs {
+			names = append(names, kb.Name)
+		}
+		if len(names) == 0 {
+			fmt.Println("还没有知识库。")
+			return exitOK
+		}
+	}
+
+	for _, name := range names {
+		raw, err := c.admin(http.MethodPost, "/api/kbs/"+url.PathEscape(name)+"/reindex",
+			map[string]bool{"force": *force})
+		if err != nil {
+			var he httpError
+			if errors.As(err, &he) && he.status == http.StatusConflict {
+				// 已经有一个在跑：等它完再发这一条。
+				if *wait {
+					if waitErr := waitIndexed(c, name); waitErr != nil {
+						fmt.Fprintln(os.Stderr, waitErr)
+						return exitError
+					}
+				} else {
+					fmt.Fprintf(os.Stderr, "「%s」暂时没排上：已经有整理任务在跑。加 --wait 可以等它完成。\n", name)
+					continue
+				}
+			} else {
+				return fail(err)
+			}
+		}
+		_ = raw
+		if *wait {
+			if err := waitIndexed(c, name); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return exitError
+			}
+			fmt.Printf("「%s」整理完成。\n", name)
+		} else {
+			fmt.Printf("「%s」已开始整理。\n", name)
+		}
+	}
+	return exitOK
+}
+
+// waitIndexed 轮询到某个知识库不再整理中。
+func waitIndexed(c *client, name string) error {
+	deadline := time.Now().Add(30 * time.Minute)
+	for time.Now().Before(deadline) {
+		raw, err := c.admin(http.MethodGet, "/api/kbs/"+url.PathEscape(name)+"/index", nil)
+		if err != nil {
+			return err
+		}
+		var st struct {
+			State    string `json:"state"`
+			Error    string `json:"error"`
+			Progress *struct {
+				Done  int `json:"done"`
+				Total int `json:"total"`
+			} `json:"progress"`
+		}
+		_ = json.Unmarshal(raw, &st)
+		switch st.State {
+		case "indexing":
+			time.Sleep(200 * time.Millisecond)
+		case "error":
+			return fmt.Errorf("「%s」整理失败：%s", name, st.Error)
+		default:
+			return nil
+		}
+	}
+	return fmt.Errorf("等「%s」整理超时", name)
+}
+
+// confirmStdin 读一行 stdin，认 y / yes / 是。
+func confirmStdin() bool {
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes", "是":
+		return true
+	}
+	return false
 }
 
 func runList(args []string) int {
