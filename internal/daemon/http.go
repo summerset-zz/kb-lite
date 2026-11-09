@@ -149,6 +149,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/kbs/{name}/reindex", h.handleKBReindex)
 	mux.HandleFunc("GET /api/kbs/{name}/index", h.handleKBIndex)
 	mux.HandleFunc("GET /api/fs/list", h.handleFSList)
+	mux.HandleFunc("POST /api/search", h.handleAdminSearch)
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
 	mux.HandleFunc("POST /api/auth/token", h.handleAuthToken)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
@@ -686,6 +687,14 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, kb *KBInd
 	}
 
 	withExplain := q.Get("explain") == "1"
+	writeJSON(w, http.StatusOK, searchPayload(kb, queries, shown, limit, withExplain, format))
+}
+
+// searchPayload 是 `/kb/{name}/search` 与 `/api/search` **共用**的一份输出。
+//
+// 两边共用不是为了省代码，是为了不漂：UI 的搜索调试页给用户解释“为什么这条排第一”，
+// 它看到的数必须就是 agent 拿到的数。
+func searchPayload(kb *KBIndex, queries []*core.Query, shown []string, limit int, withExplain bool, format string) searchResponse {
 	hits := core.Rank(kb.Entries, queries, core.RankOptions{Limit: limit, WithDetails: withExplain})
 
 	resp := searchResponse{OK: true, Query: shown, Results: make([]searchResultDTO, 0, len(hits))}
@@ -719,7 +728,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, kb *KBInd
 		}
 		resp.Debug = rows
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return resp
 }
 
 func tocDTOs(entries []core.TocEntry) []tocEntryDTO {

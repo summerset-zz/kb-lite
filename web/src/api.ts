@@ -1,4 +1,4 @@
-import type { FsList, KB, SkillTarget, Status } from './types'
+import type { FsList, KB, SearchResponse, SkillTarget, Status } from './types'
 import { s } from './strings'
 
 /*
@@ -89,6 +89,10 @@ export const api = {
     ),
 
   fsList: (path: string) => request<FsList>('GET', `/api/fs/list${q({ path })}`),
+
+  /** 搜索调试页用：与 agent 面同一套打分，但走管理面（界面只有管理凭据）。 */
+  search: (kb: string, query: string, limit = 5) =>
+    request<SearchResponse>('POST', '/api/search', { kb, q: [query], limit }),
 
   settings: (patch: {
     port?: number

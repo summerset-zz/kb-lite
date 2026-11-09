@@ -12,6 +12,7 @@ export const s = {
 
   nav: {
     kbs: '知识库',
+    search: '搜索',
     settings: '设置',
     about: '关于',
   },
@@ -80,6 +81,31 @@ export const s = {
     ready: '已就绪',
     disabled: '已关闭',
     failed: '这次没整理成',
+  },
+
+  search: {
+    title: '搜索调试',
+    hint: '想知道 AI 为什么搜到这个、或者为什么搜不到，就在这里试。',
+    kb: '知识库',
+    query: '查询',
+    placeholder: '比如：部署 回滚',
+    multiWord: '多个词就都打进去，空格分开，它们会一起参与打分。',
+    run: '搜索',
+    empty: '这个词没有命中任何一篇文章。',
+    emptyNext: '先试试更短、更常见的说法；还是不行就在知识库页点「全部更新」重新整理一遍。',
+    noKB: '还没有知识库。先添加一个，再来这里试。',
+    why: '凭什么排在这',
+    keyword: '关键词',
+    colTitle: '标题',
+    colLeaf: '条目标题',
+    colPath: '路径',
+    colToc: '章节',
+    colBody: '摘要',
+    colFull: '全文',
+    counts: (strong: number, weak: number, fullOnly: number) =>
+      `命中要点 ${strong} · 弱命中 ${weak} · 只在全文里 ${fullOnly}`,
+    approx: (n: number) => `近似命中加了 ${n} 分（中文没有分词，这里按两字一组补的）`,
+    sections: (n: number) => `${n} 节`,
   },
 
   settings: {

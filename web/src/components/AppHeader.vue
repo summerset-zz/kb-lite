@@ -4,7 +4,7 @@ import { s } from '../strings'
 import type { Status } from '../types'
 
 const props = defineProps<{ status: Status }>()
-const tab = defineModel<'kbs' | 'settings' | 'about'>('tab', { required: true })
+const tab = defineModel<'kbs' | 'search' | 'settings' | 'about'>('tab', { required: true })
 
 const base = computed(() => `http://${location.hostname}:${props.status.port}`)
 
@@ -22,6 +22,7 @@ async function copyBase() {
 
 const tabs = [
   { id: 'kbs' as const, label: s.nav.kbs },
+  { id: 'search' as const, label: s.nav.search },
   { id: 'settings' as const, label: s.nav.settings },
   { id: 'about' as const, label: s.nav.about },
 ]

@@ -54,3 +54,59 @@ export interface SkillTarget {
   path: string
   bytes: number
 }
+
+// ---- 检索（/api/search 与 /kb/{name}/search 共用同一套形状）----
+
+export interface TocEntry {
+  section: number
+  level: number
+  title: string
+  pathText: string
+  chars: number
+  long?: boolean
+}
+
+/** 一个关键词在一条候选上的命中位置（docs/03）。 */
+export interface Hit {
+  keyword: string
+  title: boolean
+  path: boolean
+  toc: boolean
+  leaf: boolean
+  body: boolean
+  full: boolean
+  /** CJK bigram 近似命中：只加分，不算要点。 */
+  approx?: boolean
+}
+
+/** 一条候选在一个查询下的得分明细。 */
+export interface Detail {
+  hits: Hit[]
+  strong: number
+  weak: number
+  fullOnly: number
+  inTitle: number
+  inPath: number
+  inToc: number
+  inLeaf: number
+  approx: number
+  score: number
+}
+
+export interface SearchResult {
+  title: string
+  path: string
+  rev: string
+  score: number
+  summary: string
+  tags: string[]
+  chars: number
+  toc: TocEntry[]
+}
+
+export interface SearchResponse {
+  ok: boolean
+  query: string[]
+  results: SearchResult[]
+  debug?: { path: string; details: Detail[]; hits: Hit[][] }[]
+}

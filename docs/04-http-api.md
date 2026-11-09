@@ -120,8 +120,19 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 
 限制：只列目录不列文件内容；跳过 `.` 开头的目录与 `node_modules`；单层最多 500 项；不接受网络路径（`\\server\share`）以外的非本地路径时不做特殊处理，但要求路径可 `realpath`。
 
-### `POST /api/settings`
+### `POST /api/search`
 
+搜索调试页用（`docs/06` §5.3）。**与 `/kb/{name}/search` 是同一套打分**，只是走管理面：
+界面手上只有管理凭据，拿不到读取密码。
+
+```jsonc
+{ "kb": "笔记", "q": ["上线 回滚"], "limit": 5 }
+```
+
+响应与 `GET /kb/{name}/search?format=json&explain=1` **完全一致**（包括 `debug` 里每个关键词
+命中在哪个字段），所以两边不会漂。`q` 最多 5 个，每个不超过 200 字。
+
+### `POST /api/settings`
 改端口 / 绑定地址 / 数据库位置 / 读 token 开关。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
 
 ```jsonc
