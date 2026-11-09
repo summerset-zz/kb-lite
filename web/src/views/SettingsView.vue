@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
-import type { Status } from '../types'
+import type { StartupInfo, Status, UpdateInfo } from '../types'
 import { useStatus } from '../useStatus'
 import ModalShell from '../components/ModalShell.vue'
 import DirPicker from '../components/DirPicker.vue'
@@ -39,7 +39,65 @@ async function loadToken() {
   }
 }
 
-onMounted(() => void loadToken())
+// ---- 开机自启 / 快捷方式 / 检查更新 ----
+const startup = ref<StartupInfo | null>(null)
+const shortcutPath = ref('')
+const update = ref<UpdateInfo | null>(null)
+const updateError = ref('')
+
+async function loadStartup() {
+  try {
+    startup.value = await api.startup()
+  } catch {
+    startup.value = null
+  }
+}
+
+async function toggleStartup() {
+  if (!startup.value) return
+  const next = !startup.value.enabled
+  busy.value = 'startup'
+  error.value = ''
+  try {
+    startup.value = await api.setStartup(next)
+    notice.value = next ? '已开启开机自启。' : '已关闭开机自启。'
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : s.errors.generic
+  } finally {
+    busy.value = ''
+  }
+}
+
+async function createShortcut() {
+  busy.value = 'shortcut'
+  error.value = ''
+  shortcutPath.value = ''
+  try {
+    const resp = await api.shortcut()
+    shortcutPath.value = resp.path
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : s.errors.generic
+  } finally {
+    busy.value = ''
+  }
+}
+
+async function checkUpdate(refresh = false) {
+  busy.value = 'update'
+  updateError.value = ''
+  try {
+    update.value = await api.update(refresh)
+  } catch (e) {
+    updateError.value = e instanceof ApiError ? e.message : s.errors.generic
+  } finally {
+    busy.value = ''
+  }
+}
+
+onMounted(() => {
+  void loadToken()
+  void loadStartup()
+})
 
 async function copy(text: string, key: string) {
   try {
@@ -234,6 +292,66 @@ function setTheme(v: string) {
         <button class="btn btn-primary" type="button" :disabled="busy !== ''" @click="save">
           {{ busy === 'save' ? s.common.loading : s.common.save }}
         </button>
+      </div>
+    </section>
+
+    <!-- 启动与更新 -->
+    <section class="card p-4 mt-4 space-y-4">
+      <div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm font-medium flex-1">{{ s.settings.startup }}</p>
+          <label class="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              :checked="startup?.enabled ?? false"
+              :disabled="!startup?.supported || busy !== ''"
+              @change="toggleStartup"
+            />
+            {{ startup?.enabled ? '已开启' : '未开启' }}
+          </label>
+        </div>
+        <p class="muted text-xs mt-0.5">
+          {{ startup?.supported ? (startup?.enabled ? s.settings.startupOn : s.settings.startupOff) : s.settings.startupUnsupported }}
+        </p>
+        <p v-if="startup?.supported && startup.command" class="mono text-xs muted mt-1 break-all">
+          {{ s.settings.startupCommand }}：{{ startup.command }}
+        </p>
+        <p v-if="startup?.mismatch" class="note text-xs mt-2">
+          {{ s.settings.startupMismatch(startup.exePath ?? '') }}
+        </p>
+        <p v-if="startup?.fragile" class="note text-xs mt-2">{{ s.settings.startupFragile }}</p>
+      </div>
+
+      <div>
+        <p class="text-sm font-medium">{{ s.settings.shortcut }}</p>
+        <p class="muted text-xs mt-0.5">{{ s.settings.shortcutHint }}</p>
+        <button class="btn btn-sm mt-2" type="button" :disabled="busy !== ''" @click="createShortcut">
+          {{ s.settings.shortcut }}
+        </button>
+        <p v-if="shortcutPath" class="mono text-xs mt-1 break-all">
+          {{ s.settings.shortcutDone }}：{{ shortcutPath }}
+        </p>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm font-medium flex-1">{{ s.settings.update }}</p>
+          <button class="btn btn-sm" type="button" :disabled="busy !== ''" @click="checkUpdate(true)">
+            {{ busy === 'update' ? s.settings.updateChecking : s.settings.update }}
+          </button>
+        </div>
+        <p class="muted text-xs mt-0.5">{{ s.settings.updateCurrent(status.version) }}</p>
+        <p v-if="updateError" class="note text-xs mt-1">{{ updateError }}</p>
+        <p v-else-if="update && !update.ok" class="note text-xs mt-1">
+          {{ s.settings.updateFailed }}<span class="muted">{{ update.error }}</span>
+        </p>
+        <p v-else-if="update && update.newer" class="text-xs mt-1" :style="{ color: 'var(--accent)' }">
+          {{ s.settings.updateNew(update.latest ?? '') }} ·
+          <a :href="update.url" target="_blank" rel="noopener" class="underline">{{ s.settings.updateDownload }}</a>
+        </p>
+        <p v-else-if="update" class="muted text-xs mt-1">
+          {{ update.dev ? s.settings.updateDev : s.settings.updateLatest }}
+        </p>
       </div>
     </section>
 

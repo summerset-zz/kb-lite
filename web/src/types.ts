@@ -121,3 +121,32 @@ export interface PreviewResponse {
   body: string
   truncated?: boolean
 }
+
+/** 开机自启的状态（`GET /api/startup`）。 */
+export interface StartupInfo {
+  supported: boolean
+  enabled: boolean
+  /** 写进系统的启动命令，界面上要给用户看。 */
+  command?: string
+  path?: string
+  error?: string
+  /** 注册表里记的 exe（可能与当前这份不同）。 */
+  exePath?: string
+  /** 自启指向的是另一份 kb-lite。 */
+  mismatch?: boolean
+  /** 当前 exe 在下载/临时目录里，开自启可能下次开机就失效。 */
+  fragile?: boolean
+}
+
+/** 检查更新的结果（`GET /api/update`）。查不到时 ok 为假、error 是人话。 */
+export interface UpdateInfo {
+  ok: boolean
+  current: string
+  latest?: string
+  newer: boolean
+  dev: boolean
+  url?: string
+  publishedAt?: string
+  checkedAt: number
+  error?: string
+}

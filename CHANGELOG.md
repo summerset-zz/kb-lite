@@ -3,6 +3,27 @@
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号按 [SemVer](https://semver.org/lang/zh-CN/)。
 `0.x` 期间允许破坏性变更，但必须写在这里。
 
+## [Unreleased]
+
+### Added
+
+- **开机自启**（设置页复选框、`kb-lite autostart status|enable|disable`、`GET|POST /api/startup`）。
+  v0.4 只做 Windows：写 `HKCU\…\CurrentVersion\Run`，不需要管理员。写进去的命令是
+  `"<exe>" serve`（不带 `--open`），并原样显示给用户看。
+  界面会提醒两种坑：程序还在下载或临时目录里（随时会被清掉）、自启指向的是另一份 kb-lite。
+- **创建桌面快捷方式**（设置页按钮、`kb-lite shortcut`）：桌面建 `KBLite.lnk`，
+  目标 `"<exe>" serve --open`。桌面目录向系统要，不拼 `~/Desktop`（OneDrive 接管后路径会变）。
+- **检查更新**（设置页、`kb-lite update [--refresh]`、`GET /api/update`）：读 GitHub 的
+  `releases/latest`，结果缓存 10 分钟。**这是唯一会访问外网的地方**，只在用户点按钮时发。
+  查不到时回 `ok:false` 加一句人话，不当成接口错误。
+
+### Fixed
+
+- **补上单实例锁**（`docs/06` 第二节早就写了，代码里一直没有）。重复双击、或开机自启与手动打开撞在一起时，
+  第二个进程以前会默默占下一个端口（端口自动 +1 让它看起来成功），于是两个实例、两个托盘图标、
+  配置被反复改写。现在启动前先看 `<配置目录>/lock`：pid 还活着或那条端口上有人应答，就只把界面打开并退出自己。
+  热重开改端口后锁也会跟着改。
+
 ## [0.3.0] - 2026-11-09
 
 v0.3 = **界面**：一个不想碰命令行的人，从双击 exe 到跑通向导、装上 SKILL、让 AI 查上，全程不用终端。

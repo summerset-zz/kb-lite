@@ -159,6 +159,26 @@ export const s = {
     resume: '继续使用',
     pause: '暂停服务',
     pauseHint: '暂停只是让 AI 连不上，索引和进程都还在。点“继续使用”立刻恢复，不用重新整理。',
+    startup: '开机自启',
+    startupOn: '登录后自动跑起来，托盘会出现',
+    startupOff: '关掉的话，每次开机要自己双击一次',
+    startupUnsupported: '这个系统还不支持开机自启，暂时只能开机后自己打开一次。',
+    startupCommand: '启动的命令',
+    startupMismatch: (p: string) =>
+      `开机自启现在指向另一份程序：${p}。关掉再打开一次，就会指向你现在用的这个。`,
+    startupFragile:
+      '程序现在在下载或临时文件夹里，那里随时会被清掉。建议先把它挪到一个固定位置（比如 D:\\Tools\\KBLite），再开开机自启。',
+    shortcut: '创建桌面快捷方式',
+    shortcutHint: '建一个放桌面上，以后双击它就够了。',
+    shortcutDone: '已创建',
+    update: '检查更新',
+    updateCurrent: (v: string) => `当前版本 ${v}`,
+    updateChecking: '正在查…',
+    updateNew: (v: string) => `有新版本 ${v}`,
+    updateLatest: '已经是最新的。',
+    updateFailed: '这次没查到，可能没联网。稍后再试一次。',
+    updateDev: '你用的是开发中的版本，正式版可能还没它新。',
+    updateDownload: '去下载',
   },
 
   skill: {

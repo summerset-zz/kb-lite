@@ -156,6 +156,47 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
   （不以 `/` 开头、不含 `..`）。绝不能变成任意 URL 代理，否则两把钥匙就白分开了。
 - `body` 超过 200 KB 截断并回 `"truncated": true`。
 
+### `GET /api/startup` · `POST /api/startup`
+
+开机自启（`docs/06` §5.5）。**目前只有 Windows 支持**（`HKCU\...\CurrentVersion\Run`，
+不需要管理员）；其他平台 `supported: false` 并给一句人话解释。
+
+```jsonc
+{ "supported": true, "enabled": false,
+  "command": "\"C:\\…\\kb-lite.exe\" serve",
+  "path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" }
+```
+
+`POST` body：`{ "enabled": true | false }`，返回同样的结构。
+
+- 写进去的命令是 `"<exe>" serve`，**不带 `--open`**：开机自动弹浏览器属于打扰，托盘会自己出现。
+- `command` 要原样展示给用户：这条路到底启动了什么，用户有权知道。
+
+### `POST /api/shortcut`
+
+在桌面建一个 `KBLite.lnk`（目标是 `"<exe>" serve --open`），返回它的路径。
+
+- 桌面目录向系统要（`[Environment]::GetFolderPath('Desktop')`），**不能拼 `~/Desktop`**：
+  OneDrive 接管桌面后真实路径会变，写死家目录会建到用户看不见的地方。
+- 只做 Windows。建 `.lnk` 要走 COM，借用系统自带的 PowerShell 比手搓 `IShellLink` 稳。
+
+### `GET /api/update`
+
+查一次有没有新版本。**这是 kb-lite 唯一会访问外网的地方**，只在用户点按钮时发，
+不随启动、不后台定时。
+
+```jsonc
+{ "ok": true, "current": "0.3.0", "latest": "v0.4.0", "newer": true,
+  "dev": false, "url": "https://github.com/…/releases/tag/v0.4.0",
+  "publishedAt": "…", "checkedAt": 1762690000000 }
+```
+
+- 数据来源是 GitHub 的 `releases/latest`（匿名，60 次/小时/IP）。结果缓存 10 分钟，
+  `?refresh=1` 强制重查，免得用户连点把配额打满。
+- **查不到时仍然回 `200`**，只是 `ok:false` 并带一句人话 `error`。
+  这是“这次没查到”，不是接口错误，界面照常显示一行提示即可。
+- `dev` 为真表示当前跑的是 `-dev` 构建；这种情况下数字版本一样时不说“有更新”。
+
 ### `POST /api/settings`
 改端口 / 绑定地址 / 数据库位置 / 读 token 开关。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
 

@@ -1,4 +1,13 @@
-import type { FsList, KB, PreviewResponse, SearchResponse, SkillTarget, Status } from './types'
+import type {
+  FsList,
+  KB,
+  PreviewResponse,
+  SearchResponse,
+  SkillTarget,
+  StartupInfo,
+  Status,
+  UpdateInfo,
+} from './types'
 import { s } from './strings'
 
 /*
@@ -97,6 +106,17 @@ export const api = {
   /** Agent 视角页：由服务端带着读取密码去取一次，把原样响应回给界面。 */
   preview: (body: { kind: string; kb?: string; q?: string; path?: string; n?: number }) =>
     request<PreviewResponse>('POST', '/api/preview', body),
+
+  /** 开机自启（目前只有 Windows 支持，其他平台 supported 为假）。 */
+  startup: () => request<StartupInfo>('GET', '/api/startup'),
+  setStartup: (enabled: boolean) => request<StartupInfo>('POST', '/api/startup', { enabled }),
+
+  /** 在桌面建一个快捷方式，返回它的路径。 */
+  shortcut: () => request<{ ok: boolean; path: string }>('POST', '/api/shortcut'),
+
+  /** 查一次新版本。整站只有这一个请求会访问外网，且只在用户点按钮时发。 */
+  update: (refresh = false) =>
+    request<UpdateInfo>('GET', `/api/update${refresh ? '?refresh=1' : ''}`),
 
   settings: (patch: {
     port?: number

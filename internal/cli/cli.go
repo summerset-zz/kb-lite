@@ -81,6 +81,9 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
   start                     从暂停恢复（不重新整理）
   quit                      退出：关监听、关记录文件、进程结束
   doctor                    只读自检：端口、凭据、记录文件、知识库目录、索引与磁盘是否一致
+  autostart [status|enable|disable]   开机自启（目前只支持 Windows）
+  shortcut                  在桌面建一个 KBLite 快捷方式
+  update [--refresh]        查一下有没有新版本（唯一会访问外网的命令）
   version
 `
 
@@ -133,6 +136,12 @@ func Run(args []string) int {
 		return runToken(rest)
 	case "doctor":
 		return runDoctor(rest)
+	case "autostart":
+		return runAutostart(rest)
+	case "shortcut":
+		return runShortcut(rest)
+	case "update":
+		return runUpdate(rest)
 	case "version", "--version", "-v":
 		fmt.Println("kb-lite " + daemon.Version)
 		return exitOK
@@ -160,7 +169,7 @@ func (s *stringsFlag) Set(v string) error {
 var boolFlagNames = map[string]bool{
 	"explain": true, "json": true, "open": true, "no-db": true, "no-tray": true,
 	"show": true, "help": true, "force": true, "rotate": true, "yes": true, "wait": true,
-	"install": true, "install-authoring": true,
+	"install": true, "install-authoring": true, "refresh": true,
 }
 
 // splitFlags 把参数拆成「flag」与「位置参数」两半边。

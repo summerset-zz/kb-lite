@@ -29,6 +29,9 @@ type Server struct {
 	done    chan struct{}
 	// serveErr 只在监听真的出错时才收到东西；换代关掉的监听不算错。
 	serveErr chan error
+	// onBind 在每次（重新）绑定之后被调用，参数是实际端口。
+	// serve 拿它把锁文件里的端口改成最新的。
+	onBind func(port int)
 }
 
 // NewServer 建服务。它不会开始监听，要再调 Start。
@@ -50,6 +53,21 @@ func NewServer(mgr *Manager, readToken, apiToken string, opts HandlerOptions) *S
 
 // Handler 返回内部 Handler（测试与状态用）。
 func (s *Server) Handler() *Handler { return s.handler }
+
+// OnBind 注册一个回调：每次（重新）绑定成功后调用，参数是实际端口。
+// 必须在 Start 之前调用。
+func (s *Server) OnBind(fn func(port int)) {
+	s.mu.Lock()
+	s.onBind = fn
+	s.mu.Unlock()
+}
+
+// notifyBind 在持锁状态下回调 onBind。注意不要在回调里再调 Server 的方法（会死锁）。
+func (s *Server) notifyBind() {
+	if s.onBind != nil {
+		s.onBind(s.port)
+	}
+}
 
 // Port 返回当前实际监听端口。
 func (s *Server) Port() int {
@@ -99,6 +117,7 @@ func (s *Server) Start(host string, port int) (int, error) {
 	s.port = actual
 	s.handler.SetBinding(actual, !IsLoopbackHost(host))
 	s.serveLocked()
+	s.notifyBind()
 	return actual, nil
 }
 
@@ -125,6 +144,7 @@ func (s *Server) Reload(host string, port int) (int, error) {
 	// 先更新再关旧监听：Host / Origin 校验立刻按新端口判。
 	s.handler.SetBinding(actual, !IsLoopbackHost(host))
 	s.serveLocked()
+	s.notifyBind()
 
 	if old != nil {
 		// 关监听会让老的 Serve 立刻返回；那属于换代，不当故障。

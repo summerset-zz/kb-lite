@@ -97,6 +97,13 @@ kb-lite start
    # 从暂停状态恢复（打 /api/resume；不传参时是前台进程，所以不要指望它后台跑）
 kb-lite quit
    # 关监听 → 关记录文件 → 进程结束
+kb-lite autostart [status|enable|disable]
+   # 开机自启。目前只有 Windows（HKCU Run，不需要管理员）。
+   # 直接在**本机**改，不需要 daemon 在跑 —— 用户完全可能在想配自启时服务没开
+kb-lite shortcut
+   # 在桌面建一个 KBLite 快捷方式（Windows）
+kb-lite update [--refresh]
+   # 查一次有没有新版本。**这是唯一会访问外网的命令**，只在明确敲它时发一次请求
 kb-lite version
 ```
 

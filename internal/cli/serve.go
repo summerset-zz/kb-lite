@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/summerset-zz/kb-lite/internal/daemon"
@@ -57,6 +58,21 @@ func runServe(args []string) int {
 	}
 	if *dbPath != "" {
 		cfg.DBPath = *dbPath
+	}
+
+	// 单实例（docs/06 第二节）：已经有 kb-lite 在跑就**只把界面打开**，然后退出自己。
+	//
+	// 不这么做的话：第二个进程会占住下一个端口（端口自动 +1 让它静默成功）、
+	// 托盘里冒出第二个图标、配置被反复改写。双击两次、或者开机自启与手动打开
+	// 撞在一起时，都会走到这里。
+	if prev, running := daemon.AnotherInstance(dir); running {
+		base := "http://127.0.0.1:" + strconv.Itoa(prev.Port)
+		fmt.Fprintf(os.Stderr, "kb-lite 已经在跑了（pid %d，%s），这次直接打开界面。\n", prev.PID, base)
+		fmt.Fprintln(os.Stderr, "要重启请先 `kb-lite quit`。")
+		if prev.Port > 0 {
+			openInBrowser(base)
+		}
+		return exitOK
 	}
 
 	// 硬不变式（ADR-015）：绑了非回环地址就必须要访问密码，否则等于把知识库开放给局域网。
@@ -116,6 +132,18 @@ func runServe(args []string) int {
 		Features: daemon.DefaultFeatures,
 		Shutdown: func() { srv.Shutdown() },
 	})
+
+	// 锁目录里的 pid 与端口。热重开改端口后要跟着改，否则重复启动会去敲旧端口。
+	exePath, _ := os.Executable()
+	srv.OnBind(func(port int) {
+		_ = daemon.WriteLock(dir, daemon.LockInfo{
+			PID:       os.Getpid(),
+			Port:      port,
+			StartedAt: time.Now().UnixMilli(),
+			Exe:       exePath,
+		})
+	})
+	defer daemon.RemoveLock(dir)
 
 	actualPort, err := srv.Start(cfg.Host, cfg.Port)
 	if err != nil {
