@@ -67,6 +67,13 @@ func runDoctor(args []string) int {
 		add("绑定地址", cfg.Host, "绑了非回环地址却没开访问密码，同网段的人都能读你的知识库")
 	}
 
+	// 3b. 访问密码开没开。curl 收到 401 时用户最先问的就是这个。
+	if cfg.EffectiveRequireToken() {
+		add("访问密码", "开着：AI 与 curl 都要带 Authorization 头", "")
+	} else {
+		add("访问密码", "关着：本机任何程序都能直接读", "")
+	}
+
 	// 4. 两份凭据文件
 	lines = append(lines, checkTokenFiles(dir)...)
 
