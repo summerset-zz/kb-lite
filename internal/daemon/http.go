@@ -106,6 +106,8 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
 	mux.HandleFunc("POST /api/shutdown", h.handleShutdown)
+	// `/` 兜底托管 UI：具体路由（/api/…、/kb/…、/skill.md）优先级更高。
+	mux.HandleFunc("GET /", h.handleUI)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
@@ -145,7 +147,7 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 					"管理接口需要管理凭据（UI 用同源 cookie，CLI 用 X-KB-Admin）。")
 				return
 			}
-		} else if h.requireToken.Load() {
+		} else if h.requireToken.Load() && isReadPath(r.URL.Path) {
 			if !h.readTokenOK(r) {
 				if retry := h.failures.fail(clientKey(r)); retry > 0 {
 					w.Header().Set("Retry-After", strconv.Itoa(retry))
@@ -164,6 +166,14 @@ func (h *Handler) guard(next http.Handler) http.Handler {
 // isAdminPath 判断是不是管理面。
 func isAdminPath(p string) bool {
 	return p == "/api" || strings.HasPrefix(p, "/api/")
+}
+
+// isReadPath 判断是不是**给 agent 的**读取面。
+//
+// 只有这两类才受访问密码约束：UI 自己（`/` 与静态资源）必须能打开，
+// 否则用户连“去设置里关掉密码”都做不到。
+func isReadPath(p string) bool {
+	return p == "/skill.md" || p == "/kb" || strings.HasPrefix(p, "/kb/")
 }
 
 // hostAllowed 只认本机的三种写法。

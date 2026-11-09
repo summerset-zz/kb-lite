@@ -358,6 +358,9 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 
 ## 其它
 
+- `GET /` → UI 静态页。页面用 `//go:embed` 打进去，**不需要任何凭据**（否则用户连「去设置里关掉密码」都做不到）。
+  打开页面时顺手下发 `kb-admin` cookie（`HttpOnly; SameSite=Strict`），UI 之后靠它调 `/api/*`。
+  没构建过 UI 时返回一个占位页，说明怎么构建，服务照常可用。
+- 访问密码只约束 `/kb/*` 与 `/skill.md` 这两类**给 agent 的**路径（`isReadPath`）。
 - `GET /openapi.json`（可选）：便于用户把接口喂给自己的工具链。
-- `GET /` → UI 静态页（见 06）。
 - **不要**提供 `/kb/{name}/raw?path=` 之类无 ACL 的万能文件读接口。

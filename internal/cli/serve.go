@@ -79,8 +79,9 @@ func runServe(args []string) int {
 	}
 
 	if len(cfg.KBs) == 0 {
-		fmt.Fprintf(os.Stderr, "还没有配置知识库。先执行：kb-lite add <目录>\n配置目录：%s\n", dir)
-		return exitError
+		// 零知识库也要能起：向导的第一步就是「先起服务，再在界面里建第一个库」。
+		// 这里只提示一句，不拦着用户。
+		fmt.Fprintln(os.Stderr, "还没有知识库，启动后到界面里添加。")
 	}
 
 	// 缓存是**可选的加速**（ADR-003）：打不开就纯内存跑，不要因为缓存坏了就起不来。
