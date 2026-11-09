@@ -455,7 +455,9 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 // 它**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸）之外，
 // 这个服务没有兔认证的路由。
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.mgr.Status(h.opts.Port, h.opts.DBMode, h.requireToken.Load()))
+	// 端口要取“现在实际监听的那个”：热重开之后 opts.Port 是旧值，
+	// 而 UI 正是从这个字段拼地址的（横幅、页头、复制的那句口令）。
+	writeJSON(w, http.StatusOK, h.mgr.Status(h.Port(), h.opts.DBMode, h.requireToken.Load()))
 }
 
 // handleManifest 是 `GET /kb/{name}/manifest`（docs/04）。

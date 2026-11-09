@@ -100,6 +100,29 @@ func getStatus(port int) error {
 	return nil
 }
 
+// statusBody 取某个端口上 /api/status 的响应体（管理面，带 admin 头）。
+func statusBody(t *testing.T, port int) (int, map[string]any) {
+	t.Helper()
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/status", port)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-KB-Admin", testAdminToken)
+	req.Header.Set("Origin", fmt.Sprintf("http://127.0.0.1:%d", port))
+
+	resp, err := testClient(5 * time.Second).Do(req)
+	if err != nil {
+		t.Fatalf("请求 %s 失败：%v", url, err)
+	}
+	defer resp.Body.Close()
+
+	var parsed map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&parsed)
+	return resp.StatusCode, parsed
+}
+
 // TestSettingsHotReloadPort 验改端口当场生效：旧端口立刻断，新端口立刻能用。
 func TestSettingsHotReloadPort(t *testing.T) {
 	srv, oldPort := startTestServer(t)
@@ -121,6 +144,15 @@ func TestSettingsHotReloadPort(t *testing.T) {
 	}
 	if srv.Port() != next {
 		t.Errorf("Server.Port() = %d，想要 %d", srv.Port(), next)
+	}
+
+	// /api/status 报的端口也得是新的：UI 就是拿它拼地址的（横幅、口令那段话）。
+	code, st := statusBody(t, next)
+	if code != http.StatusOK {
+		t.Fatalf("/api/status status = %d", code)
+	}
+	if got := int(st["port"].(float64)); got != next {
+		t.Errorf("/api/status 报的端口是 %d，想要 %d", got, next)
 	}
 
 	// 新端口能用。
