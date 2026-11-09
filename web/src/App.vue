@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { api } from './api'
 import { useStatus } from './useStatus'
 import { s } from './strings'
@@ -13,7 +13,25 @@ import AboutView from './views/AboutView.vue'
 type Tab = 'kbs' | 'settings' | 'about'
 
 const { status, loading, error, refresh, needWizard } = useStatus()
-const tab = ref<Tab>('kbs')
+
+// 页签跟着 URL 锚点走：托盘的“设置”直接打开 /#settings，刷新也不丢当前页。
+const tabFromHash = (): Tab => {
+  const h = location.hash.replace('#', '')
+  return h === 'settings' || h === 'about' ? h : 'kbs'
+}
+const tab = ref<Tab>(tabFromHash())
+
+watch(tab, (v) => {
+  const target = v === 'kbs' ? location.pathname : `${location.pathname}#${v}`
+  // 用 replaceState 而不是 pushState：切页签不该往后退键里塞一堆历史。
+  if (location.pathname + location.hash !== target) {
+    history.replaceState(null, '', target)
+  }
+})
+
+window.addEventListener('hashchange', () => {
+  tab.value = tabFromHash()
+})
 
 function onWizardDone() {
   tab.value = 'kbs'

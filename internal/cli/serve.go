@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/summerset-zz/kb-lite/internal/daemon"
+	"github.com/summerset-zz/kb-lite/internal/tray"
 )
 
 // runServe 是唯一会「真的干活」的命令：剩下的都是它的客户端。
@@ -26,6 +27,7 @@ func runServe(args []string) int {
 	noDB := fs.Bool("no-db", false, "")
 	openBrowserFlag := fs.Bool("open", false, "")
 	force := fs.Bool("force", false, "")
+	noTray := fs.Bool("no-tray", false, "")
 	_ = fs.String("log-level", "info", "")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
@@ -143,6 +145,12 @@ func runServe(args []string) int {
 		openInBrowser(base)
 	}
 
+	// Windows 上顺手挂个托盘（docs/06 第四节）：暂停/启动、设置、在命令行中打开、退出。
+	// `--no-tray` 给服务器/脚本用，免得在没有桌面的会话里出现奇怪的东西。
+	if !*noTray {
+		startTray(srv, mgr)
+	}
+
 	// Ctrl+C → 优雅退出。
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -213,4 +221,53 @@ func openInBrowser(u string) {
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "打不开浏览器：", err)
 	}
+}
+
+// startTray 挂上 Windows 托盘（其他平台什么都不做，见 tray.Available）。
+//
+// 托盘只是 UI 的第二个入口，**任何失败都不能影响服务本身**：起不来就打一行提示，
+// 服务照常跑。用户还可以用浏览器打开界面。
+func startTray(srv *daemon.Server, mgr *daemon.Manager) {
+	if !tray.Available() {
+		return
+	}
+	go func() {
+		err := tray.Run(
+			func() tray.State {
+				st := tray.State{Address: srv.Addr(), Paused: srv.Handler().Paused()}
+				// 有任何一个知识库在整理就显示进度（菜单里那一行）。
+				for _, kb := range mgr.Status(srv.Port(), "", false).KBs {
+					if kb.State == "indexing" && kb.Progress != nil {
+						st.Indexing = true
+						st.Done, st.Total = kb.Progress.Done, kb.Progress.Total
+						break
+					}
+				}
+				return st
+			},
+			tray.Actions{
+				TogglePause: func() { srv.Handler().SetPaused(!srv.Handler().Paused()) },
+				OpenBrowser: openInBrowser,
+				OpenConsole: func() {
+					dir, _ := os.Executable()
+					cmd := exec.Command("cmd", "/c", "start", "", "cmd", "/k", "kb-lite -h")
+					cmd.Dir = filepath.Dir(dir)
+					if err := cmd.Start(); err != nil {
+						fmt.Fprintln(os.Stderr, "打不开命令行：", err)
+					}
+				},
+				CopyAddress: func() string {
+					addr := srv.Addr()
+					if tray.CopyToClipboard(addr) {
+						return addr
+					}
+					return ""
+				},
+				Quit: srv.Shutdown,
+			},
+		)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "托盘没起来（服务照常可用）：", err)
+		}
+	}()
 }

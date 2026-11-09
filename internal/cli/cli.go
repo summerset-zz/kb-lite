@@ -29,6 +29,7 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --port <n>              端口；被占时自动 +1 并写回 config
     --host <addr>           默认 127.0.0.1；改成 0.0.0.0 会强制开启访问密码
     --open                  启动后打开浏览器
+    --no-tray               不挂 Windows 托盘（服务器与脚本用）
     --db <path>             缓存库位置（默认 <配置目录>/index.db，可以随时删）
     --no-db                 不落盘（纯内存，每次启动都重切）
     --force                 忽略缓存，全部重新切片
@@ -154,8 +155,8 @@ func (s *stringsFlag) Set(v string) error {
 
 // boolFlagNames 是**不带值**的开关。用来把 `--limit 5` 的 5 正确地算在 flag 这一边。
 var boolFlagNames = map[string]bool{
-	"explain": true, "json": true, "open": true, "no-db": true, "show": true, "help": true,
-	"force": true, "rotate": true, "yes": true, "wait": true,
+	"explain": true, "json": true, "open": true, "no-db": true, "no-tray": true,
+	"show": true, "help": true, "force": true, "rotate": true, "yes": true, "wait": true,
 	"install": true, "install-authoring": true,
 }
 

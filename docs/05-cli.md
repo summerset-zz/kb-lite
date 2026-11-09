@@ -16,6 +16,7 @@ kb-lite serve
   --db <path>         覆盖数据库路径
   --host <addr>       默认 127.0.0.1。改成 0.0.0.0 时打印醒目警告
   --open              启动后打开浏览器
+  --no-tray           不挂 Windows 托盘（服务器、容器、脚本用）
   --no-db             纯内存模式（不落盘）
   --log-level <l>     error|warn|info|debug，默认 info
 ```
