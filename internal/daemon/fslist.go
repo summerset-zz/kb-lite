@@ -19,20 +19,17 @@ type FSListResp struct {
 }
 
 // FSDir 是一个候选子目录。
+//
+// 只给名字和路径。**不数里面有多少 markdown**：那是递归走整棵子树，
+// 在大盘根目录上换一层就要等好几秒，而“有多少篇”对“选哪个文件夹”帮助有限。
 type FSDir struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
-	// HasMarkdown 表示这个目录（含子目录）里至少有一个 markdown。
-	HasMarkdown bool `json:"hasMarkdown"`
-	// MarkdownCount 是数到的数量，超过上限时等于上限（不要再报精确值）。
-	MarkdownCount int `json:"markdownCount"`
 }
 
 const (
 	// MaxFSDirs 是单层最多列多少个子目录（docs/04）。
 	MaxFSDirs = 500
-	// maxMarkdownProbe 是数 markdown 时的上限，防止在大盘根目录上扫半天。
-	maxMarkdownProbe = 2000
 )
 
 // statDir 判断路径是不是目录。
@@ -84,12 +81,7 @@ func ListDirs(p string) (*FSListResp, error) {
 			continue
 		}
 		full := filepath.Join(abs, name)
-		count := countMarkdown(full, maxMarkdownProbe)
-		resp.Dirs = append(resp.Dirs, FSDir{
-			Name: name, Path: full,
-			HasMarkdown:   count > 0,
-			MarkdownCount: count,
-		})
+		resp.Dirs = append(resp.Dirs, FSDir{Name: name, Path: full})
 		if len(resp.Dirs) >= MaxFSDirs {
 			break
 		}

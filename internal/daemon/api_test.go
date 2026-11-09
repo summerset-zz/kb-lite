@@ -272,14 +272,11 @@ func TestFSList(t *testing.T) {
 	if _, ok := names["node_modules"]; ok {
 		t.Error("node_modules 不该出现在候选里")
 	}
-	if got := names["有笔记"]["markdownCount"].(float64); got != 1 {
-		t.Errorf("有笔记 的 markdownCount = %v，想要 1", got)
+	if _, ok := names["有笔记"]; !ok {
+		t.Error("有笔记 应当出现在候选里")
 	}
-	if names["有笔记"]["hasMarkdown"] != true {
-		t.Error("有笔记 应当 hasMarkdown")
-	}
-	if names["空的"]["hasMarkdown"] != false {
-		t.Error("空的 不该 hasMarkdown")
+	if _, ok := names["空的"]; !ok {
+		t.Error("空的目录也要列出来 —— 选择器不替他判断里面有没有东西")
 	}
 
 	// 路径不存在：400，不是 500。

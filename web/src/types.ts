@@ -37,8 +37,6 @@ export interface Status {
 export interface FsDir {
   name: string
   path: string
-  hasMarkdown: boolean
-  markdownCount: number
 }
 
 export interface FsList {

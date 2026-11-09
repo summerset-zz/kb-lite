@@ -36,9 +36,11 @@ export const s = {
   picker: {
     root: '先选一个磁盘',
     pickThis: '用这个文件夹',
+    go: '前往',
+    pathInputTitle: '可以点、可以改，也能把路径直接粘进来',
+    pathHint: '路径可以直接粘进来，按回车跳过去。从资源管理器的地址栏复制就行。',
     emptyRoot: '先选一个磁盘，里面就是你的文件夹。',
     emptyHere: '这个位置下面没有子文件夹。点右上角“用这个文件夹”就选它自己。',
-    markdownCount: (n: string) => `这里有 ${n} 个 markdown 文件`,
   },
 
   wizard: {

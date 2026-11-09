@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { FsList } from '../types'
@@ -11,6 +11,8 @@ const cur = ref<FsList | null>(null)
 const loading = ref(true)
 const error = ref('')
 const busy = ref('')
+// 地址栏：能点、能改、能把路径直接贴进去（从资源管理器的地址栏复制）。
+const typed = ref(props.start ?? '')
 
 async function go(path: string) {
   loading.value = true
@@ -38,8 +40,23 @@ const canUp = computed(() => {
   return Boolean(cur.value?.parent) || Boolean(cur.value?.drives?.length)
 })
 
-// 大盘根目录的 markdown 数量到上限就只说“2000+”，不要再报一个精确值骗人。
-const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
+// 输入框里改过、而且跟当前目录不一样：才露出“前往”。
+const dirty = computed(() => typed.value.trim() !== path.value)
+
+// 跳完了（或者从列表点进去）就把输入框同步成真正的位置。失败时不动，
+// 让用户就着自己打错的路径改。
+watch(
+  () => cur.value?.path,
+  (p) => {
+    typed.value = p ?? ''
+  },
+)
+
+function submitTyped() {
+  const p = typed.value.trim()
+  if (p === path.value) return
+  void go(p)
+}
 </script>
 
 <template>
@@ -48,7 +65,18 @@ const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
       <button class="btn btn-sm" type="button" :disabled="!canUp || loading" @click="go(upTarget)">
         {{ s.common.back }}
       </button>
-      <span class="mono flex-1 truncate" :title="path">{{ path || s.picker.root }}</span>
+      <input
+        v-model="typed"
+        class="input flex-1 min-w-0 mono"
+        spellcheck="false"
+        autocomplete="off"
+        :placeholder="s.picker.root"
+        :title="s.picker.pathInputTitle"
+        @keydown.enter.prevent="submitTyped"
+      />
+      <button v-if="dirty" class="btn btn-sm" type="button" :disabled="loading" @click="submitTyped">
+        {{ s.picker.go }}
+      </button>
       <button
         class="btn btn-primary btn-sm"
         type="button"
@@ -60,6 +88,7 @@ const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
     </div>
 
     <p v-if="error" class="note mt-3 text-sm">{{ error }}</p>
+    <p class="muted text-xs mt-2">{{ s.picker.pathHint }}</p>
 
     <div class="mt-3 max-h-72 overflow-auto -mx-1 px-1">
       <p v-if="loading" class="muted text-sm py-6 text-center">{{ s.common.loading }}</p>
@@ -83,9 +112,6 @@ const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
         >
           <span class="truncate">{{ d.name }}</span>
           <span class="flex-1" />
-          <span v-if="d.hasMarkdown" class="muted text-xs shrink-0">
-            {{ s.picker.markdownCount(countText(d.markdownCount)) }}
-          </span>
         </button>
 
         <div v-if="cur.drives?.length" class="mt-3 flex flex-wrap gap-2">
