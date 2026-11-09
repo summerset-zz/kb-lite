@@ -159,3 +159,67 @@
 - **维护者不熟 Go**：语言小、标准库正、第三方依赖被限制在三个纯 Go 包里，项目总量约 2500 行 —— 学习成本一次性，且远小于「每个用户装运行时」的持续成本。
 
 **重新考虑的条件**：① Go 的维护成本实际压过了收益（例如每次改 core 都要重新学一遍）；② 出现必须复用线上 TS 实现的硬需求（例如要跟线上共用同一份插件代码）。
+
+---
+
+## ADR-014 托盘用纯 Go 自己实现（Windows 先行），不上 Tauri
+
+**背景**：ADR-007 把 Tauri 留到 v2，触发条件是「用户明确要托盘/开机自启」+「签名预算」。现在前半条触发了。
+
+**决定**：**Windows 托盘用 `user32` / `shell32` 的 `syscall` 自己实现**（`Shell_NotifyIcon` + 隐藏窗口消息循环），**不加 cgo**。UI 仍然开在系统浏览器里。macOS / Linux 暂时不提供托盘，用 `autostart` + `serve --open` 覆盖。
+
+**理由**
+
+1. Tauri 要 Rust 工具链，且**不能从 Windows 交叉编译出 macOS** —— `docs/08` 的「一台机器出五个平台」直接破功；
+2. 托盘在 Windows 上是 Win32 的十行 API，Tauri 为它拖进一整套运行时与签名成本（未签名的安装包在 SmartScreen / Gatekeeper 面前就是劝退）；
+3. 单进程：daemon 与托盘同生共死，没有 sidecar、没有健康检查、没有第二套端口协商。
+
+**代价（接受）**
+
+- 原生消息循环不能单测，只能靠手测；托盘代码要包在一个平台文件里（`_windows.go`），非 Windows 编到空实现；
+- macOS / Linux 用户没有托盘；
+- 将来若要跨平台托盘，仍是 ADR-007 的路线（Tauri），**届时先定签名预算**。
+
+---
+
+## ADR-015 读取面 token 默认关，管理面用独立凭据
+
+**决定**
+
+- 读取面（`/kb/*`、`/skill.md`）：`requireToken` **默认关**，用户可在设置页打开；
+- 管理面（`/api/*`）：**永远**要 admin 凭据（`api-token`，只以 `HttpOnly; SameSite=Strict` cookie 交给同源页面；界面不展示、不可复制），CLI 读文件带 `X-KB-Admin`；
+- `/api/*` 还要求 `Sec-Fetch-Site: same-origin` 或 `Origin: <自己>`；
+- **硬不变式**：绑定非回环地址时 `requireToken` 强制为开，CLI 与设置页都拒绝「局域网 + 无 token」。
+
+**理由**
+
+- 「双击即用」是这个产品的前提。强制每个用户先去配 token、再粘给 agent，是第一公里就劝退；
+- 无 token 的实际暴露面很窄：网页读不到（无 CORS + Host/Origin/Sec-Fetch-Site 校验），代价只是「本机其他程序能读」；
+- 「配置接口不能暴露给 agent」不能只靠「skill.md 里不提」——那是约定不是防线。admin 凭据分离让它变成**结构性**保证：agent 那把读 token 打不开 `/api/*`。
+
+**代价（接受）**：多一个文件、多一次 cookie 下发；`/api/*` 不能再用 curl 随手调（要带 `Origin`），调试稍麻烦。
+
+**重新考虑的条件**：出现「多人共用一台机器」的需求（那时要真权限，按 ADR-008 推开）。
+
+---
+
+## ADR-016 前端：Vite + Vue 3 + Tailwind v4 + Reka UI
+
+**决定**：`web/` 用 Vite + Vue 3 + TS + Tailwind CSS v4 + `reka-ui`（无样式交互原语）+ `@iconify-json/lucide`。产物 `//go:embed` 进二进制。
+
+**理由**
+
+- 参考项目（fontcover-v2）就是 Tailwind + `@nuxt/ui`，视觉语言可以对齐，但 `@nuxt/ui` 绑 Nuxt（要 SSR），我们是纯静态 SPA，不带它；
+- 只要「好看」，不要「后台管理系统脸」：Element / Naive / Ant 的默认观感与这个产品不搭，且整包体积大；
+- Reka UI 只解决焦点陷阱、弹出层定位、无障碍这些**难写但没设计价值**的部分，视觉仍由自己的 token 控制。
+
+**禁止**：SSR / Nuxt、CSS-in-JS、`innerHTML` 渲染用户内容、组件里裸 `fetch`。
+
+---
+
+## ADR-017 读取 skill 与写作 skill 分成两份，分开安装
+
+**决定**：`/skill.md`（教 agent **怎么读**）与 `authoring.md`（教 AI **怎么写**）是两份独立文件、独立版本、在 UI 里两个独立安装按钮，落到不同的 skill 目录（`kb-lite` / `kb-lite-authoring`）。
+
+**理由**：合成一份会让 agent 在「我只是想查点东西」的时候也照写作规范去动用户的笔记 —— 而我们**没有写接口**，它只会去改文件系统。读与写是两种意图，就该是两把钥匙。
+

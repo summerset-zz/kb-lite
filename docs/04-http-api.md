@@ -2,19 +2,28 @@
 
 Base：`http://127.0.0.1:7331`（端口可配；端口被占时自动 +1 并把实际端口写回 `config.json`，UI 与 CLI 都从配置读）。
 
-认证：所有请求需带
+认证分成两级（ADR-015，细节见 [07-security](./07-security.md)）：
+
+> **状态**：这是 **v0.3 的契约**。v0.2 的实现仍然只有一把 token、读取面也必须带（`<配置目录>/token`）。
+> 改动顺序见 `docs/09`：先把 `/api/*` 与管理凭据做出来，再切读取面的默认值 —— 不要反过来。
+
+**读取面** `/kb/*`、`/skill.md` —— `requireToken` **默认关**（只绑回环地址时）；开了之后要带：
 
 ```
-Authorization: Bearer <token>
+Authorization: Bearer <读 token>
 ```
 
 或（给不方便设头的老客户端）
 
 ```
-X-KB-Token: <token>
+X-KB-Token: <读 token>
 ```
 
-token 在 `<配置目录>/token`，`kb-lite token --show` 可打印。详见 [07-security](./07-security.md)。
+读 token 在 `<配置目录>/read-token`，`kb-lite token --show` 可打印，给用户的只有这一把。
+
+**管理面** `/api/*` —— **永远**需要 admin 凭据：UI 靠同源页面下发的 `HttpOnly; SameSite=Strict` cookie，
+CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。另外还要求 `Sec-Fetch-Site: same-origin` 或 `Origin: <自己>`
+（curl 默认两个都不带 → `403`）。**agent 手里的读 token 打不开管理面。**
 
 通用约定：
 
@@ -39,11 +48,13 @@ token 在 `<配置目录>/token`，`kb-lite token --show` 可打印。详见 [07
 
 ```jsonc
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "port": 7331,
   "dbPath": "C:\\Users\\me\\AppData\\Roaming\\kb-lite\\index.db",
   "dbMode": "sqlite",              // "sqlite" | "memory"
-  "authRequired": true,
+  "setupCompleted": true,
+  "lanExposed": false,
+  "requireToken": false,           // 读取面是否需要 token
   "kbs": [
     { "name": "我的笔记", "id": "k1f3a9c2", "rootPath": "D:\\notes",
       "enabled": true, "state": "ready",       // ready | indexing | error | disabled
@@ -55,7 +66,7 @@ token 在 `<配置目录>/token`，`kb-lite token --show` 可打印。详见 [07
 }
 ```
 
-**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸），这个服务没有兔认证的路由。
+**要 admin 凭据**（见上面两级认证）：除了 `/skill.md` 与 `GET /`（UI 静态页），这个服务没有不要凭据的路由。
 
 `state == "indexing"` 时，`entries/sections` 还是**上一次**索引的数字 —— 调用方据此判断新鲜度（docs/01）。
 
@@ -108,6 +119,43 @@ UI 上必须二次确认，且确认文案要写明「目录里的文件不会�
 ```
 
 限制：只列目录不列文件内容；跳过 `.` 开头的目录与 `node_modules`；单层最多 500 项；不接受网络路径（`\\server\share`）以外的非本地路径时不做特殊处理，但要求路径可 `realpath`。
+
+### `POST /api/settings`
+
+改端口 / 绑定地址 / 数据库位置 / 读 token 开关。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
+
+```jsonc
+{ "port": 7400, "host": "127.0.0.1", "dbPath": "D:\\kb\\index.db", "requireToken": true }
+```
+
+字段都可选，没传的不动。行为：
+
+- 先校验（端口真 bind 一次 / 目录真建一个临时文件再删 / `host` 非回环时 `requireToken` 必须为 `true`），失败 `400` 并指向具体字段；
+- 落盘 `config.json`（原子写）→ 需要时重新监听（旧监听最后关，避免中间有一段完全不可用）→ 回复实际地址；
+- 数据库位置变更 = **在新位置重建**（它是缓存），旧文件成了才删；
+- 端口变了的话，客户端（UI）必须能从响应里拿到新地址并自己跳过去。
+
+> ⚠️ 不能“保存时直接把 `index.db` 建了”—— Windows 上它正被 daemon 持有。探写权限要用临时文件。
+
+### `POST /api/auth/token`
+
+```jsonc
+{ "action": "rotate" }            // 重新生成读 token；开了 requireToken 时旧的立即失效
+```
+
+### `POST /api/skill/install`
+
+把两份 skill 之一写到 agent 的目录（`docs/06` 的 SKILL 区块）。
+
+```jsonc
+{ "kind": "read" }     // read | authoring —— 两份**分开装**（ADR-017）
+{ "targets": ["dsh", "claude"] }   // 可选；默认只 dsh（~/.agents/skills）
+```
+
+- `read` → `~/.agents/skills/kb-lite/SKILL.md`（及 `~/.claude/skills/kb-lite/SKILL.md`）；
+- `authoring` → `~/.agents/skills/kb-lite-authoring/SKILL.md`（及 claude 对应目录）；
+- 只允许写这两棵子树，不跟随符号链接；写入前把旧文件备份成 `.bak`，失败就还原。
+- 返回 `{ "installed": [ { "path": "…", "bytes": 3402 } ] }`。
 
 ### `POST /api/shutdown`
 
@@ -291,7 +339,11 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 
 ## `GET /skill.md`
 
-返回给使用侧 agent 的说明文档（`text/markdown`）。内容模板见 [skill-template](./skill-template.md)，`{{BASE_URL}}`、`{{TOKEN_HINT}}`、`{{KBS}}` 由服务端在渲染时填入。
+返回给使用侧 agent 的说明文档（`text/markdown`）。内容模板见 [skill-template](./skill-template.md)，
+`{{BASE_URL}}`、`{{TOKEN}}`、`{{KB_LIST}}`、`{{KB_SAMPLE}}` 由服务端在渲染时填入。
+
+**token 是条件渲染的**：`requireToken` 关着时，模板里所有 `Authorization` 头整段消失（不能遗留 `Bearer ` 空值）。
+同理还有 `{{#if MANIFEST}}` 这类能力门控 —— 没实现的东西一律不出现在文档里。
 
 **必须与实现同源**：这段文本里描述的参数名、返回字段、`note` 文案，都要从同一份常量生成，不许手写第二份。加了参数忘了改 skill，比没有 skill 更糟。
 

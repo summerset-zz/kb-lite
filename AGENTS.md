@@ -31,9 +31,16 @@
   `gopkg.in/yaml.v3`（frontmatter）、`golang.org/x/text`（GB18030，必要时 collation）、
   `modernc.org/sqlite`（v0.2 起，纯 Go）。**不要 `mattn/go-sqlite3`**（要 cgo，交叉编译立刻全废）。
 - SQLite 拿不到时降级为**纯内存**并正常运行。
-- 前端：`web/`，Vite + Vue 3（**不要 React/Vue 之外的重型框架生态**）；**禁止 `innerHTML` 渲染用户内容**。
+- 前端：`web/`，**Vite + Vue 3 + TS + Tailwind v4**，交互原语用 `reka-ui`（无样式），图标 `@iconify-json/lucide`。
+  **禁止 SSR / Nuxt、CSS-in-JS、Element/Naive/Ant 这类整套组件库**（ADR-016）。**禁止 `innerHTML` 渲染用户内容**。
   产物用 `//go:embed` 打进二进制 —— **用户侧永远不需要 Node**。
-- 端口/路径/token **一律从 `config.json` 读**，不硬编码。
+- 托盘：**纯 Go 自己实现**（Windows 先行的 `Shell_NotifyIcon` + 消息循环），**不引入 cgo，不上 Tauri/Electron**（ADR-014）。
+  平台代码用 `_windows.go` 包起来，其他平台编空实现。
+- 凭据分两级（ADR-015）：读取面（`/kb/*`、`/skill.md`）的 **token 默认关**，用户可在设置页打开；
+  管理面（`/api/*`）**永远**要 admin 凭据（`HttpOnly; SameSite=Strict` cookie / CLI 的 `X-KB-Admin`），
+  并且要求 `Sec-Fetch-Site: same-origin` 或 `Origin: <自己>`。**绑定非回环地址时强制开启读取 token。**
+- 两份 skill **分开**（ADR-017）：`/skill.md`（教读）与 `authoring.md`（教写）不得合并。
+- 端口/路径/凭据 **一律从 `config.json` 读**，不硬编码。
 
 ## 不能自己发挥的地方
 
@@ -47,8 +54,10 @@
 | `toc` 的文本格式（`<编号> <标题> · 268 字` / `· 空`） | 04 |
 | 三种 `note` 文案 | 04 |
 | `200 + ok:false + candidates` 的错误形态 | 04 / ADR-010 |
-| 只读（没有任何写文件的接口） | ADR-004 |
+| 只读（没有改知识库文件内容的接口） | ADR-004 |
 | 不发任何 CORS 头 | 07 |
+| 界面文案：**假定用户只会用 AI、不懂电脑**，术语对照表照抄 | 06 §8 |
+| 托盘菜单/暂停与退出的语义、CLI 与 GUI 必须一一对应 | 06 §2 / §10 |
 
 ## 实现顺序
 

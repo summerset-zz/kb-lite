@@ -34,22 +34,27 @@
 
 **验收**：1000 篇的库二次启动 < 500 ms；删掉 `index.db` 后首次启动结果完全一致。
 
-## v0.3 · 管理接口与 Web UI
+## v0.3 · 管理接口、Web UI 与托盘
 
-- `/api/kbs` 全套（含 `/api/fs/list`）
-- UI：向导、KB 列表、开关 / 重新切片 / 删除、目录树、**Agent 视角页**、搜索调试页、设置页
-- 静态资源用 `//go:embed` 进二进制，`serve --open`
+- 管理接口：`/api/kbs` 全套、`/api/fs/list`、`/api/settings`、`/api/auth/token`、`/api/skill/install`、`/api/shutdown`；
+  `/api/*` 用 **admin 凭据 + 同源信号**，读取面 token 默认关（ADR-015）
+- UI（`web/`，`//go:embed` 进二进制）：向导、知识库页、设置页、作者页、两份 skill 的安装按钮、**Agent 视角页**、搜索调试页
+- Windows 托盘（纯 Go，ADR-014）：两态图标 + 右键菜单（暂停/启动、设置、在命令行中打开、退出）
+- CLI 平权：`settings` / `skill --install` / `start` / `stop` / `quit` / `doctor`（`docs/06` 第十节是验收清单）
+- `serve --open` 打开 UI
 
 **验收**：
 
-- 一个完全不懂命令行的人，从双击 exe 到跑通向导 < 3 分钟（找 3 个真人试，别看自己）；
-- 删除 KB 之后，目录里的文件 md5 与之前完全一致。
+1. 一个完全不懂命令行的人，从双击 exe 到跑通向导 < 3 分钟（找 3 个真人试，别看自己）；
+2. **界面上的每句话都能被「只会用 AI、不懂电脑」的人读懂**：抽出所有文案给他读，他能说出「下一步点哪儿」（`docs/06` 第八节）；
+3. 删除 KB 之后，目录里的文件 md5 与之前完全一致；
+4. 托盘暂停再启动，不需要重新整理（索引还在）。
 
 ## v0.4 · 分发
 
-- 三平台 SEA 构建 + Release
+- 三平台构建 + Release（`.github/workflows/release.yml`，目前还没有）
 - README / 宣传页 / 截图 / FAQ
-- `kb-lite doctor`
+- `kb-lite doctor` 补齐（若 v0.3 只做了骨架）
 - 开机自启命令（`kb-lite autostart enable`）
 
 **验收**：从 Releases 下载 → 双击 → 见到界面，全程不需要安装任何东西（在一台没装过 Node / Go / Python 的 Windows 干净机器上验）。

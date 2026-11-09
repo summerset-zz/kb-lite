@@ -17,6 +17,7 @@
 ```
 
 - **只有一个进程能写索引**（daemon）。CLI 不直接碰 SQLite，而是调 daemon 的 HTTP 接口 —— 避免 WAL/锁竞争，且代码只有一份。
+- 管理面（`/api/*`）也只存在于 daemon 里；UI 与 CLI 都是它的客户端（`docs/06` 第十节是平权清单）。
 - CLI 在 daemon 未启动时会**自己起一个短暂的 in-process 实例**做只读操作（`search` / `read`），或者在需要写的时候提示用户先 `serve`。见 [05-cli](./05-cli.md)。
 - UI 是纯静态资源，由 daemon 托管在 `/`（Tauri 壳只是换了承载方式，见 [06-desktop-ui](./06-desktop-ui.md)）。
 
@@ -59,9 +60,11 @@ desktop/         Tauri 壳（可选产物，见 06）
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/kb-lite/` |
 
 ```
-config.json      # 端口、数据库路径、KB 列表
-token            # 32 字节随机 hex，0600
+config.json      # 端口、绑定地址、数据库路径、KB 列表、读取面是否要密码
+read-token       # 读取面凭据，32 字节随机 hex，0600（仅 requireToken 打开时有意义）
+api-token        # 管理面凭据，同上；UI 靠 HttpOnly cookie 拿，界面上不显示（ADR-015）
 index.db         # SQLite（默认位置，用户可改）
+lock             # pid + 实际端口，给单实例唤醒用
 logs/daemon.log  # 轮转，10 MB × 3
 ```
 
@@ -69,8 +72,11 @@ logs/daemon.log  # 轮转，10 MB × 3
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "setupCompleted": true,        // 向导跑完了没；false 时 UI 进向导
   "port": 7331,
+  "host": "127.0.0.1",           // 非回环时 requireToken 强制 true
+  "requireToken": false,         // 读取面是否需要密码（默认关）
   "dbPath": "C:\\Users\\me\\AppData\\Roaming\\kb-lite\\index.db",
   "kbs": [
     {

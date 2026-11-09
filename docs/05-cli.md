@@ -35,8 +35,10 @@ kb-lite rename <old> <new>
 kb-lite reindex [name] [--force] [--wait]
    # 不传 name = 全部 KB；--wait 阻塞到完成并打印统计
 kb-lite status [--json]
+kb-lite settings [--port <n>] [--host <addr>] [--db <path>] [--password on|off]
+   # 改完立即生效（需要时自己重新监听），不需要重启进程
 kb-lite doctor
-   # 自检：端口、token 文件权限、DB 可写、每个 KB 的根目录是否还在、
+   # 自检：端口、凭据文件权限、DB 可写、每个 KB 的根目录是否还在、
    #      索引里有多少条记录的源文件已消失、SQLite 驱动是否可用、-h 返回的 Host 校验配置
 ```
 
@@ -69,18 +71,32 @@ kb-lite manifest <name> [--budget 2000] [--prefix <p>]
 
 ```
 kb-lite skill [--url <base>] [--kb <name>] [--out <path>]
-   # 打印 /skill.md 的内容，可直接重定向成 SKILL.md
+   # 打印 /skill.md 的内容（“让 AI 能查我的笔记”那份）
    # --out 由进程自己写文件（UTF-8 无 BOM）—— 不要用 shell 的 `>`：
    #   PowerShell 的 `>` 会写成 UTF-16，`Out-File -Encoding utf8` 会带 BOM，
    #   两者都会让 YAML frontmatter 失效，skill 就读不出来了。
+kb-lite skill --install [--target dsh|claude|both]
+   # 装到 ~/.agents/skills/kb-lite/SKILL.md（默认）与 ~/.claude/skills/kb-lite/SKILL.md
+kb-lite skill --install-authoring [--target dsh|claude|both]
+   # 另一份：教 AI **怎么写**（~/.agents/skills/kb-lite-authoring/）
+   # 两份**分开装**（ADR-017）：合成一份后 agent 会在只想查东西的时候也去改笔记
 kb-lite token [--show] [--rotate]
+   # 只针对读取面那把“访问密码”。管理凭据（api-token）不提供打印命令（ADR-015）
+   # ⚠️ `--show` 在开启读取密码时才有意义；关着时直接告诉你“当前没有启用访问密码”
 kb-lite sync <name> [--wait]
    # git -C <root> pull --ff-only，然后 reindex。
    # 只 pull，不 add/commit/push。冲突或非 fast-forward 时不强行处理，
    # 打印 git 的输出并退出码 2，让用户自己解决。
 kb-lite stop
+   # 暂停服务：关掉 HTTP 监听，**进程、索引、托盘都保留**；再 `start` 立刻恢复（不重切）
+kb-lite start
+   # 从暂停状态恢复监听（不传参时是前台进程，所以不要指望它后台跑）
+kb-lite quit
+   # 关监听 → 关记录文件 → 进程结束
 kb-lite version
 ```
+
+> **`stop` 与 `quit` 是两个动作**：托盘菜单、UI、CLI 三处叫法必须一致（`docs/06` 第二节）。
 
 ## 退出码
 
@@ -97,7 +113,10 @@ kb-lite version
 | 命令 | 行为 |
 |---|---|
 | `search` / `toc` / `read` / `manifest` / `status` / `skill` | **自动降级为离线只读**：进程内扫目录，并用 SQLite（**只读连接**）按 sha1 跳过没变过的文件。SQLite 不存在或 `--no-db` 时现场全量切片（慢一点，但结果一致） |
-| `add` / `remove` / `enable` / `disable` / `rename` / `reindex` / `sync` / `stop` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon** —— 用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
+| `add` / `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `sync` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon** —— 用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
+
+> `settings` / `skill --install` 之所以也必须走 daemon：它们要改的是**正在运行的那份配置**，
+> 自己改 `config.json` 会和内存里的状态对不上（端口、监听地址、skill 渲染日期）。
 
 ## 实现注意
 
