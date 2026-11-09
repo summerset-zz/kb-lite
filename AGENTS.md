@@ -17,7 +17,8 @@
 5. [`docs/04-http-api.md`](./docs/04-http-api.md) —— 接口与文案
 6. [`docs/05-cli.md`](./docs/05-cli.md) · [`docs/06-desktop-ui.md`](./docs/06-desktop-ui.md) · [`docs/07-security.md`](./docs/07-security.md)
 7. [`docs/08-build-release.md`](./docs/08-build-release.md) · [`docs/09-roadmap.md`](./docs/09-roadmap.md) · [`docs/10-decisions.md`](./docs/10-decisions.md)
-8. 给 agent 的两份模板：[`docs/skill-template.md`](./docs/skill-template.md)（教**读**）· [`docs/authoring-template.md`](./docs/authoring-template.md)（教**写**）
+8. [`docs/11-writing-style.md`](./docs/11-writing-style.md) —— 行文风格（角括号 0、不用破折号、用“你”）。**你写的每个中文句子都适用**
+9. 给 agent 的两份模板：[`docs/skill-template.md`](./docs/skill-template.md)（教**读**）· [`docs/authoring-template.md`](./docs/authoring-template.md)（教**写**）
 
 ## 技术约束（硬）
 
@@ -56,7 +57,8 @@
 | `200 + ok:false + candidates` 的错误形态 | 04 / ADR-010 |
 | 只读（没有改知识库文件内容的接口） | ADR-004 |
 | 不发任何 CORS 头 | 07 |
-| 界面文案：**假定用户只会用 AI、不懂电脑**，术语对照表照抄 | 06 §8 |
+| 界面文案：**假定用户只会用 AI、不懂电脑**；术语对照表照抄（端口保留原词、统一“知识库”、按钮写“安装 SKILL”） | 06 §8 |
+| 行文风格：角括号 0、不用破折号、用“你”不用“您”、一句话一个意思 | 11 |
 | 托盘菜单/暂停与退出的语义、CLI 与 GUI 必须一一对应 | 06 §2 / §10 |
 
 ## 实现顺序
