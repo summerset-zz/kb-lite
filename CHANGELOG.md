@@ -9,6 +9,15 @@ v0.3 = **界面**：一个不想碰命令行的人，从双击 exe 到跑通向�
 
 ### Added
 
+- **`.github/workflows/ci.yml`**：三个 OS 跑 `go vet` + `go test`；五个目标逐交叉编译
+  （另加一次 `-tags nosqlite`）；界面单独一个 job 跑 `typecheck` + `build`。
+  `setup-go` 用 `go-version-file: go.mod`，所以“还支持 1.22”每次都被验证一遍。
+- **`.github/workflows/release.yml`**：打 `v*` tag 就发版。Windows 出 zip、Unix 出 tar.gz，
+  附 `SHA256SUMS.txt`；正文是固定开头三段（是什么 / 下载哪个 / 被拦了怎么办）+ CHANGELOG 对应段落。
+  凭据用 Actions 自带的 `GITHUB_TOKEN`，不需要任何 PAT。
+  **界面在 `go build` 之前构建**：`web/dist` 是编译时 embed 进二进制的，
+  少了这步会发出带「界面还没有构建」占位页的包。
+- README 的快速开始改成“下载 → 解压 → 双击”三步，并把 SmartScreen / Gatekeeper 的点击路径写清楚。
 - **Agent 视角页**（导航第三个页签「给 AI 看」）：把 AI 真正收到的原文摊开
   （说明书、manifest、一次检索的 JSON、一次按节阅读），每块自己点“取一次”。
   看不懂是正常的，这一页的目的就是让人不用信我们的描述，自己看。

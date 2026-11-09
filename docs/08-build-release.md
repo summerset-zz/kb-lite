@@ -88,15 +88,15 @@ v0.2 的实测体积（在 Windows 上一台机器交叉编译全部五个目标
 
 ## CI
 
-`.github/workflows/ci.yml`：
+`.github/workflows/ci.yml`，**已实现**。三个 job：
 
-```
-on: [push, pull_request]
-jobs:
-  test:
-    strategy: { matrix: { os: [ubuntu-latest, windows-latest, macos-latest] } }
-    steps: go vet ./... → go test ./...
-```
+| job | 干什么 | 为什么 |
+|---|---|---|
+| `test` | 三个 OS 各跑 `go vet` 与 `go test` | 路径越界、大小写、Windows 短名这些坑是平台特异的 |
+| `cross-build` | 五个目标逐交叉编译（另加一次 `-tags nosqlite`） | 换语言换来的最大收益，断了就没意义了 |
+| `web` | `pnpm install --frozen-lockfile` → `typecheck` → `build` | 界面挂了 release 也发不出去 |
+
+`setup-go` 用 `go-version-file: go.mod` 而不是 `stable`：这样“我们真的还支持 1.22”每次都被验证一遍。
 
 三个 OS 都要跑：路径越界、大小写、8.3 短名这些坑是平台特异的。
 
@@ -109,24 +109,36 @@ jobs:
 
 ## 发布
 
-`.github/workflows/release.yml`：`on: push: tags: ['v*']`
+`.github/workflows/release.yml`：`on: push: tags: ['v*']`，**已实现**。
 
-矩阵产出：
+矩阵产出（Windows 打 zip，Unix 打 tar.gz：裸二进制在浏览器里下下来往往丢掉可执行位）：
 
 ```
-kb-lite-win-x64.exe
-kb-lite-win-arm64.exe
-kb-lite-macos-arm64
-kb-lite-macos-x64
-kb-lite-linux-x64
+kb-lite-win-x64.zip          （里面是 kb-lite-win-x64.exe）
+kb-lite-win-arm64.zip
+kb-lite-macos-arm64.tar.gz
+kb-lite-macos-x64.tar.gz
+kb-lite-linux-x64.tar.gz
 SHA256SUMS.txt
 ```
 
-Release 正文从 `CHANGELOG.md` 的对应版本段落生成。正文开头固定三段：
+**凭据：不需要任何 PAT。** 上传 Release 用 Actions 自动注入的 `GITHUB_TOKEN`，
+workflow 里声明 `permissions: contents: write` 就够。tag 由人来打，workflow 只负责构建与上传。
+
+**构建顺序有个坎（漏了会发错包）**：界面必须在 `go build` **之前**构建好。
+`web/dist` 是编译时 `//go:embed` 进二进制的，而 `internal/daemon/static/` 里除了
+`.gitkeep` 都不进版本库 —— 新 clone 下来直接 `go build`，产出的二进制会显示
+「界面还没有构建」。所以 release 的步骤固定为：pnpm 构建界面 → 再交叉编译。
+CI 里也有一份同样的检查（`web` job）。
+
+Release 正文 = **固定的开头三段** + `CHANGELOG.md` 里这个版本那一段（用 awk 摘）。
+固定三段：
 
 1. 一句话是什么；
-2. Windows 用户：下载哪个文件、要不要安装（答案是**不用，双击即用**）；
-3. 遇到 SmartScreen 怎么办（截图）。
+2. 下载哪个文件、要不要安装（答案是**不用，双击即用**）；
+3. 遇到 SmartScreen / Gatekeeper 怎么办（写清点击路径，附截图）。
+
+没有对应 CHANGELOG 段落时 workflow 会告警：正文只剩标题的发版比不发更糟。
 
 **不再有 npm 包。** `npx kb-lite serve` 这条路径已经不需要了。二进制本身就是零安装，而且更快、不依赖网络。仓库里给 `web/` 用的 `package.json` 不要发布。
 

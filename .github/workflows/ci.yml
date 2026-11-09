@@ -1,0 +1,103 @@
+name: ci
+
+# 三件事都要在这里拦住（docs/08）：
+#   1. vet + test 在三个 OS 上都过 —— 路径越界、大小写、Windows 短名这些坑是平台特异的；
+#   2. 五个目标平台都能交叉编译 —— 换语言换来的最大收益，断了就没意义了；
+#   3. 界面能构建 —— 少了这一步，release 会带着「界面还没有构建」的占位页发出去。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # 用 go.mod 里声明的版本，而不是 stable：
+          # 这样「我们真的还支持 1.22」这件事每次都会被验证一遍。
+          go-version-file: go.mod
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1
+
+  cross-build:
+    name: cross-build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: linux, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags="-s -w" -o /tmp/out/kb-lite ./cmd/kb-lite
+
+      # 只要 modernc.org/sqlite 还在，这一条不该红。换成 mattn/go-sqlite3 会立刻全红。
+      - name: nosqlite 瘦身构建也要能过
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build -tags nosqlite -trimpath -ldflags="-s -w" -o /tmp/out/kb-lite-nosqlite ./cmd/kb-lite
+
+  web:
+    name: web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: install
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: typecheck
+        working-directory: web
+        run: pnpm typecheck
+
+      # 产物会写进 internal/daemon/static/，release 时靠它 //go:embed。
+      - name: build
+        working-directory: web
+        run: pnpm build

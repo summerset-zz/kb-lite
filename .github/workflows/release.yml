@@ -1,0 +1,158 @@
+name: release
+
+# 打 `v*` tag 就发一版（docs/08）。
+#
+# 凭据用的是 Actions 自动注入的 GITHUB_TOKEN，不需要任何 PAT：
+# `permissions: contents: write` 就够了。tag 由人来打，workflow 只负责构建与上传。
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, asset: kb-lite-win-x64 }
+          - { goos: windows, goarch: arm64, asset: kb-lite-win-arm64 }
+          - { goos: darwin, goarch: arm64, asset: kb-lite-macos-arm64 }
+          - { goos: darwin, goarch: amd64, asset: kb-lite-macos-x64 }
+          - { goos: linux, goarch: amd64, asset: kb-lite-linux-x64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ⚠️ 界面必须在 go build **之前**构建好：产物是 //go:embed 打进二进制的，
+      # 而且 internal/daemon/static/ 里除 .gitkeep 之外不进版本库。
+      # 少了这一步，发出去的二进制会显示「界面还没有构建」。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: build web
+        working-directory: web
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: go build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" -o dist/${{ matrix.asset }} ./cmd/kb-lite
+
+      - name: package (windows)
+        if: matrix.goos == 'windows'
+        run: |
+          cd dist
+          mv ${{ matrix.asset }} ${{ matrix.asset }}.exe
+          zip -9 ${{ matrix.asset }}.zip ${{ matrix.asset }}.exe
+          rm ${{ matrix.asset }}.exe
+
+      - name: package (unix)
+        if: matrix.goos != 'windows'
+        run: |
+          cd dist
+          chmod +x ${{ matrix.asset }}
+          tar -czf ${{ matrix.asset }}.tar.gz ${{ matrix.asset }}
+          rm ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}.*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: SHA256SUMS
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Release 正文 = 固定的开头三段（是什么 / 下载哪个 / SmartScreen 怎么办）
+      #              + CHANGELOG 里这个版本那一段。
+      - name: 组正文
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          {
+            echo "## kb-lite ${GITHUB_REF_NAME}"
+            echo
+            echo "把一个 markdown 目录变成只读 HTTP 知识库，给 AI 用 curl 查。"
+            echo "零 LLM、零向量、不要 API key。你的 markdown 就是数据库。"
+            echo
+            echo "### 怎么用"
+            echo
+            echo "1. 下载对应平台的文件，解压；"
+            echo "2. **双击**（或命令行跑一次 \`kb-lite serve\`）。不用安装，不用 Node / Python / Docker；"
+            echo "3. 浏览器会自动打开向导，选一个放着资料的文件夹就完事。"
+            echo
+            echo "| 你的电脑 | 下载 |"
+            echo "|---|---|"
+            echo "| Windows 普通电脑 | \`kb-lite-win-x64.zip\` |"
+            echo "| Windows on ARM | \`kb-lite-win-arm64.zip\` |"
+            echo "| Mac（Apple 芯片） | \`kb-lite-macos-arm64.tar.gz\` |"
+            echo "| Mac（Intel） | \`kb-lite-macos-x64.tar.gz\` |"
+            echo "| Linux x64 | \`kb-lite-linux-x64.tar.gz\` |"
+            echo
+            echo "### 第一次打开被拦了？"
+            echo
+            echo "这个软件没有买代码签名证书（那要每年几百美金）。所以："
+            echo
+            echo "- **Windows**：会弹「Windows 已保护你的电脑」。点「更多信息」→「仍要运行」。"
+            echo "- **macOS**：右键点图标 →「打开」，或执行 \`xattr -d com.apple.quarantine ./kb-lite-macos-arm64\`。"
+            echo
+            echo "源码就在这个仓库里，你可以自己 \`go build\`。"
+            echo
+            echo "### 这次改了什么"
+            echo
+          } > /tmp/body.md
+
+          # 摘出 CHANGELOG 里 `## [x.y.z]` 到下一个 `## [` 之间的内容。
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md >> /tmp/body.md
+
+          # 没有对应段落时不要发一个只有标题的正文。
+          if [ "$(wc -l < /tmp/body.md)" -lt 20 ]; then
+            echo "CHANGELOG.md 里没有 ${VERSION} 这一段，正文可能不完整。" >&2
+          fi
+          cp /tmp/body.md body.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: body.md
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true

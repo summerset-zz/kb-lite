@@ -42,17 +42,37 @@ $ curl "$BASE/kb/我的笔记/entry/ops/runbook.md/section?n=2"
 
 ## 快速开始
 
+去 [Releases](../../releases) 下载对应平台的一个文件，解压，**双击**。
+
+| 你的电脑 | 下载 |
+|---|---|
+| Windows 普通电脑 | `kb-lite-win-x64.zip` |
+| Windows on ARM | `kb-lite-win-arm64.zip` |
+| Mac（Apple 芯片） | `kb-lite-macos-arm64.tar.gz` |
+| Mac（Intel） | `kb-lite-macos-x64.tar.gz` |
+| Linux x64 | `kb-lite-linux-x64.tar.gz` |
+
+第一次打开会进向导：**选记录文件放哪儿 → 选端口与谁能打开 → 选一个放着资料的文件夹**。三步走完，界面会给你四段可以直接粘给 AI 的东西（说明书、MCP 配置、整理说明、命令示例）。
+
+**不需要 Node、不需要 Python、不需要 Docker、不需要 API key。** 一个 11 MB 左右的静态二进制（含纯 Go 的 SQLite 缓存），界面的静态资源也打在里面。
+
+### 第一次打开被拦了？
+
+这个软件没有买代码签名证书（每年几百美金）。所以：
+
+- **Windows**：弹「Windows 已保护你的电脑」时，点「更多信息」→「仍要运行」。
+- **macOS**：右键点图标 →「打开」；或 `xattr -d com.apple.quarantine ./kb-lite-macos-arm64`。
+
+源码都在这仓库里，不放心就自己 `go build`。
+
+### 命令行用户的用法
+
 ```bash
-# 下载 release 里的单文件，双击即可。
-kb-lite serve
-
-# 需要一个特定的数据目录？
-kb-lite serve --db D:\kb\index.db
+kb-lite serve --open          # 起服务并打开界面
+kb-lite add ~/notes           # 加一个知识库（会立刻开始整理）
+kb-lite doctor                # 哪儿不对就让它先看一眼
+kb-lite quit                  # 退出（stop 只是暂停，AI 连不上但进程还在）
 ```
-
-首次运行会进向导：选数据库放哪儿 → 选知识库目录 → 打开界面。
-
-**不需要 Node、不需要 Python、不需要 Docker、不需要 API key。** 一个 11 MB 左右的静态二进制（含纯 Go 的 SQLite 缓存），Windows / macOS / Linux 各一份。
 
 ## 文档
 
