@@ -92,11 +92,17 @@ v0.2 的实测体积（在 Windows 上一台机器交叉编译全部五个目标
 
 | job | 干什么 | 为什么 |
 |---|---|---|
-| `test` | 三个 OS 各跑 `go vet` 与 `go test` | 路径越界、大小写、Windows 短名这些坑是平台特异的 |
+| `test` | 三个 OS 各跑 `go vet` 与 `go test`（`CGO_ENABLED=0`） | 路径越界、大小写、Windows 短名这些坑是平台特异的 |
 | `cross-build` | 五个目标逐交叉编译（另加一次 `-tags nosqlite`） | 换语言换来的最大收益，断了就没意义了 |
 | `web` | `pnpm install --frozen-lockfile` → `typecheck` → `build` | 界面挂了 release 也发不出去 |
 
 `setup-go` 用 `go-version-file: go.mod` 而不是 `stable`：这样“我们真的还支持 1.22”每次都被验证一遍。
+
+**测试也要 `CGO_ENABLED=0`**，与发出去的二进制一致。不设的话，macOS 上 `net` 与
+`database/sql` 会拉进 cgo 解析器，测试二进制走外部链接（clang），在 macOS 15 的 dyld 上直接
+`missing LC_UUID load command` 然后 `abort trap`。那个报错与我们的代码无关，但会把 CI 天天打红。
+第一次遇到时只红 `internal/cli` 与 `internal/daemon`，`internal/core` 反而是绿的 ——
+因为只有前两个 import 了 `net`。
 
 三个 OS 都要跑：路径越界、大小写、8.3 短名这些坑是平台特异的。
 

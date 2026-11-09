@@ -16,11 +16,17 @@ permissions:
 jobs:
   test:
     name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # 跟我们发出去的二进制保持一致：CGO_ENABLED=0。
+    # 不这么设的话，macOS 上 net / database-sql 会拉进 cgo 解析器，测试二进制走外部链接
+    # （clang），在 macOS 15 的 dyld 上直接报 `missing LC_UUID load command` 然后 abort。
+    # 那个错误跟我们的代码无关，但会天天把 CI 打红。
+    env:
+      CGO_ENABLED: "0"
     steps:
       - uses: actions/checkout@v4
 
