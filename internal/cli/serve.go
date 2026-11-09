@@ -29,6 +29,7 @@ func runServe(args []string) int {
 	dbPath := fs.String("db", "", "")
 	noDB := fs.Bool("no-db", false, "")
 	openBrowserFlag := fs.Bool("open", false, "")
+	force := fs.Bool("force", false, "")
 	_ = fs.String("log-level", "info", "")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
@@ -56,9 +57,6 @@ func runServe(args []string) int {
 	if *dbPath != "" {
 		cfg.DBPath = *dbPath
 	}
-	if *noDB || *dbPath != "" {
-		fmt.Fprintln(os.Stderr, "（v0.1 还没有落盘：--db / --no-db 接受但不生效，每次启动都会重切）")
-	}
 
 	token, err := daemon.LoadOrCreateToken(dir)
 	if err != nil {
@@ -71,7 +69,22 @@ func runServe(args []string) int {
 		return exitError
 	}
 
-	mgr := daemon.NewManager(cfg, daemon.BuildOptions{})
+	// 缓存是**可选的加速**（ADR-003）：打不开就纯内存跑，不要因为缓存坏了就起不来。
+	opts := daemon.BuildOptions{Force: *force}
+	if !*noDB {
+		store, err := daemon.OpenStore(cfg.DBPath)
+		switch {
+		case err == nil:
+			defer store.Close()
+			opts.Store = store
+		case errors.Is(err, daemon.ErrDBUnavailable), errors.Is(err, daemon.ErrDBNeedsUpgrade):
+			fmt.Fprintf(os.Stderr, "%v —— 本次不落盘\n", err)
+		default:
+			fmt.Fprintf(os.Stderr, "缓存打不开（%v），本次不落盘\n", err)
+		}
+	}
+
+	mgr := daemon.NewManager(cfg, opts)
 	started := time.Now()
 	if err := mgr.Rebuild(); err != nil {
 		fmt.Fprintln(os.Stderr, "建索引失败：", err)
@@ -153,6 +166,10 @@ func printIndexStats(mgr *daemon.Manager, took time.Duration) {
 	for _, kb := range mgr.Index().KBs {
 		fmt.Printf("已索引「%s」：%d 篇 / %d 节 / %s\n",
 			kb.KB.Name, len(kb.Entries), kb.Sections, formatBytes(kb.Bytes))
+		// 增量要看得见：否则用户不知道「这次为什么快」。
+		if kb.Stats.Reused+kb.Stats.Parsed > 0 {
+			fmt.Printf("  复用缓存 %d 篇，重新切片 %d 篇\n", kb.Stats.Reused, kb.Stats.Parsed)
+		}
 		if len(kb.Warnings) > 0 {
 			warnings := make([]warningDTO, 0, len(kb.Warnings))
 			for _, w := range kb.Warnings {

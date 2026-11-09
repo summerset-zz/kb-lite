@@ -52,7 +52,7 @@ kb-lite serve --db D:\kb\index.db
 
 首次运行会进向导：选数据库放哪儿 → 选知识库目录 → 打开界面。
 
-**不需要 Node、不需要 Python、不需要 Docker、不需要 API key。** 一个 15 MB 左右的静态二进制，Windows / macOS / Linux 各一份。
+**不需要 Node、不需要 Python、不需要 Docker、不需要 API key。** 一个 11 MB 左右的静态二进制（含纯 Go 的 SQLite 缓存），Windows / macOS / Linux 各一份。
 
 ## 文档
 

@@ -49,7 +49,7 @@ make          # = web: pnpm build → cp web/dist → static/ → go build
 
 | 产物 | 用途 | 备注 |
 |---|---|---|
-| `dist/kb-lite-<os>-<arch>[.exe]` | 发布用 | Go 静态二进制，**~8 MB**（实测见下表） |
+| `dist/kb-lite-<os>-<arch>[.exe]` | 发布用 | Go 静态二进制，**~11 MB**（实测见下表） |
 | `internal/daemon/static/` | UI 产物 | `//go:embed` 编进二进制，**不单独分发** |
 
 ### 交叉编译（这是换 Go 换来的最大简化）
@@ -66,17 +66,21 @@ GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/kb-lite-li
 
 `-trimpath` 去掉本机绝对路径，`-s -w` 去掉符号表（体积约减 30%）。不打 `-buildmode=pie`，也不要 `CGO_ENABLED=1`。
 
-v0.1 的实测体积（在 Windows 上一台机器交叉编译全部五个目标，含 `x/text` + `yaml.v3`）：
+v0.2 的实测体积（在 Windows 上一台机器交叉编译全部五个目标，含 `x/text` + `yaml.v3` + **纯 Go 的 `modernc.org/sqlite`**）：
 
 | 目标 | 体积 |
 |---|---|
-| `windows/amd64` | 8.04 MB（zip 后 3.42 MB）|
-| `windows/arm64` | 7.29 MB |
-| `darwin/arm64` | 7.38 MB |
-| `darwin/amd64` | 7.98 MB |
-| `linux/amd64` | 7.82 MB |
+| `windows/amd64` | 11.46 MB（zip 后 4.93 MB）|
+| `windows/arm64` | 10.56 MB |
+| `darwin/arm64` | 10.75 MB |
+| `darwin/amd64` | 11.42 MB |
+| `linux/amd64` | 11.20 MB |
 
-不裁剪（带符号）的同一产物是 11.59 MB —— `-s -w` 省下约 31%。
+对比 v0.1（没有 SQLite）：windows/amd64 8.44 MB。**SQLite 花了约 3.0 MB**（纯 Go 的 libc 转译层占大头），
+换掉的是「每次启动都要全量重切」—— 1000 篇从 179 ms 降到 53 ms（`go test -bench BenchmarkRebuild ./internal/daemon`）。
+不想要这 3 MB 可以 `-tags nosqlite` 构建：功能全在，只是每次都纯内存重切（见 `driver_none.go`）。
+
+不裁剪（带符号）的同一产物是 16.90 MB —— `-s -w` 省下约 32%。
 
 只要 `modernc.org/sqlite` 这个纯 Go 依赖还在，上面每一条都能在 Windows 上跑。**一旦有人换成 `mattn/go-sqlite3`，交叉编译会立刻全部失败**，而且错误发生在链接阶段、很难一眼看出原因 —— 这是必须在 code review 里拦住的事。
 

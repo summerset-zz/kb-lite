@@ -24,6 +24,8 @@ const (
 	WarnFrontmatter = "frontmatter"
 	// WarnRead：读文件失败（权限、文件消失）。
 	WarnRead = "read"
+	// WarnCache：SQLite 缓存读/写失败。不影响正确性，只影响下次启动要不要重切。
+	WarnCache = "cache"
 )
 
 // WarningLabel 是给人看的类别名。
@@ -37,6 +39,8 @@ func WarningLabel(kind string) string {
 		return "frontmatter 不合法"
 	case WarnRead:
 		return "读取失败"
+	case WarnCache:
+		return "缓存不可用"
 	default:
 		return kind
 	}

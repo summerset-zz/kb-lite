@@ -96,7 +96,7 @@ kb-lite version
 
 | 命令 | 行为 |
 |---|---|
-| `search` / `toc` / `read` / `manifest` / `status` / `skill` | **自动降级为离线只读**：进程内直接读 SQLite（不需要 daemon）。SQLite 不存在或 `--no-db` 时，现场扫描目录切片（慢一点，但结果一致） |
+| `search` / `toc` / `read` / `manifest` / `status` / `skill` | **自动降级为离线只读**：进程内扫目录，并用 SQLite（**只读连接**）按 sha1 跳过没变过的文件。SQLite 不存在或 `--no-db` 时现场全量切片（慢一点，但结果一致） |
 | `add` / `remove` / `enable` / `disable` / `rename` / `reindex` / `sync` / `stop` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon** —— 用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
 
 ## 实现注意

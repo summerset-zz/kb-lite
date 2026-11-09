@@ -56,6 +56,8 @@ type ScannedFile struct {
 	// AbsPath 是真实绝对路径（由根目录拼出来，未做 symlink 展开）。
 	AbsPath string
 	Size    int64
+	// ModTimeMS 是文件的修改时间（毫秒）。只进缓存表用于诊断，**不**参与「变没变」的判断（那个看 sha1）。
+	ModTimeMS int64
 }
 
 // ScanResult 是一次扫描的结果。
@@ -142,7 +144,9 @@ func Scan(opts ScanOptions) (ScanResult, error) {
 			return nil
 		}
 
-		res.Files = append(res.Files, ScannedFile{RelPath: relPosix, AbsPath: p, Size: fi.Size()})
+		res.Files = append(res.Files, ScannedFile{
+			RelPath: relPosix, AbsPath: p, Size: fi.Size(), ModTimeMS: fi.ModTime().UnixMilli(),
+		})
 		return nil
 	})
 	if walkErr != nil {

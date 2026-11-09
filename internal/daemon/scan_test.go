@@ -19,7 +19,6 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
-
 func TestScanBasics(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.md"), "正文")

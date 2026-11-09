@@ -199,13 +199,21 @@ func buildLocalIndex() (*daemon.Manager, error) {
 	if len(cfg.KBs) == 0 {
 		return nil, fmt.Errorf("还没有知识库。用 kb-lite add <目录> 添加一个。\n配置目录：%s", dir)
 	}
-	mgr := daemon.NewManager(cfg, daemon.BuildOptions{})
+	// 离线也吃缓存：文件没变过的就不重切。但**只读**打开 —— 写索引只允许 daemon 做，
+	// 否则两边抢 WAL 锁（docs/01 / docs/05）。
+	//
+	// 仍然会扫目录并比 sha1，所以结果不会是旧的；只是不必重新解析。
+	opts := daemon.BuildOptions{}
+	if store, err := daemon.OpenStoreReadOnly(cfg.DBPath); err == nil {
+		defer store.Close()
+		opts.Store = store
+	}
+	mgr := daemon.NewManager(cfg, opts)
 	if err := mgr.Rebuild(); err != nil {
 		return nil, err
 	}
 	return mgr, nil
 }
-
 func printSearch(name, query string, resp *searchRespDTO, explain bool) {
 	fmt.Printf("%s ← %q    关键词 = %q    返回 %d 条\n",
 		name, query, resp.Query, len(resp.Results))
@@ -774,14 +782,17 @@ func printWarnings(warnings []warningDTO, indent string) {
 }
 
 type statusKBDTO struct {
-	Name     string           `json:"name"`
-	ID       string           `json:"id"`
-	RootPath string           `json:"rootPath"`
-	State    string           `json:"state"`
-	Error    string           `json:"error,omitempty"`
-	Entries  int              `json:"entries"`
-	Sections int              `json:"sections"`
-	Bytes    int64            `json:"bytes"`
+	Name     string `json:"name"`
+	ID       string `json:"id"`
+	RootPath string `json:"rootPath"`
+	State    string `json:"state"`
+	Error    string `json:"error,omitempty"`
+	Entries  int    `json:"entries"`
+	Sections int    `json:"sections"`
+	Bytes    int64  `json:"bytes"`
+	// Reused / Parsed 是本次建索引的增量统计（缓存命中 / 真正重切）。
+	Reused   int              `json:"reused"`
+	Parsed   int              `json:"parsed"`
 	Warnings []warningDTO     `json:"warnings,omitempty"`
 	Skipped  []skippedDTO     `json:"skipped,omitempty"`
 	Items    []statusEntryDTO `json:"items,omitempty"`
@@ -790,8 +801,8 @@ type statusKBDTO struct {
 // runStatus 建一遍索引并打印统计。
 //
 // 它是 docs/05 里「daemon 未运行时自动降级为离线只读」的形态：进程内扫目录、切片、报数，
-// 不起服务。v0.1 没有 /api/status（那是 v0.3），所以想看告警（超大文件、编码失败）
-// 目前只有这条路径和 serve 的启动输出。
+// 不起服务。有缓存时 sha1 没变的文件不会被重新切片 —— 所以它同时也是「二次启动快不快」
+// 的自测口。
 func runStatus(args []string) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "")
@@ -816,11 +827,19 @@ func runStatus(args []string) int {
 		return exitOK
 	}
 
-	mgr := daemon.NewManager(cfg, daemon.BuildOptions{})
+	// status 也吃缓存（只读）：否则「看一眼统计」每次都要全量重切，库大了就受不了。
+	opts := daemon.BuildOptions{}
+	if store, err := daemon.OpenStoreReadOnly(cfg.DBPath); err == nil {
+		defer store.Close()
+		opts.Store = store
+	}
+	started := time.Now()
+	mgr := daemon.NewManager(cfg, opts)
 	if err := mgr.Rebuild(); err != nil {
 		fmt.Fprintln(os.Stderr, "建索引失败：", err)
 		return exitError
 	}
+	took := time.Since(started)
 
 	var out []statusKBDTO
 	for _, st := range mgr.States() {
@@ -830,6 +849,8 @@ func runStatus(args []string) int {
 			dto.Entries = len(kb.Entries)
 			dto.Sections = kb.Sections
 			dto.Bytes = kb.Bytes
+			dto.Reused = kb.Stats.Reused
+			dto.Parsed = kb.Stats.Parsed
 			dto.Warnings = nil
 			for _, w := range kb.Warnings {
 				dto.Warnings = append(dto.Warnings, warningDTO{Kind: w.Kind, Message: w.Message})
@@ -875,6 +896,9 @@ func runStatus(args []string) int {
 			fmt.Printf("%s  %s\n", padRight(kb.Name, 12), kb.State)
 		}
 		fmt.Printf("  %s\n", kb.RootPath)
+		if kb.Reused+kb.Parsed > 0 {
+			fmt.Printf("  复用缓存 %d 篇，重新切片 %d 篇，用时 %d ms\n", kb.Reused, kb.Parsed, took.Milliseconds())
+		}
 		printWarnings(kb.Warnings, "  ")
 		if len(kb.Skipped) > 0 {
 			fmt.Printf("  跳过 %d 篇：%s\n", len(kb.Skipped), skipSummary(kb.Skipped))

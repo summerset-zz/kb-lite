@@ -96,15 +96,17 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE entry (
   kb_id       TEXT NOT NULL,
   rel_path    TEXT NOT NULL,   -- posix 相对路径，条目对外 id
-  sha1        TEXT NOT NULL,
+  sha1        TEXT NOT NULL,   -- **文件原始字节**的 sha1，用来判断「变没变」
   mtime_ms    INTEGER NOT NULL,
   size_bytes  INTEGER NOT NULL,
   title       TEXT NOT NULL,
   summary     TEXT NOT NULL,
-  search_text TEXT NOT NULL,   -- 见 03：全文小写合并，只给匹配用
+  search_text TEXT NOT NULL,   -- 见 03：全文小写合并，只给匹配用（= Entry.SearchFull）
   char_count  INTEGER NOT NULL,
   indexed_at  INTEGER NOT NULL,
   PRIMARY KEY (kb_id, rel_path)
+  -- 实现补齐的列：rev、search_title / search_path / search_path_leaf /
+  -- search_meta、toc_text、toc(json)、tags(json)。理由见下面的「实现注记」。
 );
 
 CREATE TABLE section (
@@ -113,10 +115,20 @@ CREATE TABLE section (
   section_no  INTEGER NOT NULL, -- 0 = 导言；全局扁平连续
   level       INTEGER NOT NULL,
   title       TEXT NOT NULL,
+  path        TEXT NOT NULL,    -- 面包屑的 json 数组 ["上线与回滚","回滚"]
   path_text   TEXT NOT NULL,    -- 面包屑 "上线与回滚 / 回滚"
   chars       INTEGER NOT NULL, -- 本节自己的正文字数
   content     TEXT NOT NULL,
   PRIMARY KEY (kb_id, rel_path, section_no)
+);
+
+CREATE TABLE warn (             -- 每篇的解析告警（frontmatter 不合法等），见 02
+  kb_id TEXT NOT NULL, rel_path TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL
+);
+
+CREATE TABLE skipped (          -- 整篇跳过的文件 + 当时的 sha1（没变就不必再解析）
+  kb_id TEXT NOT NULL, rel_path TEXT NOT NULL, sha1 TEXT NOT NULL, reason TEXT NOT NULL,
+  PRIMARY KEY (kb_id, rel_path)
 );
 
 CREATE TABLE tombstone (        -- 删掉的 KB / 文件的残留，用于诊断
@@ -125,6 +137,15 @@ CREATE TABLE tombstone (        -- 删掉的 KB / 文件的残留，用于诊断
 ```
 
 `PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`
+
+> **实现注记（为什么比上面多出几列）**：内存索引要能**只靠 DB 重建**，否则二次启动还是得重新切片，
+> 「1000 篇 < 500 ms」不成立。所以 `Entry` 里参与打分的字段（`rev`、五个 search 字段、`toc_text`、`toc`）
+> 都得落盘。`warn` / `skipped` 两张表同理：不复用它们，第二次启动会突然少掉告警、
+> 并且把空文件重新解析一遍 —— 「第一次 8 条告警、第二次 0 条」比多一张表危险得多。
+>
+> **`sha1` 与 `rev` 不是一回事**：`sha1` 是文件原始字节的 sha1（判断变没变，早于解码）；
+> `rev` 是解码后正文的 sha1 前 8 位（对外可见，见 04）。BOM / CRLF / GB18030 的文件两者不同，
+> 不要拿其中一个去顶另一个。
 
 **驱动**：`modernc.org/sqlite`（**纯 Go，无 cgo**）。不用 `mattn/go-sqlite3` —— 它要 cgo，会把「Windows 上开发、一条命令出 macOS/Linux 二进制」这件事直接杀掉。驱动不可用、或传了 `--no-db` 时，**纯内存模式**运行（仍然可用，只是每次启动要重切）。
 

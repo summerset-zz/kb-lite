@@ -29,6 +29,8 @@ type KBIndex struct {
 	// 跳过的东西必须能看见 —— 静默丢弃比多一条噪音糟得多（docs/02「整篇跳过」）。
 	Skipped   []SkippedFile
 	IndexedAt time.Time
+	// Stats 是这次建索引的增量统计（复用了几篇 / 重切了几篇）。
+	Stats IndexStats
 }
 
 // SkippedFile 是一篇被跳过的文件。
@@ -63,6 +65,22 @@ type BuildOptions struct {
 	MaxSectionChars int
 	// Workers <= 0 时用 runtime.GOMAXPROCS(0)。
 	Workers int
+	// Store 是 SQLite 缓存。为 nil 时纯内存模式下工作（docs/01：驱动不可用时的降级）。
+	Store *Store
+	// Force 忽略 sha1 缓存，全部重切（`--force`）。
+	Force bool
+}
+
+// IndexStats 是一次建索引的增量统计。
+type IndexStats struct {
+	// Reused 是 sha1 没变、直接复用缓存切片的文件数。
+	Reused int
+	// Parsed 是真正重新切片的文件数。
+	Parsed int
+	// Skipped 是整篇跳过的文件数（空正文 / frontmatter 要求跳过）。
+	Skipped int
+	// FromCache 表示这次读到了缓存（false = 首次建索引 / 缓存不可用）。
+	FromCache bool
 }
 
 // KBState 是一个 KB 的索引状态（对应 docs/04 `/api/status` 里的 state）。
@@ -107,7 +125,7 @@ func (m *Manager) KB(name string) (*KBIndex, bool) {
 
 // Rebuild 重建全部索引，完成后原子替换快照。
 //
-// v0.1 没有增量：每次都全扫、全切（sha1 跳过与 SQLite 是 v0.2 的事）。
+// 有缓存时按 sha1 跳过未变的文件（docs/01「重建」）：只有内容变了的文件才会重新切片。
 // 单个 KB 失败（根目录不在了之类）不会影响其它 KB —— 记成 error 状态继续。
 func (m *Manager) Rebuild() error {
 	next := emptyIndex()
@@ -164,6 +182,9 @@ func (m *Manager) States() []KBState {
 //
 // 并行切片，但**结果按下标回填** —— 条目顺序与 Scan 的输出顺序（RelPath 升序）一致，
 // 这样 search 的同分排序在任何机器上都一样（docs/01「并发」）。
+//
+// 增量：先读缓存，文件内容的 sha1 与缓存相同就不解析（这是「几千篇也秒级」的关键）。
+// 读文件仍然要做 —— 否则判断不出「变没变」；但读一个文件比解析一篇便宜一个量级。
 func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KBIndex, error) {
 	scanned, err := Scan(ScanOptions{
 		Root:         kb.RootPath,
@@ -180,6 +201,9 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 		mu       sync.Mutex
 		warnings = append([]Warning{}, scanned.Warnings...)
 		skipped  []SkippedFile
+		upsert   []cachedEntry
+		skipRows []skipRow
+		stats    IndexStats
 		done     int64
 		total    = len(files)
 	)
@@ -189,7 +213,28 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 		mu.Unlock()
 	}
 
+	var cache *kbCache
+	if opts.Store != nil {
+		c, err := opts.Store.LoadKB(kb.ID)
+		switch {
+		case err != nil:
+			// 缓存坏了不是致命错误：从零切一遍就行。但要说出来 —— 静默变慢很难查。
+			addWarn(WarnCache, "读取缓存失败，本次全量重建（"+err.Error()+"）")
+		default:
+			cache = c
+			// FromCache 是「真的用了缓存」：刚建的空库不算，否则首次启动的统计会骗人。
+			stats.FromCache = len(c.Entries) > 0 || len(c.Skipped) > 0
+		}
+	}
+
+	metaOf := make(map[string]fileMeta, total)
+	for _, f := range files {
+		metaOf[f.RelPath] = fileMeta{Size: f.Size, ModTime: f.ModTimeMS}
+	}
+
 	entries := make([]*core.Entry, total)
+	// 这篇以前是条目、这次整篇跳过了 —— DB 里的旧条目必须删掉。
+	becameSkipped := make(map[string]bool)
 
 	workers := opts.Workers
 	if workers <= 0 {
@@ -209,13 +254,56 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 		go func() {
 			defer wg.Done()
 			for i := range jobs {
+				f := files[i]
 				// 每个下标只被一个 worker 写，不需要锁。
-				e, skip := readEntry(files[i], opts, addWarn)
-				entries[i] = e
-				if skip != "" {
-					mu.Lock()
-					skipped = append(skipped, SkippedFile{RelPath: files[i].RelPath, Reason: skip})
-					mu.Unlock()
+				data, readErr := os.ReadFile(f.AbsPath)
+				if readErr != nil {
+					addWarn(WarnRead, f.RelPath+": 读取失败（"+readErr.Error()+"）")
+				} else {
+					sum := sha1Hex(data)
+					var hit *cachedEntry
+					var hitSkip *cachedSkip
+					if cache != nil && !opts.Force {
+						if ce, ok := cache.Entries[f.RelPath]; ok && ce.SHA1 == sum {
+							hit = &ce
+						} else if cs, ok := cache.Skipped[f.RelPath]; ok && cs.SHA1 == sum {
+							hitSkip = &cs
+						}
+					}
+					switch {
+					case hit != nil:
+						entries[i] = hit.Entry
+						for _, warn := range hit.Warnings {
+							addWarn(warn.Kind, warn.Message)
+						}
+						mu.Lock()
+						stats.Reused++
+						mu.Unlock()
+					case hitSkip != nil:
+						mu.Lock()
+						skipped = append(skipped, SkippedFile{RelPath: f.RelPath, Reason: hitSkip.Reason})
+						skipRows = append(skipRows, skipRow{RelPath: f.RelPath, SHA1: sum, Reason: hitSkip.Reason})
+						becameSkipped[f.RelPath] = true
+						mu.Unlock()
+					default:
+						e, skip, warns := parseEntry(f, data, opts)
+						for _, warn := range warns {
+							addWarn(warn.Kind, warn.Message)
+						}
+						if skip != "" {
+							mu.Lock()
+							skipped = append(skipped, SkippedFile{RelPath: f.RelPath, Reason: skip})
+							skipRows = append(skipRows, skipRow{RelPath: f.RelPath, SHA1: sum, Reason: skip})
+							becameSkipped[f.RelPath] = true
+							mu.Unlock()
+							break
+						}
+						entries[i] = e
+						mu.Lock()
+						upsert = append(upsert, cachedEntry{SHA1: sum, Entry: e, Warnings: warns})
+						stats.Parsed++
+						mu.Unlock()
+					}
 				}
 				if n := atomic.AddInt64(&done, 1); progress != nil && n%50 == 0 {
 					progress(int(n), total)
@@ -255,40 +343,70 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 	ki.Warnings = warnings
 	sort.Slice(skipped, func(i, j int) bool { return skipped[i].RelPath < skipped[j].RelPath })
 	ki.Skipped = skipped
+	stats.Skipped = len(skipped)
+	ki.Stats = stats
+
+	if opts.Store != nil {
+		// 卸载：缓存里有、这次目录里没有（或者这次变成跳过了）的条目。
+		present := make(map[string]bool, len(files))
+		for _, f := range files {
+			present[f.RelPath] = true
+		}
+		var removed []string
+		if cache != nil {
+			for rel := range cache.Entries {
+				if !present[rel] || becameSkipped[rel] {
+					removed = append(removed, rel)
+				}
+			}
+		}
+		sort.Strings(removed)
+		sort.Slice(skipRows, func(i, j int) bool { return skipRows[i].RelPath < skipRows[j].RelPath })
+		if err := opts.Store.SaveKB(kb.ID, kbWrite{Upsert: upsert, Skipped: skipRows, Removed: removed}, metaOf, ki.IndexedAt); err != nil {
+			// 写不进缓存不影响服务：内存索引已经对了，只是下次还要重切。
+			ki.Warnings = append(ki.Warnings, Warning{WarnCache, "写入缓存失败，下次启动会全量重建（" + err.Error() + "）"})
+		}
+	}
 	return ki, nil
 }
 
-// readEntry 返回条目与跳过原因（原因为空表示没跳过）。
-// 读不出来 / 解码失败不是「跳过」而是「告警」：它们属于意外，不属于用户的意图。
-func readEntry(f ScannedFile, opts BuildOptions, addWarn func(kind, msg string)) (*core.Entry, string) {
-	data, err := os.ReadFile(f.AbsPath)
-	if err != nil {
-		addWarn(WarnRead, f.RelPath+": 读取失败（"+err.Error()+"）")
-		return nil, ""
-	}
+// parseEntry 解析一篇已经读进内存的文件。
+//
+// 返回条目、跳过原因（空 = 没跳过）以及这篇产生的告警。
+// 告警是**返回值**而不是回调：它们要跟着条目一起写进缓存，否则下次复用时
+// 这些告警就消失了（第一次启动有 8 条 frontmatter 告警、第二次 0 条，那才是真的误导）。
+func parseEntry(f ScannedFile, data []byte, opts BuildOptions) (*core.Entry, string, []Warning) {
+	var warns []Warning
 	text, warn := Decode(data)
 	if warn != "" {
-		addWarn(WarnEncoding, f.RelPath+": "+warn)
-		return nil, ""
+		return nil, "", []Warning{{WarnEncoding, f.RelPath + ": " + warn}}
 	}
 
 	res := core.BuildEntry(f.RelPath, text, core.SliceOptions{MaxSectionChars: opts.MaxSectionChars})
 	for _, w := range res.Warnings {
 		// core 目前只会报 frontmatter 相关的问题（不合法 / 宽松解析）。
 		// 它们**不阻止**这篇被索引：正文已经救回来了，把类别说准很重要。
-		addWarn(WarnFrontmatter, f.RelPath+": "+w)
+		warns = append(warns, Warning{WarnFrontmatter, f.RelPath + ": " + w})
 	}
 	if res.Skipped {
-		return nil, res.SkipReason
+		return nil, res.SkipReason, warns
 	}
 	e := res.Entry
 	// rev = 内容 sha1 的前 8 位（docs/04「rev 与漂移」）。
 	e.Rev = contentRev(text)
-	return &e, ""
+	return &e, "", warns
+}
+
+// sha1Hex 是**文件原始字节**的 sha1，用于判断「这个文件变没变」。
+//
+// 不要拿它当对外可见的 rev：rev 是解码后正文的指纹（见 contentRev），
+// 两者在 BOM / CRLF / GB18030 的文件上并不相同。
+func sha1Hex(data []byte) string {
+	sum := sha1.Sum(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // contentRev 是内容的短指纹。sha1 用在这里是为了「便宜且稳定」，不是安全用途。
 func contentRev(s string) string {
-	sum := sha1.Sum([]byte(s))
-	return hex.EncodeToString(sum[:])[:8]
+	return sha1Hex([]byte(s))[:8]
 }
