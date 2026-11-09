@@ -136,7 +136,9 @@ func kbPath(name string, tail string) string {
 // curl 默认两个都不带，所以 agent 手里那把读取密码打不开管理面（ADR-015）。
 func (c *client) admin(method, path string, payload any) ([]byte, error) {
 	if c.apiToken == "" {
-		return nil, errors.New("还没有管理凭据，先运行一次 kb-lite serve，它会生成")
+		// 管理凭据只有 serve 会生成。没有它就等于“服务还没起来过”，
+		// 按 docs/05 的退出码 4 处理，而不是报一个泛泛的错误。
+		return nil, daemonDownError{base: c.base}
 	}
 	var body io.Reader
 	if payload != nil {
