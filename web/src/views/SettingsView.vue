@@ -29,6 +29,23 @@ const token = ref('')
 const copied = ref('')
 const pickerOpen = ref(false)
 
+// 记录文件是个**文件**，选择器给的是**文件夹**：两边差一个文件名。
+// 直接拿文件夹当 dbPath 传下去的话，探测可写那一步建出来的是单个文件路径之外的目录，
+// 最后 SQLite 打不开。
+function dirOf(p: string): string {
+  const cut = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
+  return cut > 0 ? p.slice(0, cut) : p
+}
+
+function pickDBDir(dir: string) {
+  const name = dbPath.value.split(/[\\/]/).filter(Boolean).pop() ?? 'index.db'
+  const sep = dir.includes('\\') ? '\\' : '/'
+  dbPath.value = dir.replace(/[\\/]+$/, '') + sep + name
+  pickerOpen.value = false
+}
+
+const dbFileName = computed(() => dbPath.value.split(/[\\/]/).filter(Boolean).pop() ?? 'index.db')
+
 const pasteText = computed(
   () => `我的知识库服务在 ${location.protocol}//${location.hostname}:${props.status.port}，访问密码是 ${token.value}`,
 )
@@ -233,9 +250,9 @@ function setTheme(v: string) {
           <input v-model="dbPath" class="input flex-1 min-w-0 mono" spellcheck="false" />
           <button class="btn btn-sm" type="button" @click="pickerOpen = true">换个位置</button>
         </div>
-        <div v-if="pickerOpen" class="mt-2">
-          <DirPicker :start="dbPath" @pick="(p) => { dbPath = p; pickerOpen = false }" @cancel="pickerOpen = false" />
-        </div>
+        <p class="muted text-xs mt-1">
+          {{ s.settings.dbPickHint(dbFileName) }}
+        </p>
       </div>
 
       <!-- 端口 -->
@@ -410,6 +427,11 @@ function setTheme(v: string) {
         </button>
       </div>
     </section>
+
+    <!-- 记录文件位置：选择器必须是弹窗，页内一块在手机上会被挤到屏幕外。 -->
+    <ModalShell :open="pickerOpen" :title="s.settings.dbPath" wide @close="pickerOpen = false">
+      <DirPicker :start="dirOf(dbPath)" @pick="pickDBDir" @cancel="pickerOpen = false" />
+    </ModalShell>
 
     <ModalShell :open="quitOpen" :title="s.settings.quit" @close="quitOpen = false">
       <p class="text-sm">{{ s.settings.quitHint }}</p>

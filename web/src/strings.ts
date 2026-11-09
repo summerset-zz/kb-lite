@@ -32,6 +32,15 @@ export const s = {
     saved: '已保存。',
   },
 
+  // 目录选择器。它的字以前是写在组件里的，现在也收到这里。
+  picker: {
+    root: '先选一个磁盘',
+    pickThis: '用这个文件夹',
+    emptyRoot: '先选一个磁盘，里面就是你的文件夹。',
+    emptyHere: '这个位置下面没有子文件夹。点右上角“用这个文件夹”就选它自己。',
+    markdownCount: (n: string) => `这里有 ${n} 个 markdown 文件`,
+  },
+
   wizard: {
     title: '先做三件事',
     step1: '记录文件放在哪',
@@ -142,6 +151,7 @@ export const s = {
   settings: {
     title: '设置',
     dbPath: '记录文件位置',    dbPathHint: '它只是个索引缓存，换位置会在新位置重新整理。',
+    dbPickHint: (name: string) => `点“换个位置”选文件夹，记录文件仍然叫 ${name}。`,
     port: '端口',
     whoCanOpen: '谁可以打开',
     password: '访问密码',

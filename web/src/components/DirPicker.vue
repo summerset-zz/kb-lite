@@ -30,6 +30,9 @@ onMounted(() => void go(props.start ?? ''))
 
 const path = computed(() => cur.value?.path ?? '')
 const canUp = computed(() => Boolean(cur.value?.parent))
+
+// 大盘根目录的 markdown 数量到上限就只说“2000+”，不要再报一个精确值骗人。
+const countText = (n: number) => (n >= 2000 ? '2000+' : String(n))
 </script>
 
 <template>
@@ -38,14 +41,14 @@ const canUp = computed(() => Boolean(cur.value?.parent))
       <button class="btn btn-sm" type="button" :disabled="!canUp || loading" @click="go(cur?.parent ?? '')">
         {{ s.common.back }}
       </button>
-      <span class="mono flex-1 truncate" :title="path">{{ path || '选取磁盘' }}</span>
+      <span class="mono flex-1 truncate" :title="path">{{ path || s.picker.root }}</span>
       <button
         class="btn btn-primary btn-sm"
         type="button"
         :disabled="!path || loading"
         @click="emit('pick', path)"
       >
-        用这个文件夹
+        {{ s.picker.pickThis }}
       </button>
     </div>
 
@@ -55,8 +58,12 @@ const canUp = computed(() => Boolean(cur.value?.parent))
       <p v-if="loading" class="muted text-sm py-6 text-center">{{ s.common.loading }}</p>
 
       <template v-else-if="cur">
-        <p v-if="cur.dirs.length === 0" class="muted text-sm py-6 text-center">
-          这个位置下面没有子文件夹。选上面那个“用这个文件夹”也行。
+        <!-- 还没有路径时只有盘符：那时候说“这个位置下面没有子文件夹”是废话，
+             “用这个文件夹”也点不了。先告诉他要干什么。 -->
+        <p v-if="!path" class="muted text-sm py-6 text-center">{{ s.picker.emptyRoot }}</p>
+
+        <p v-else-if="cur.dirs.length === 0" class="muted text-sm py-6 text-center">
+          {{ s.picker.emptyHere }}
         </p>
 
         <button
@@ -70,7 +77,7 @@ const canUp = computed(() => Boolean(cur.value?.parent))
           <span class="truncate">{{ d.name }}</span>
           <span class="flex-1" />
           <span v-if="d.hasMarkdown" class="muted text-xs shrink-0">
-            这里有 {{ d.markdownCount >= 2000 ? '2000+' : d.markdownCount }} 个 markdown 文件
+            {{ s.picker.markdownCount(countText(d.markdownCount)) }}
           </span>
         </button>
 

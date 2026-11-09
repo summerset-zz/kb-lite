@@ -4,6 +4,7 @@ import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { Status } from '../types'
 import DirPicker from '../components/DirPicker.vue'
+import ModalShell from '../components/ModalShell.vue'
 import CopyBlock from '../components/CopyBlock.vue'
 
 const props = defineProps<{ status: Status }>()
@@ -233,10 +234,6 @@ const mcpText = computed(() =>
         <p v-if="duplicateOf" class="note mt-3 text-sm">
           {{ s.wizard.alreadyAdded(duplicateOf) }}
         </p>
-
-        <div v-if="pickerOpen" class="mt-4">
-          <DirPicker :start="kbPath" @pick="onPick" @cancel="pickerOpen = false" />
-        </div>
       </section>
 
       <section v-else class="mt-6">
@@ -262,6 +259,17 @@ const mcpText = computed(() =>
       </section>
 
       <p v-if="error" class="note mt-4 text-sm">{{ error }}</p>
+
+      <!-- 选择器必须是弹窗：写成页内一块的话，它出现在按钮下方，
+           屏幕小一点就完全看不到，用户只会以为“点了没反应”。 -->
+      <ModalShell
+        :open="pickerOpen"
+        :title="s.wizard.pickFolder"
+        wide
+        @close="pickerOpen = false"
+      >
+        <DirPicker :start="kbPath" @pick="onPick" @cancel="pickerOpen = false" />
+      </ModalShell>
 
       <div class="flex items-center gap-2 mt-6">
         <button v-if="step > 0 && step < 3" class="btn btn-ghost" type="button" @click="step -= 1">
