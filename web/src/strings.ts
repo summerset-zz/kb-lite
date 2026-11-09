@@ -82,8 +82,9 @@ export const s = {
     copyCurlHint: '想自己试试接口时用',
     copySkill: '给 AI 的说明书',
     copySkillHint: '放在 AI 工具认识的目录里，它就会用这个知识库',
-    copyMcp: 'MCP 配置',
-    copyMcpHint: '存成 .mcp.json，支持 MCP 的工具会认它',
+    copySkillUrl: '说明书地址',
+    copySkillUrlHint:
+      '你的 AI 工具里如果有“填一个网址当资料源”这种入口，就填这一行。开了访问密码的工具多半填不了，那就粘上面那一段。',
     copyAuthoring: '整理说明',
     copyAuthoringHint: '交给另一个 AI，让它把 docx、pdf 这些整理成能进知识库的格式',
   },

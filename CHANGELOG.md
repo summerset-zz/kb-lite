@@ -40,6 +40,11 @@
 
 ### Fixed
 
+- **向导完成页那块「MCP 配置」其实不是 MCP**。它生成的
+  `{"mcpServers":{"kb-lite":{"type":"http","url":"…/skill.md"}}}` 里那个地址返回的是 markdown，
+  MCP 客户端连上来只会握手失败，照着填会得到一个坏的服务器条目。现在换成「说明书地址」：
+  一行 URL 加一句说明（工具里有“填一个网址当资料源”就填它，要密码的填不了就粘上一段）。
+  真正的 MCP 转发壳按 ADR-006 另做，做完再把这行换成 `{"command":"kb-lite","args":["mcp"]}`。
 - **一个认不出编码的文件能让整个服务消失**（`panic: nil pointer dereference` 在
   `Store.SaveKB`）。解码失败时 `parseEntry` 返回的是「没跳过、但也没有条目」，调用方把空条目
   塞进待落盘列表，写缓存时解引用就崩；崩溃发生在整理的后台 goroutine 里，Go 的规矩是

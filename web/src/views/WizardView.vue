@@ -123,14 +123,11 @@ const cmdText = computed(
     (needsAuth.value ? ' \\\n  -H "Authorization: Bearer <访问密码>"' : ''),
 )
 
-// MCP 的工具描述就是这个地址：多数客户端读完它就自己会调。
-const mcpText = computed(() =>
-  JSON.stringify(
-    { mcpServers: { 'kb-lite': { type: 'http', url: `${base.value}/skill.md` } } },
-    null,
-    2,
-  ),
-)
+// 说明书地址。有些工具支持“填一个网址当资料源”，那就填这一行。
+//
+// 不要把它包装成 MCP 配置：这个地址返回的是 markdown，不是 MCP 服务端点，
+// 任何 MCP 客户端连上来都会握手失败。MCP 将来只做“转发到本地 HTTP”的薄壳（ADR-006）。
+const skillUrl = computed(() => `${base.value}/skill.md`)
 </script>
 
 <template>
@@ -242,7 +239,11 @@ const mcpText = computed(() =>
             :hint="s.wizard.copySkillHint"
             :text="skillText"
           />
-          <CopyBlock :label="s.wizard.copyMcp" :hint="s.wizard.copyMcpHint" :text="mcpText" />
+          <CopyBlock
+            :label="s.wizard.copySkillUrl"
+            :hint="s.wizard.copySkillUrlHint"
+            :text="skillUrl"
+          />
           <CopyBlock
             :label="s.wizard.copyAuthoring"
             :hint="s.wizard.copyAuthoringHint"
