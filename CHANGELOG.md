@@ -3,7 +3,7 @@
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号按 [SemVer](https://semver.org/lang/zh-CN/)。
 `0.x` 期间允许破坏性变更，但必须写在这里。
 
-## [Unreleased]
+## [0.3.0] - 2026-11-09
 
 v0.3 = **界面**：一个不想碰命令行的人，从双击 exe 到跑通向导、装上 SKILL、让 AI 查上，全程不用终端。
 
