@@ -7,7 +7,6 @@ import { useStatus } from '../useStatus'
 import KBCard from '../components/KBCard.vue'
 import SkillSection from '../components/SkillSection.vue'
 import DirPicker from '../components/DirPicker.vue'
-import ModalShell from '../components/ModalShell.vue'
 
 const props = defineProps<{ status: Status }>()
 const { refresh } = useStatus()
@@ -15,30 +14,21 @@ const { refresh } = useStatus()
 const addOpen = ref(false)
 const adding = ref(false)
 const addError = ref('')
-const path = ref('')
-const name = ref('')
 
 const base = computed(() => `http://${location.hostname}:${props.status.port}`)
 const reach = computed(() => (props.status.lanExposed ? s.wizard.lan : s.wizard.loopback))
 
 function openAdd() {
   addOpen.value = true
-  path.value = ''
-  name.value = ''
   addError.value = ''
 }
 
-function onPick(p: string) {
-  path.value = p
-  if (!name.value) name.value = p.split(/[\\/]/).filter(Boolean).pop() ?? '知识库'
-}
-
-async function submitAdd() {
-  if (!path.value) return
+// 弹窗里已经选好文件夹、起好名字了，这里只管提交。失败留在弹窗里，改名字就能重试。
+async function submitAdd(path: string, name: string) {
   adding.value = true
   addError.value = ''
   try {
-    await api.createKB(name.value.trim() || '知识库', path.value)
+    await api.createKB(name, path)
     addOpen.value = false
     await refresh()
   } catch (e) {
@@ -99,18 +89,13 @@ async function copyBase() {
     <h2 class="font-medium mt-8 mb-2">让 AI 用起来</h2>
     <SkillSection />
 
-    <ModalShell :open="addOpen" :title="s.kbs.add" wide @close="addOpen = false">
-      <DirPicker :start="path" @pick="onPick" @cancel="addOpen = false" />
-
-      <div v-if="path" class="mt-3 flex items-center gap-3 flex-wrap">
-        <label class="text-sm w-16" for="add-name">{{ s.wizard.name }}</label>
-        <input id="add-name" v-model="name" class="input w-48" />
-        <button class="btn btn-primary" type="button" :disabled="adding" @click="submitAdd">
-          {{ adding ? s.common.loading : s.kbs.add }}
-        </button>
-      </div>
-
-      <p v-if="addError" class="note mt-3 text-sm">{{ addError }}</p>
-    </ModalShell>
+    <DirPicker
+      :open="addOpen"
+      ask-name
+      :submitting="adding"
+      :submit-error="addError"
+      @pick="submitAdd"
+      @cancel="addOpen = false"
+    />
   </div>
 </template>

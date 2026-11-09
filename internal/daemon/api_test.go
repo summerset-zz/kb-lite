@@ -308,6 +308,52 @@ func TestFSListWithoutPath(t *testing.T) {
 	}
 }
 
+// TestFSMkdir 守“新建文件夹”：只建空目录，且不给越界留口子。
+func TestFSMkdir(t *testing.T) {
+	srv := newTestServer(t)
+	root := t.TempDir()
+
+	status, body, raw := adminReq(t, srv, http.MethodPost, "/api/fs/mkdir",
+		map[string]string{"path": root, "name": "资料"})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d：%s", status, raw)
+	}
+	if _, err := os.Stat(filepath.Join(root, "资料")); err != nil {
+		t.Fatalf("目录没建出来：%v（%v）", err, body)
+	}
+	// 回来的路径是展开过符号链接/短名的绝对路径（Windows 的 %TEMP% 常是 HUJII~1 这种），
+	// 所以只比最后一段，不比整串。
+	if got, _ := body["path"].(string); filepath.Base(got) != "资料" {
+		t.Errorf("path = %v", got)
+	}
+
+	// 同名：409，不是 500。
+	status, _, _ = adminReq(t, srv, http.MethodPost, "/api/fs/mkdir",
+		map[string]string{"path": root, "name": "资料"})
+	if status != http.StatusConflict {
+		t.Errorf("重名 status = %d，想要 409", status)
+	}
+
+	// 名字里带分隔符：400，而且不能在上一层建出东西来。
+	for _, bad := range []string{"../逃出去", "a/b", `a\b`, "..", ""} {
+		status, _, _ = adminReq(t, srv, http.MethodPost, "/api/fs/mkdir",
+			map[string]string{"path": root, "name": bad})
+		if status != http.StatusBadRequest {
+			t.Errorf("名字 %q status = %d，想要 400", bad, status)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "逃出去")); err == nil {
+		t.Error("建到上一层去了")
+	}
+
+	// 父目录不存在：400。
+	status, _, _ = adminReq(t, srv, http.MethodPost, "/api/fs/mkdir",
+		map[string]string{"path": filepath.Join(root, "没有这个"), "name": "x"})
+	if status != http.StatusBadRequest {
+		t.Errorf("父目录不存在 status = %d，想要 400", status)
+	}
+}
+
 // ---- 小工具 ----
 
 func strPtr(s string) *string { return &s }

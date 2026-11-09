@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -90,8 +91,53 @@ func ListDirs(p string) (*FSListResp, error) {
 	return resp, nil
 }
 
-// startList 是「手上还没有路径」时的起点。
+// ---- 新建空文件夹 ----
+
+// 建目录的错误（docs/04 的 `POST /api/fs/mkdir`）。
+var (
+	ErrInvalidDirName = errors.New("文件夹名字不合法")
+	ErrPathExists     = errors.New("已经有同名的文件夹了")
+)
+
+// CreateDir 在 `parent` 下面建一个空文件夹。
 //
+// 这是管理面上**唯一**会写用户磁盘的接口，而且只建空目录：不写文件、不改内容、不删东西。
+// 用它的理由是界面上的那一步：用户浏览到 `D:\notes`，发现想放进去的文件夹还不存在，
+// 这时候让他切到资源管理器建完再回来，是最容易放弃的地方。
+func CreateDir(parent, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	// 借用知识库名字的校验：1 到 64 字，不含 `/` `\` 与控制字符，不是 `.` / `..`。
+	if ValidateKBName(name) != nil {
+		return "", ErrInvalidDirName
+	}
+	if strings.TrimSpace(parent) == "" {
+		return "", ErrInvalidRoot
+	}
+	abs, err := filepath.Abs(parent)
+	if err != nil {
+		return "", ErrInvalidRoot
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	if ok, err := statDir(abs); err != nil || !ok {
+		return "", ErrInvalidRoot
+	}
+	full := filepath.Join(abs, name)
+	// 名字里已经禁掉分隔符，这里再确认一次没跑到上一层去。
+	if filepath.Dir(full) != abs {
+		return "", ErrInvalidDirName
+	}
+	if _, err := os.Stat(full); err == nil {
+		return "", ErrPathExists
+	}
+	if err := os.Mkdir(full, 0o755); err != nil {
+		return "", err
+	}
+	return full, nil
+}
+
+// startList 是「手上还没有路径」时的起点。
 // Windows 先给盘符（用户最可能想说 D:\ 这种），其它平台从家目录开始。
 // 两个都没有才退回文件系统根。
 func startList() (*FSListResp, error) {

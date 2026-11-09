@@ -225,6 +225,36 @@ func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleFSMkdir 是 `POST /api/fs/mkdir`：在指定目录下建一个空文件夹。
+//
+// 管理面上**唯一**会写用户磁盘的接口，而且只建空目录（docs/04）。
+// 界面上的那一幕：用户浏览到 D:\notes，发现想放进去的文件夹还不存在，
+// 这时候让他切到资源管理器建完再回来，是最容易放弃的一步。
+func (h *Handler) handleFSMkdir(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+		Name string `json:"name"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	full, err := CreateDir(req.Path, req.Name)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": full})
+	case errors.Is(err, ErrInvalidDirName):
+		writeError(w, http.StatusBadRequest, "invalid_name",
+			"名字要 1 到 64 个字，且不能含斜杠。")
+	case errors.Is(err, ErrPathExists):
+		writeError(w, http.StatusConflict, "already_exists", "这个位置已经有同名的文件夹了。")
+	case errors.Is(err, ErrInvalidRoot):
+		writeError(w, http.StatusBadRequest, "invalid_path", "这个目录不在了，刷新一下再试。")
+	default:
+		// Windows 的保留名（CON、PRN…）、权限不足之类都走这里，把系统的话原样带回去。
+		writeError(w, http.StatusBadRequest, "mkdir_failed", "没能建出来："+err.Error())
+	}
+}
+
 // handleSettings 是 `POST /api/settings`。
 //
 // 三种改动的生效方式不一样（docs/04）：

@@ -37,7 +37,7 @@ function dirOf(p: string): string {
   return cut > 0 ? p.slice(0, cut) : p
 }
 
-function pickDBDir(dir: string) {
+function onPickDBDir(dir: string) {
   const name = dbPath.value.split(/[\\/]/).filter(Boolean).pop() ?? 'index.db'
   const sep = dir.includes('\\') ? '\\' : '/'
   dbPath.value = dir.replace(/[\\/]+$/, '') + sep + name
@@ -428,10 +428,8 @@ function setTheme(v: string) {
       </div>
     </section>
 
-    <!-- 记录文件位置：选择器必须是弹窗，页内一块在手机上会被挤到屏幕外。 -->
-    <ModalShell :open="pickerOpen" :title="s.settings.dbPath" wide @close="pickerOpen = false">
-      <DirPicker :start="dirOf(dbPath)" @pick="pickDBDir" @cancel="pickerOpen = false" />
-    </ModalShell>
+    <!-- 记录文件位置：选择器自己就是弹窗，这里只管把选中的文件夹拼回文件名。 -->
+    <DirPicker :open="pickerOpen" :start="dirOf(dbPath)" @pick="onPickDBDir" @cancel="pickerOpen = false" />
 
     <ModalShell :open="quitOpen" :title="s.settings.quit" @close="quitOpen = false">
       <p class="text-sm">{{ s.settings.quitHint }}</p>

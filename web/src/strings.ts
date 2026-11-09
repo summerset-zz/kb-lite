@@ -30,17 +30,29 @@ export const s = {
     copied: '已复制',
     close: '关闭',
     saved: '已保存。',
+    create: '创建',
   },
 
   // 目录选择器。它的字以前是写在组件里的，现在也收到这里。
   picker: {
+    titlePick: '选一个放着资料的文件夹',
+    titleBrowse: '选一个文件夹',
     root: '先选一个磁盘',
-    pickThis: '用这个文件夹',
     go: '前往',
     pathInputTitle: '可以点、可以改，也能把路径直接粘进来',
     pathHint: '路径可以直接粘进来，按回车跳过去。从资源管理器的地址栏复制就行。',
     emptyRoot: '先选一个磁盘，里面就是你的文件夹。',
-    emptyHere: '这个位置下面没有子文件夹。点右上角“用这个文件夹”就选它自己。',
+    emptyHere: '这个位置下面没有子文件夹。直接点下面的确认按钮就选它自己。',
+    confirmPick: '用这个文件夹',
+    confirmCreate: '添加这个知识库',
+    newFolder: '新建文件夹',
+    newFolderName: '文件夹名字',
+    newFolderPlaceholder: '比如：产品文档',
+    newFolderHint: '会在当前位置里建一个空文件夹，不会动任何已有的文件。',
+    nameLabel: '知识库名称',
+    nameHint:
+      'AI 按这个名字找你问的东西，比如“字体内容”“项目文档”。刚才那个文件夹名只是默认值，随时可以改。',
+    defaultName: '新的知识库',
   },
 
   wizard: {
@@ -58,15 +70,12 @@ export const s = {
     lanWarn:
       '打开后，同一个网络里的人只要知道地址就能看到你的知识库。不推荐。如果你确实需要，比如想用手机上的 AI，会自动帮你打开访问密码。',
     step3: '第一个知识库',
-    pickFolder: '选一个放着资料的文件夹',
     pickFolderHint: '我们会把它整理成 AI 能查的形式。文件不会被改动。',
     // 重新运行向导时：已经加好的库要看得见，否则用户会以为它们没了。
     step3Again: '知识库',
     step3AgainHint: '下面这些已经加好了，不用再动。想加新的就再选一个文件夹。',
-    addAnother: '再加一个（可选）',
-    alreadyAdded: (name: string) => `这个文件夹已经是知识库「${name}」了，不用再加一次。`,
-    startWithout: '不用加了，直接开始',
-    name: '名称',
+    addKB: '添加一个知识库',
+    needKB: '还没有知识库。先添加一个，再继续。',
     done: '准备好了',
     doneHint: '下面这几段都是给 AI 用的，你不用看懂。想用的时候点“复制”粘给它。',
     copyCurl: '命令示例',

@@ -3,12 +3,13 @@ import { computed, ref, watch } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { Status } from '../types'
+import { useStatus } from '../useStatus'
 import DirPicker from '../components/DirPicker.vue'
-import ModalShell from '../components/ModalShell.vue'
 import CopyBlock from '../components/CopyBlock.vue'
 
 const props = defineProps<{ status: Status }>()
 const emit = defineEmits<{ done: [] }>()
+const { refresh } = useStatus()
 
 const step = ref(0)
 const busy = ref(false)
@@ -23,38 +24,41 @@ const dbPath = ref(props.status.dbPath)
 const port = ref(props.status.port)
 const lan = ref(props.status.lanExposed)
 
-// 第 3 步：第一个知识库
+// 第 3 步：知识库。点“添加”开弹窗，在弹窗里选文件夹、起名字、确认 —— 确认完就真的建好了。
 const pickerOpen = ref(false)
-const kbPath = ref('')
-const kbName = ref('')
+const addBusy = ref(false)
+const addError = ref('')
 
 // 已经加好的知识库：重新运行向导的人第一件事就是确认它们还在。
 const existing = computed(() => props.status.kbs ?? [])
 
-// 同一个文件夹再加一次没有意义（服务端会回“重名”）。先在界面上认出来。
-const duplicateOf = computed(() => {
-  const p = normPath(kbPath.value)
-  if (!p) return ''
-  return existing.value.find((kb) => normPath(kb.rootPath) === p)?.name ?? ''
-})
-
-function normPath(p: string): string {
-  const t = p.trim().replace(/[\\/]+$/, '')
-  // Windows 路径不分大小写；别的平台分了，就别乱合并。
-  return t.includes('\\') ? t.toLowerCase() : t
-}
-
 const canNext = computed(() => {
   if (step.value === 0) return dbCustom.value ? dbPath.value.trim().length > 0 : true
   if (step.value === 1) return port.value > 0 && port.value < 65536
-  // 已经有知识库的人不需要再加一个，也能往下走。
-  return kbPath.value.trim().length > 0 || existing.value.length > 0
+  // 第三步不强制有知识库：万一个目录都加不上（权限不对之类），用户也得能走完向导，
+  // 否则就卡死在这一屏，连设置页都进不去。
+  return true
 })
 
-function onPick(path: string) {
-  pickerOpen.value = false
-  kbPath.value = path
-  if (!kbName.value) kbName.value = path.split(/[\\/]/).filter(Boolean).pop() ?? '知识库'
+// 在弹窗里点“添加这个知识库”之后走这里。失败就留在弹窗里（文案就显示在按钮上方），
+// 用户改个名字就能重试，不用重新选一遍文件夹。
+async function addKB(path: string, name: string) {
+  addBusy.value = true
+  addError.value = ''
+  try {
+    await api.createKB(name, path)
+    pickerOpen.value = false
+    await refresh()
+  } catch (e) {
+    addError.value = e instanceof ApiError ? e.message : s.errors.generic
+  } finally {
+    addBusy.value = false
+  }
+}
+
+function openPicker() {
+  addError.value = ''
+  pickerOpen.value = true
 }
 
 async function finish() {
@@ -62,15 +66,10 @@ async function finish() {
   error.value = ''
   try {
     // 顺序有讲究：
-    //  1. 先建第一个知识库（此刻还在旧地址上，请求能到）；
-    //  2. 再一次把端口、范围、记录文件位置和「向导已完成」一起提交。
+    //  1. 知识库在这之前已经建好了（第 3 步的弹窗里点“添加”就建了）；
+    //  2. 这里再把端口、范围、记录文件位置和「向导已完成」一起提交。
     //     如果端口真的换了，服务会当场上线新地址、旧地址立刻失效，
     //     所以这一次提交必须是**最后一次**对旧地址的调用，之后直接跳过去。
-    // 已经选过的文件夹（重复跑向导时会碰到）不再建一次，否则只会拿到一句“重名”。
-    if (kbPath.value.trim() && !duplicateOf.value) {
-      await api.createKB(kbName.value.trim(), kbPath.value.trim())
-    }
-
     const resp = await api.settings({
       port: port.value,
       host: lan.value ? '0.0.0.0' : '127.0.0.1',
@@ -217,23 +216,13 @@ const mcpText = computed(() =>
           </li>
         </ul>
 
-        <p v-if="existing.length" class="text-sm mt-5 mb-2">{{ s.wizard.addAnother }}</p>
+        <p v-if="!existing.length" class="note mt-4 text-sm">{{ s.wizard.needKB }}</p>
 
-        <div class="flex items-center gap-2 flex-wrap" :class="existing.length ? '' : 'mt-4'">
-          <button class="btn" type="button" @click="pickerOpen = true">
-            {{ s.wizard.pickFolder }}
-          </button>
-          <span v-if="kbPath" class="mono text-sm break-all">{{ kbPath }}</span>
-        </div>
-
-        <div v-if="kbPath" class="mt-4 flex items-center gap-3 flex-wrap">
-          <label class="text-sm w-16" for="wizard-name">{{ s.wizard.name }}</label>
-          <input id="wizard-name" v-model="kbName" class="input w-48" />
-        </div>
-
-        <p v-if="duplicateOf" class="note mt-3 text-sm">
-          {{ s.wizard.alreadyAdded(duplicateOf) }}
-        </p>
+        <!-- 这里是唯一的“添加”入口：选文件夹、起名字、确认都在弹窗里完成。
+             以前名字留在页面上，于是“选文件夹”和“真的建一个”看起来是两件事。 -->
+        <button class="btn btn-primary mt-4" type="button" @click="openPicker">
+          {{ s.wizard.addKB }}
+        </button>
       </section>
 
       <section v-else class="mt-6">
@@ -260,16 +249,14 @@ const mcpText = computed(() =>
 
       <p v-if="error" class="note mt-4 text-sm">{{ error }}</p>
 
-      <!-- 选择器必须是弹窗：写成页内一块的话，它出现在按钮下方，
-           屏幕小一点就完全看不到，用户只会以为“点了没反应”。 -->
-      <ModalShell
+      <DirPicker
         :open="pickerOpen"
-        :title="s.wizard.pickFolder"
-        wide
-        @close="pickerOpen = false"
-      >
-        <DirPicker :start="kbPath" @pick="onPick" @cancel="pickerOpen = false" />
-      </ModalShell>
+        ask-name
+        :submitting="addBusy"
+        :submit-error="addError"
+        @pick="addKB"
+        @cancel="pickerOpen = false"
+      />
 
       <div class="flex items-center gap-2 mt-6">
         <button v-if="step > 0 && step < 3" class="btn btn-ghost" type="button" @click="step -= 1">
@@ -292,7 +279,7 @@ const mcpText = computed(() =>
           :disabled="busy || !canNext"
           @click="finish"
         >
-          {{ busy ? s.common.loading : kbPath ? s.common.start : s.wizard.startWithout }}
+          {{ busy ? s.common.loading : s.common.start }}
         </button>
         <button v-else class="btn btn-primary" type="button" @click="emit('done')">
           {{ s.common.start }}
