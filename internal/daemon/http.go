@@ -80,6 +80,19 @@ func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /skill.md", h.handleSkill)
 	mux.HandleFunc("GET /api/status", h.handleStatus)
+	mux.HandleFunc("GET /api/kbs", h.handleKBList)
+	mux.HandleFunc("POST /api/kbs", h.handleKBCreate)
+	mux.HandleFunc("PATCH /api/kbs/{name}", h.handleKBPatch)
+	mux.HandleFunc("DELETE /api/kbs/{name}", h.handleKBDelete)
+	mux.HandleFunc("POST /api/kbs/{name}/enable", func(w http.ResponseWriter, r *http.Request) {
+		h.handleKBEnable(w, r, true)
+	})
+	mux.HandleFunc("POST /api/kbs/{name}/disable", func(w http.ResponseWriter, r *http.Request) {
+		h.handleKBEnable(w, r, false)
+	})
+	mux.HandleFunc("POST /api/kbs/{name}/reindex", h.handleKBReindex)
+	mux.HandleFunc("GET /api/kbs/{name}/index", h.handleKBIndex)
+	mux.HandleFunc("GET /api/fs/list", h.handleFSList)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
@@ -298,6 +311,8 @@ func (t *throttle) fail(key string) int {
 type errorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Progress 只在 code == "indexing" 时出现（docs/04 的 409）。
+	Progress *StatusProgress `json:"progress,omitempty"`
 }
 
 type errorResponse struct {
@@ -335,6 +350,12 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 	rest, ok := remainderAfterKB(r)
 	if !ok || rest == "" {
 		writeError(w, http.StatusBadRequest, "invalid_path", "路径不完整。")
+		return
+	}
+
+	// 禁用要在入口就拦：索引还留着（重新启用不用重切），但检索面必须立刻 503。
+	if st, ok := h.mgr.stateOf(name); ok && st.State == "disabled" {
+		writeError(w, http.StatusServiceUnavailable, "kb_disabled", "这个知识库当前是关闭的。")
 		return
 	}
 

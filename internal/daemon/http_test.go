@@ -46,7 +46,7 @@ func newTestServerWith(t *testing.T, o testServerOpts) *httptest.Server {
 
 	mgr := NewManager(&Config{KBs: []KB{
 		{ID: "k1", Name: "笔记", RootPath: root, Enabled: true},
-	}}, BuildOptions{Workers: 1})
+	}}, BuildOptions{Workers: 1, ConfigDir: t.TempDir()})
 	if err := mgr.Rebuild(); err != nil {
 		t.Fatal(err)
 	}

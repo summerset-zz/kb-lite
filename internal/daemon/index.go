@@ -69,6 +69,8 @@ type BuildOptions struct {
 	Store *Store
 	// Force 忽略 sha1 缓存，全部重切（`--force`）。
 	Force bool
+	// ConfigDir 是配置目录。管理接口改完配置要落盘；离线只读时可以为空。
+	ConfigDir string
 }
 
 // IndexStats 是一次建索引的增量统计。
@@ -91,6 +93,8 @@ type KBState struct {
 	Error string
 	Done  int
 	Total int
+	// StartedAt 是本次整理开始的时间（毫秒），只在 indexing 时有意义。
+	StartedAt int64
 }
 
 // Manager 持有当前索引快照与每个 KB 的索引状态。
@@ -102,6 +106,12 @@ type Manager struct {
 
 	mu     sync.Mutex
 	states map[string]KBState
+
+	// cfgMu 串行化配置改写：UI 与 CLI 可能同时发请求，直接改 m.cfg 会丢更新。
+	cfgMu sync.Mutex
+	// jobMu 保护 running：全局同时只允许一个整理任务（docs/01）。
+	jobMu   sync.Mutex
+	running string
 }
 
 // NewManager 建一个空的 Manager。索引要等 Rebuild() 之后才有内容。

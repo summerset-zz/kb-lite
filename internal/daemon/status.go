@@ -55,35 +55,50 @@ func (m *Manager) Status(port int, dbMode string, requireToken bool) Status {
 		LanExposed:     !IsLoopbackHost(m.cfg.Host),
 		RequireToken:   requireToken,
 		AdminAuth:      true,
-		KBs:            make([]StatusKB, 0, len(m.cfg.KBs)),
-	}
-
-	idx := m.idx.Load()
-	states := m.States()
-	byName := make(map[string]KBState, len(states))
-	for _, s := range states {
-		byName[s.Name] = s
-	}
-
-	for _, kb := range m.cfg.KBs {
-		item := StatusKB{Name: kb.Name, ID: kb.ID, RootPath: kb.RootPath, Enabled: kb.Enabled}
-		if s, ok := byName[kb.Name]; ok {
-			item.State = s.State
-			item.Error = s.Error
-			if s.State == "indexing" {
-				item.Progress = &StatusProgress{Done: s.Done, Total: s.Total}
-			}
-		}
-		if k, ok := idx.ByName[kb.Name]; ok {
-			item.Entries = len(k.Entries)
-			item.Sections = k.Sections
-			item.Bytes = k.Bytes
-			item.Warnings = len(k.Warnings)
-			if !k.IndexedAt.IsZero() {
-				item.LastIndexedAt = k.IndexedAt.UnixMilli()
-			}
-		}
-		st.KBs = append(st.KBs, item)
+		KBs:            m.kbStatuses(),
 	}
 	return st
+}
+
+// kbStatuses 按配置顺序返回每个知识库的状态（`/api/status` 与 `/api/kbs` 共用）。
+func (m *Manager) kbStatuses() []StatusKB {
+	out := make([]StatusKB, 0, len(m.cfg.KBs))
+	for _, kb := range m.cfg.KBs {
+		out = append(out, m.kbStatusOf(kb))
+	}
+	return out
+}
+
+// kbStatusByName 取一个知识库的状态。找不到时返回零值（调用方已经校验过存在）。
+func (m *Manager) kbStatusByName(name string) StatusKB {
+	if kb, ok := m.cfgKB(name); ok {
+		return m.kbStatusOf(kb)
+	}
+	return StatusKB{Name: name}
+}
+
+func (m *Manager) kbStatusOf(kb KB) StatusKB {
+	item := StatusKB{Name: kb.Name, ID: kb.ID, RootPath: kb.RootPath, Enabled: kb.Enabled}
+
+	if s, ok := m.stateOf(kb.Name); ok {
+		item.State = s.State
+		item.Error = s.Error
+		if s.State == "indexing" {
+			item.Progress = &StatusProgress{Done: s.Done, Total: s.Total}
+		}
+	} else if kb.Enabled {
+		// 还没跑过整理：不是 ready，但也不是错误。
+		item.State = "indexing"
+	}
+
+	if k, ok := m.idx.Load().ByName[kb.Name]; ok {
+		item.Entries = len(k.Entries)
+		item.Sections = k.Sections
+		item.Bytes = k.Bytes
+		item.Warnings = len(k.Warnings)
+		if !k.IndexedAt.IsZero() {
+			item.LastIndexedAt = k.IndexedAt.UnixMilli()
+		}
+	}
+	return item
 }
