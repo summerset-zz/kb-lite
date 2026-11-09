@@ -53,6 +53,8 @@ const AdminCookieName = "kb-admin"
 type Handler struct {
 	mgr *Manager
 	// readToken 是读取面的访问密码；RequireToken 为假时不校验。
+	// 设置页要在运行时显示与更换它，所以读写都要过 tokenMu。
+	tokenMu   sync.RWMutex
 	readToken string
 	// apiToken 是管理面的凭据。**不能**发给用户，也不进任何文档（ADR-015）。
 	apiToken string
@@ -85,10 +87,25 @@ func NewHandler(mgr *Manager, readToken, apiToken string, opts HandlerOptions) *
 // SetRequireToken 热更新读取密码开关（设置页保存后调用）。
 func (h *Handler) SetRequireToken(v bool) { h.requireToken.Store(v) }
 
+// ReadToken 返回当前的读取密码。
+func (h *Handler) ReadToken() string {
+	h.tokenMu.RLock()
+	defer h.tokenMu.RUnlock()
+	return h.readToken
+}
+
+// SetReadToken 热更新读取密码（换密码后立刻生效，旧密码作废）。
+func (h *Handler) SetReadToken(tok string) {
+	h.tokenMu.Lock()
+	h.readToken = tok
+	h.tokenMu.Unlock()
+}
+
 // Routes 返回挂好中间件的 handler。
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /skill.md", h.handleSkill)
+	mux.HandleFunc("GET /authoring.md", h.handleAuthoring)
 	mux.HandleFunc("GET /api/status", h.handleStatus)
 	mux.HandleFunc("GET /api/kbs", h.handleKBList)
 	mux.HandleFunc("POST /api/kbs", h.handleKBCreate)
@@ -104,6 +121,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/kbs/{name}/index", h.handleKBIndex)
 	mux.HandleFunc("GET /api/fs/list", h.handleFSList)
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
+	mux.HandleFunc("POST /api/auth/token", h.handleAuthToken)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
 	mux.HandleFunc("POST /api/shutdown", h.handleShutdown)
 	// `/` 兜底托管 UI：具体路由（/api/…、/kb/…、/skill.md）优先级更高。
@@ -173,7 +191,7 @@ func isAdminPath(p string) bool {
 // 只有这两类才受访问密码约束：UI 自己（`/` 与静态资源）必须能打开，
 // 否则用户连“去设置里关掉密码”都做不到。
 func isReadPath(p string) bool {
-	return p == "/skill.md" || p == "/kb" || strings.HasPrefix(p, "/kb/")
+	return p == "/skill.md" || p == "/authoring.md" || p == "/kb" || strings.HasPrefix(p, "/kb/")
 }
 
 // hostAllowed 只认本机的三种写法。
@@ -219,10 +237,14 @@ func (h *Handler) readTokenOK(r *http.Request) bool {
 	if tok == "" {
 		tok = strings.TrimSpace(r.Header.Get("X-KB-Token"))
 	}
-	if tok == "" || h.readToken == "" {
+	if tok == "" {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(tok), []byte(h.readToken)) == 1
+	want := h.ReadToken()
+	if want == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(tok), []byte(want)) == 1
 }
 
 // adminOK 校验管理面的凭据。

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>KBLite</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // 在首帧之前把用户选过的配色写上，避免闪一下白/黑。
+      // 必须放在 head 里同步执行；CSS 的 prefers-color-scheme 只管“跟随系统”那种情况。
+      ;(() => {
+        try {
+          const saved = localStorage.getItem('kb-lite-theme')
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.dataset.theme = saved
+          }
+        } catch {
+          /* 隐私模式下 localStorage 会抛，忽略即可 */
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

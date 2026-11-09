@@ -46,9 +46,9 @@ kb-lite serve --open     # 额外打开默认浏览器到 UI
 | 项 | 选择 | 约束 |
 |---|---|---|
 | 构建 | Vite + Vue 3 + TypeScript | 产物 `web/dist` 拷到 `internal/daemon/static/`，再 `//go:embed`。用户侧永远不需要 Node |
-| 样式 | Tailwind CSS v4 | 设计 token 写在 `web/src/styles/tokens.css`，不引 CSS-in-JS |
-| 交互原语 | Reka UI（无样式） | 只买焦点陷阱、弹出层定位、无障碍，不买视觉 |
-| 图标 | `@iconify-json/lucide` | 按需引入，不要把整套图标打进产物 |
+| 样式 | Tailwind CSS v4 | 设计 token 与组件级样式写在 `web/src/styles.css`，不引 CSS-in-JS |
+| 交互原语 | 原生 `<dialog>`（v0.3） | 只买焦点陷阱、Esc 关闭、无障碍；这三件浏览器已经做对了，所以**先不引 Reka UI**。等真需要弹层锚点定位再引，别为两个弹窗拖进一整套组件库 |
+| 图标 | 暂用文字按钮（v0.3） | `@iconify-json/lucide` 要配 `unplugin-icons` 才按需引入；等界面稳定后再补，不为图标多一层构建 |
 | 禁止 | SSR、Nuxt、Element Plus、Naive UI、Ant Design | 这不是后台管理系统，也不要为一个本地工具拖进整套组件生态 |
 
 硬规则：

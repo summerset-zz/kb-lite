@@ -51,6 +51,15 @@ func newTestServerWith(t *testing.T, o testServerOpts) *httptest.Server {
 		t.Fatal(err)
 	}
 
+	srv := newServerFor(t, mgr, o)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// newServerFor 用给定的 manager 起服务。需要自己控制配置目录的测试用它。
+func newServerFor(t *testing.T, mgr *Manager, o testServerOpts) *httptest.Server {
+	t.Helper()
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +71,6 @@ func newTestServerWith(t *testing.T, o testServerOpts) *httptest.Server {
 	})
 	srv := &httptest.Server{Listener: ln, Config: &http.Server{Handler: h.Routes()}}
 	srv.Start()
-	t.Cleanup(srv.Close)
 	return srv
 }
 

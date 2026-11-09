@@ -54,6 +54,27 @@ func TestSettingsToggleTokenTakesEffectNow(t *testing.T) {
 	}
 }
 
+// 向导的最后一屏要把 setupCompleted 置真，否则重开界面又会回到向导。
+func TestSettingsSetupCompleted(t *testing.T) {
+	srv := newTestServerWith(t, testServerOpts{features: DefaultFeatures, requireToken: false})
+
+	// 新建的配置还没走完向导。
+	_, body, raw := adminReq(t, srv, http.MethodGet, "/api/status", nil)
+	if body["setupCompleted"] != false {
+		t.Fatalf("setupCompleted 初始应为 false，实际 %v（%s）", body["setupCompleted"], raw)
+	}
+
+	status, _, raw := adminReq(t, srv, http.MethodPost, "/api/settings", map[string]any{"setupCompleted": true})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d：%s", status, raw)
+	}
+
+	_, body, _ = adminReq(t, srv, http.MethodGet, "/api/status", nil)
+	if body["setupCompleted"] != true {
+		t.Errorf("保存后 setupCompleted = %v，应该是 true", body["setupCompleted"])
+	}
+}
+
 // 绑非回环地址时，访问密码必须被强制打开（ADR-015 的硬不变式）。
 func TestSettingsLanForcesToken(t *testing.T) {
 	srv := newTestServerWith(t, testServerOpts{features: DefaultFeatures, requireToken: false})

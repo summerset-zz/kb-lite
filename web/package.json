@@ -1,0 +1,24 @@
+{
+  "name": "kb-lite-web",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "kb-lite 的界面。产物会被拷到 internal/daemon/static/ 并打进 Go 二进制，用户侧不需要 Node。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build && node scripts/sync-static.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.10"
+  }
+}

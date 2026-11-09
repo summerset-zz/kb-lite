@@ -24,6 +24,8 @@ type SettingsPatch struct {
 	Host         *string `json:"host"`
 	DBPath       *string `json:"dbPath"`
 	RequireToken *bool   `json:"requireToken"`
+	// SetupCompleted 由向导最后一步置真；设置页的“重新运行向导”置假。
+	SetupCompleted *bool `json:"setupCompleted"`
 }
 
 // ApplySettings 落盘设置，并告诉调用方哪些改动要重启才生效。
@@ -65,6 +67,9 @@ func (m *Manager) ApplySettings(p SettingsPatch) (restart bool, err error) {
 		}
 		if p.RequireToken != nil {
 			c.RequireToken = *p.RequireToken
+		}
+		if p.SetupCompleted != nil {
+			c.SetupCompleted = *p.SetupCompleted
 		}
 		// 手写的配置可能没有 host：先补默认，后面的探测与判定才有意义。
 		if strings.TrimSpace(c.Host) == "" {

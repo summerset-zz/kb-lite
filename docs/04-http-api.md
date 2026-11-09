@@ -7,7 +7,7 @@ Base：`http://127.0.0.1:7331`（端口可配；端口被占时自动 +1 并把�
 > **状态**：这是 **v0.3 的契约**。v0.2 的实现仍然只有一把 token、读取面也必须带（`<配置目录>/token`）。
 > 改动顺序见 `docs/09`：先把 `/api/*` 与管理凭据做出来，再切读取面的默认值。不要反过来。
 
-**读取面** `/kb/*`、`/skill.md`。`requireToken` **默认关**（只绑回环地址时），界面里叫“访问密码”。开了之后要带：
+**读取面** `/kb/*`、`/skill.md`、`/authoring.md`。`requireToken` **默认关**（只绑回环地址时），界面里叫“访问密码”。开了之后要带：
 
 ```
 Authorization: Bearer <读 token>
@@ -144,8 +144,12 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 ### `POST /api/auth/token`
 
 ```jsonc
+{ "action": "show" }              // 把当前读取密码回给 UI（设置页要展示它，好让用户粘给 AI）
 { "action": "rotate" }            // 重新生成读取密码；旧的立即失效
 ```
+
+两个动作都只碰**读取**密码。它走管理面，所以界面上不需要再输一次口令。
+管理凭据（`api-token`）界面上不显示、不可换，也不进任何文档（ADR-015）。
 
 ### `POST /api/skill/install`
 
@@ -356,11 +360,17 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 
 **必须与实现同源**：这段文本里描述的参数名、返回字段、`note` 文案，都要从同一份常量生成，不许手写第二份。加了参数忘了改 skill，比没有 skill 更糟。
 
+## `GET /authoring.md`
+
+与 `/skill.md` 平级的第二份说明（`text/markdown`，同样的条件鉴权）：教 AI 把文件**写成**能进知识库的格式。
+两份必须分开（ADR-017）：合成一份，agent 在只想查东西的时候也会去改用户的文件。
+UI 的完成页与设置页各给一个“复制”按钮，取的就是这两份全文。
+
 ## 其它
 
 - `GET /` → UI 静态页。页面用 `//go:embed` 打进去，**不需要任何凭据**（否则用户连「去设置里关掉密码」都做不到）。
   打开页面时顺手下发 `kb-admin` cookie（`HttpOnly; SameSite=Strict`），UI 之后靠它调 `/api/*`。
   没构建过 UI 时返回一个占位页，说明怎么构建，服务照常可用。
-- 访问密码只约束 `/kb/*` 与 `/skill.md` 这两类**给 agent 的**路径（`isReadPath`）。
+- 访问密码只约束 `/kb/*`、`/skill.md`、`/authoring.md` 这几类**给 agent 的**路径（`isReadPath`）。
 - `GET /openapi.json`（可选）：便于用户把接口喂给自己的工具链。
 - **不要**提供 `/kb/{name}/raw?path=` 之类无 ACL 的万能文件读接口。

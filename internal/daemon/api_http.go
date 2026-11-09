@@ -175,6 +175,41 @@ func (h *Handler) handleKBIndex(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// authTokenReq 是 `POST /api/auth/token` 的请求体。
+//
+// action：
+//   - `show`（默认）：把当前读取密码回给 UI。它只在管理面上出现，所以不需要额外口令；
+//   - `rotate`：换一把新的，旧的立刻失效。
+//
+// 这两个动作都只碰**读取**密码。管理凭据（api-token）界面上不显示也不可换。
+type authTokenReq struct {
+	Action string `json:"action"`
+}
+
+// handleAuthToken 是 `POST /api/auth/token`（docs/04）。
+func (h *Handler) handleAuthToken(w http.ResponseWriter, r *http.Request) {
+	var req authTokenReq
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	switch req.Action {
+	case "", "show":
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": h.ReadToken()})
+	case "rotate":
+		dir := h.mgr.ConfigDirPath()
+		tok, err := RotateReadToken(dir)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "token_write_failed",
+				"新密码没能存下来："+err.Error())
+			return
+		}
+		h.SetReadToken(tok)
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": tok, "rotated": true})
+	default:
+		writeError(w, http.StatusBadRequest, "bad_action", "action 只能是 show 或 rotate。")
+	}
+}
+
 // handleFSList 是 `GET /api/fs/list?path=`：给 UI 的目录选择器。
 func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimSpace(r.URL.Query().Get("path"))

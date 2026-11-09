@@ -43,13 +43,23 @@ func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
 	// 读取密码没开就不把密码写进文档：那是给用户看的纸，不该多一个用不上的东西。
 	tok := ""
 	if h.requireToken.Load() {
-		tok = h.readToken
+		tok = h.ReadToken()
 	}
 	out := RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte(out))
+}
+
+// handleAuthoring 输出 `GET /authoring.md`（教 AI 怎么写的那份说明）。
+//
+// 与 `/skill.md` 平级、分开取（ADR-017）：UI 的完成页与设置页各给一个“复制”按钮。
+// 它同样属于读取面，开了访问密码就要带密码。
+func (h *Handler) handleAuthoring(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(RenderAuthoringText()))
 }
 
 // RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。
