@@ -17,7 +17,25 @@ export interface KB {
   bytes: number
   lastIndexedAt: number
   warnings: number
+  /** 这次真的没进知识库的文件篇数（含整篇跳过的与读不了的）。 */
+  notIndexed: number
   progress?: Progress
+}
+
+/** 一次收录的结果（`GET /api/kbs/{name}/report`，与读取面同一份数据）。 */
+export interface KBReport {
+  ok: boolean
+  name: string
+  entries: number
+  sections: number
+  bytes: number
+  /** 毫秒；建了但还没整理过时没有这个字段。 */
+  updatedAt?: number
+  skippedTotal: number
+  warningTotal: number
+  /** 服务端封顶 100 条，总数看 `skippedTotal`。 */
+  skipped: { path: string; reason: string }[]
+  warnings: { kind: string; message: string }[]
 }
 
 export interface Status {
@@ -163,6 +181,21 @@ export interface StartupInfo {
   mismatch?: boolean
   /** 当前 exe 在下载/临时目录里，开自启可能下次开机就失效。 */
   fragile?: boolean
+}
+
+/** 桌面快捷方式的状态（`GET /api/shortcut`）。 */
+export interface ShortcutInfo {
+  supported: boolean
+  exists: boolean
+  path?: string
+  /** .lnk 现在指向哪个 exe。 */
+  target?: string
+  arguments?: string
+  /** 指向另一份 kb-lite：双击会跑起旧版本。 */
+  mismatch: boolean
+  /** 指向的文件已经不在了。 */
+  missing: boolean
+  error?: string
 }
 
 /** 检查更新的结果（`GET /api/update`）。查不到时 ok 为假、error 是人话。 */

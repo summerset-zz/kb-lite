@@ -299,7 +299,7 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
         <p class="font-medium mt-6">{{ s.wizard.sumSkill }}</p>
         <p class="muted text-xs mt-1">{{ s.wizard.sumSkillHint }}</p>
         <div class="mt-3">
-          <SkillSection />
+          <SkillSection :status="status" />
         </div>
 
         <details class="mt-5">

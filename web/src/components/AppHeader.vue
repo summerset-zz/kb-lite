@@ -10,7 +10,10 @@ import { useToast } from '../toast'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ status: Status }>()
-const tab = defineModel<'kbs' | 'search' | 'agent' | 'settings' | 'about'>('tab', { required: true })
+// 'help' 与 'agent' 都不在导航里：它们走 #hash，模型类型必须认得这两个值。
+const tab = defineModel<'kbs' | 'search' | 'agent' | 'settings' | 'about' | 'help'>('tab', {
+  required: true,
+})
 
 const menu = useMenu()
 const { theme, toggle: toggleTheme } = useTheme()
@@ -23,7 +26,7 @@ const base = computed(() => `http://${location.hostname}:${props.status.port}`)
 const running = computed(() => !props.status.paused)
 const stateText = computed(() =>
   running.value
-    ? s.service.running(props.status.lanExposed ? s.service.lanMode : s.service.localMode)
+    ? s.service.running(props.status.port, props.status.lanExposed ? s.service.lanMode : s.service.localMode)
     : s.service.stopped,
 )
 
@@ -50,8 +53,10 @@ async function copyBase() {
 
 const tabs = [
   { id: 'kbs' as const, label: s.nav.kbs },
+  { id: 'help' as const, label: s.nav.help },
   { id: 'search' as const, label: s.nav.search },
-  { id: 'agent' as const, label: s.nav.agent },
+  // “给 AI 看”暂时不上导航：那一页是给排查问题的人看的，日常用不到。
+  // 组件与路由（#agent）都留着，以后要用直接加回来。
   { id: 'settings' as const, label: s.nav.settings },
   { id: 'about' as const, label: s.nav.about },
 ]
@@ -108,12 +113,13 @@ const tabs = [
         </button>
       </div>
 
-      <nav class="flex gap-1 -mb-px">
+      <!-- 五个页签在 320px 宽的窗口里放不下：允许横向滚，不靠缩字号、不靠删页签。 -->
+      <nav class="flex gap-1 -mb-px overflow-x-auto">
         <button
           v-for="t in tabs"
           :key="t.id"
           type="button"
-          class="px-3 py-2 text-sm border-b-2 bg-transparent cursor-pointer"
+          class="px-3 py-2 text-sm border-b-2 bg-transparent cursor-pointer whitespace-nowrap shrink-0"
           :style="{
             borderColor: tab === t.id ? 'var(--accent)' : 'transparent',
             color: tab === t.id ? 'var(--text)' : 'var(--text-muted)',
@@ -127,25 +133,3 @@ const tabs = [
     </div>
   </header>
 </template>
-
-<style scoped>
-.menu-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 14px;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-}
-.menu-item:hover:not(:disabled) {
-  background: var(--surface-2);
-}
-.menu-item:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-</style>

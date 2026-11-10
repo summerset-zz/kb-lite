@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api, ApiError } from '../api'
+import { copyPath, revealPath } from '../actions'
 import { s } from '../strings'
-import type { StartupInfo, Status, UpdateInfo } from '../types'
+import type { ShortcutInfo, StartupInfo, Status, UpdateInfo } from '../types'
 import { useStatus } from '../useStatus'
 import { useToast } from '../toast'
 import ModalShell from '../components/ModalShell.vue'
+import SplitButton from '../components/SplitButton.vue'
 
 const props = defineProps<{ status: Status }>()
 const { refresh } = useStatus()
@@ -41,7 +43,7 @@ async function loadToken() {
 
 // ---- 开机自启 / 快捷方式 / 检查更新 ----
 const startup = ref<StartupInfo | null>(null)
-const shortcutPath = ref('')
+const shortcut = ref<ShortcutInfo | null>(null)
 const update = ref<UpdateInfo | null>(null)
 const updateError = ref('')
 
@@ -53,9 +55,26 @@ async function loadStartup() {
   }
 }
 
+async function loadShortcut() {
+  try {
+    shortcut.value = await api.shortcut()
+  } catch {
+    shortcut.value = null
+  }
+}
+
 async function toggleStartup() {
   if (!startup.value) return
-  const next = !startup.value.enabled
+  await writeStartup(!startup.value.enabled)
+}
+
+// 自启项指向的是另一份程序时，把这个开关重写一遍就好：写进去的永远是当前 exe。
+// 不去“改那一行”，直接覆盖；反正原来的那行本来就是旧的。
+async function fixStartup() {
+  await writeStartup(true)
+}
+
+async function writeStartup(next: boolean) {
   busy.value = 'startup'
   error.value = ''
   try {
@@ -68,13 +87,12 @@ async function toggleStartup() {
   }
 }
 
+// 快捷方式只有一条路：重建。覆盖之后自然就指向当前这份 exe。
 async function createShortcut() {
   busy.value = 'shortcut'
   error.value = ''
-  shortcutPath.value = ''
   try {
-    const resp = await api.shortcut()
-    shortcutPath.value = resp.path
+    shortcut.value = await api.createShortcut()
     toast.ok(s.settings.shortcutCreated)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
@@ -98,7 +116,24 @@ async function checkUpdate(refresh = false) {
 onMounted(() => {
   void loadToken()
   void loadStartup()
+  void loadShortcut()
 })
+
+// 访问密码默认只在“共享到局域网”时才出现：只绑本机的人不需要被一个密码框打扰。
+// 但已经开着的时候必须能看见、能关掉，否则用户就锁不回去了。
+const showPassword = computed(() => lan.value || requireToken.value)
+
+// 快捷方式那段的一句话与按钮文字，按“有没有、指向谁”分三种。
+const shortcutHint = computed(() => {
+  const st = shortcut.value
+  if (!st?.supported) return s.settings.shortcutUnsupported
+  if (!st.exists) return s.settings.shortcutHint
+  if (st.missing || st.mismatch) return '' // 用下面那条警示说明
+  return s.settings.shortcutCurrent
+})
+const shortcutAction = computed(() =>
+  shortcut.value?.exists ? s.settings.shortcutRecreate : s.settings.shortcut,
+)
 
 async function copy(text: string, key: string) {
   try {
@@ -211,11 +246,25 @@ function openStale() {
       <div>
         <div class="flex items-center gap-2 flex-wrap">
           <p class="text-sm font-medium flex-1">{{ s.settings.location }}</p>
-          <button class="btn btn-xs" type="button" @click="copy(status.configDir, 'dir')">
-            {{ copied === 'dir' ? s.common.copied : s.settings.locationCopy }}
-          </button>
+          <SplitButton id="settings-dir" :label="s.kbs.actions" menu-only>
+            <template #default="{ close }">
+              <button
+                class="menu-item"
+                type="button"
+                @click="close(); revealPath(status.configDir)"
+              >
+                {{ s.settings.openLocation }}
+              </button>
+              <button
+                class="menu-item"
+                type="button"
+                @click="close(); copyPath(status.configDir)"
+              >
+                {{ s.common.copyPath }}
+              </button>
+            </template>
+          </SplitButton>
         </div>
-        <p class="muted text-xs mt-0.5">{{ s.settings.locationHint }}</p>
         <p class="mono text-xs mt-2 break-all">{{ status.configDir }}</p>
       </div>
 
@@ -244,8 +293,8 @@ function openStale() {
         <p v-if="lan" class="note mt-2 text-sm">{{ s.wizard.lanWarn }}</p>
       </div>
 
-      <!-- 访问密码 -->
-      <div>
+      <!-- 访问密码：只有开了才显示（共享到局域网时强制开）。 -->
+      <div v-if="showPassword">
         <div class="flex items-center gap-3">
           <p class="text-sm font-medium flex-1">{{ s.settings.password }}</p>
           <label class="flex items-center gap-2 text-sm">
@@ -254,22 +303,19 @@ function openStale() {
           </label>
         </div>
 
-        <template v-if="requireToken || lan">
-          <p class="muted text-sm mt-2">{{ s.settings.passwordOnHint }}</p>
-          <div class="card p-3 mt-2" :style="{ background: 'var(--surface-2)' }">
-            <p class="mono text-xs break-all">{{ pasteText }}</p>
-            <div class="flex gap-2 mt-2">
-              <button class="btn btn-sm" type="button" @click="copy(pasteText, 'paste')">
-                {{ copied === 'paste' ? s.common.copied : s.common.copy }}
-              </button>
-              <button class="btn btn-sm" type="button" :disabled="busy !== ''" @click="rotate">
-                {{ s.settings.rotate }}
-              </button>
-            </div>
+        <p class="muted text-sm mt-2">{{ s.settings.passwordOnHint }}</p>
+        <div class="card p-3 mt-2" :style="{ background: 'var(--surface-2)' }">
+          <p class="mono text-xs break-all">{{ pasteText }}</p>
+          <div class="flex gap-2 mt-2">
+            <button class="btn btn-sm" type="button" @click="copy(pasteText, 'paste')">
+              {{ copied === 'paste' ? s.common.copied : s.common.copy }}
+            </button>
+            <button class="btn btn-sm" type="button" :disabled="busy !== ''" @click="rotate">
+              {{ s.settings.rotate }}
+            </button>
           </div>
-          <p class="muted text-xs mt-1">一次性密码，别发给别人。点“换一个密码”，旧的就作废了。</p>
-        </template>
-        <p v-else class="muted text-sm mt-2">{{ s.settings.passwordOffHint }}</p>
+        </div>
+        <p class="muted text-xs mt-1">一次性密码，别发给别人。点“换一个密码”，旧的就作废了。</p>
       </div>
 
       <p v-if="movedTo" class="note text-sm">
@@ -309,17 +355,37 @@ function openStale() {
         <p v-if="startup?.mismatch" class="note text-xs mt-2">
           {{ s.settings.startupMismatch(startup.exePath ?? '') }}
         </p>
+        <button
+          v-if="startup?.mismatch"
+          class="btn btn-sm mt-2"
+          type="button"
+          :disabled="busy !== ''"
+          @click="fixStartup"
+        >
+          {{ s.settings.startupFix }}
+        </button>
         <p v-if="startup?.fragile" class="note text-xs mt-2">{{ s.settings.startupFragile }}</p>
       </div>
 
       <div>
-        <p class="text-sm font-medium">{{ s.settings.shortcut }}</p>
-        <p class="muted text-xs mt-0.5">{{ s.settings.shortcutHint }}</p>
-        <button class="btn btn-sm mt-2" type="button" :disabled="busy !== ''" @click="createShortcut">
-          {{ s.settings.shortcut }}
-        </button>
-        <p v-if="shortcutPath" class="mono text-xs mt-1 break-all">
-          {{ s.settings.shortcutDone }}：{{ shortcutPath }}
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm font-medium flex-1">{{ s.settings.shortcut }}</p>
+          <button
+            class="btn btn-sm"
+            type="button"
+            :disabled="busy !== '' || !shortcut?.supported"
+            @click="createShortcut"
+          >
+            {{ busy === 'shortcut' ? s.common.loading : shortcutAction }}
+          </button>
+        </div>
+        <p v-if="shortcutHint" class="muted text-xs mt-0.5">{{ shortcutHint }}</p>
+        <p v-if="shortcut?.error" class="note text-xs mt-2">{{ shortcut.error }}</p>
+        <p v-else-if="shortcut?.missing" class="note text-xs mt-2">
+          {{ s.settings.shortcutDeleted(shortcut.target ?? '') }}
+        </p>
+        <p v-else-if="shortcut?.mismatch" class="note text-xs mt-2">
+          {{ s.settings.shortcutMismatch(shortcut.target ?? '') }}
         </p>
       </div>
 
@@ -394,9 +460,5 @@ function openStale() {
         </button>
       </template>
     </ModalShell>
-
-    <p class="muted text-xs mt-6 text-center">
-      这个页面关掉不代表 kb-lite 退出了。它还在后台跑着，AI 照样连得上。
-    </p>
   </div>
 </template>

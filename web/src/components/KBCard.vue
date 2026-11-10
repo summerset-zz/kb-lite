@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { api, ApiError } from '../api'
+import { copyPath, revealPath } from '../actions'
 import { s } from '../strings'
-import type { KB } from '../types'
+import type { KB, KBReport } from '../types'
 import { humanBytes, humanTime } from '../format'
-import { useMenu } from '../menu'
 import ModalShell from './ModalShell.vue'
 import AppIcon from './AppIcon.vue'
+import SplitButton from './SplitButton.vue'
 
 const props = defineProps<{ kb: KB }>()
 const emit = defineEmits<{ changed: [] }>()
 
-// 同时只开一个、点外面就关（用 details 做不到后两件事）。
-const menu = useMenu()
 const menuId = `kb-${props.kb.id}`
 
 const busy = ref('')
@@ -26,13 +25,24 @@ const statusLabel = computed(() => {
   if (props.kb.state === 'indexing') return s.kbs.indexing
   if (props.kb.state === 'error') return s.kbs.failed
   if (!props.kb.enabled) return s.kbs.disabled
-  return s.kbs.ready
+  // 有文件没进库时，就不说“已就绪”了：AI 确实查不到那几篇。
+  if (props.kb.notIndexed > 0) return s.kbs.statusNotIndexed(props.kb.notIndexed)
+  return s.kbs.statusReady(props.kb.lastIndexedAt ? humanTime(props.kb.lastIndexedAt) : '')
+})
+
+// 行首那个符号：对号 = 没问题，感叹号 = 要看看，时钟 = 正在整理。
+const stateIcon = computed<'clock' | 'alert-circle' | 'check'>(() => {
+  if (props.kb.state === 'indexing') return 'clock'
+  if (props.kb.state === 'error' || props.kb.notIndexed > 0) return 'alert-circle'
+  if (!props.kb.enabled) return 'alert-circle'
+  return 'check'
 })
 
 const dot = computed(() => {
   if (props.kb.state === 'indexing') return 'var(--accent)'
   if (props.kb.state === 'error') return 'var(--danger)'
   if (!props.kb.enabled) return 'var(--text-muted)'
+  if (props.kb.notIndexed > 0) return 'var(--danger)'
   return 'var(--accent)'
 })
 
@@ -75,70 +85,104 @@ async function doRemove() {
   await run('remove', () => api.removeKB(props.kb.name))
   removeOpen.value = false
 }
+
+// ---- 入库日志 ----
+// 看点是“这次到底进去了什么、漏了什么”。以前这些数字只在 /api/status 里有一个总数，
+// 而“有几个文件没被收录”的名册只有 agent 能看到，用户反而看不到。
+const logOpen = ref(false)
+const report = ref<KBReport | null>(null)
+const logError = ref('')
+
+async function openLog() {
+  logOpen.value = true
+  report.value = null
+  logError.value = ''
+  try {
+    report.value = await api.kbReport(props.kb.name)
+  } catch (e) {
+    logError.value = e instanceof ApiError ? e.message : s.errors.generic
+  }
+}
+
+/** 跳过原因：能翻译的翻译，翻译不了的（比如编码失败那句原文）原样显示。 */
+function skipReason(reason: string): string {
+  return s.kbs.skipReason[reason] ?? reason
+}
 </script>
 
 <template>
   <div class="card p-4">
-    <div class="flex items-start gap-3 flex-wrap">
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="h-2 w-2 rounded-full shrink-0" :style="{ background: dot }" />
-          <span class="font-medium truncate">{{ kb.name }}</span>
-          <span class="muted text-xs shrink-0">{{ statusLabel }}</span>
-        </div>
-        <p class="mono text-xs muted mt-1 break-all">{{ kb.rootPath }}</p>
-        <p class="text-sm mt-1">
-          {{ kb.entries }} {{ s.kbs.entries }} · {{ kb.sections }} {{ s.kbs.sections }} ·
-          {{ humanBytes(kb.bytes) }}
-        </p>
-        <p class="text-xs muted mt-1">
-          {{ s.kbs.addedAt }}：{{ kb.lastIndexedAt ? humanTime(kb.lastIndexedAt) : s.kbs.never }}
-          <span v-if="kb.warnings"> · ⚠ {{ kb.warnings }} {{ s.kbs.skipped }}</span>
-        </p>
-        <p v-if="progress" class="text-xs mt-1" :style="{ color: 'var(--accent)' }">{{ progress }}</p>
-        <p v-if="kb.state === 'indexing'" class="text-xs muted mt-1">{{ s.kbs.indexingHint }}</p>
-      </div>
-
-      <div class="relative shrink-0">
-        <button
-          class="btn btn-sm"
-          type="button"
-          :disabled="busy !== ''"
-          @click.stop="menu.toggle(menuId)"
-        >
-          {{ s.kbs.actions }}
-          <AppIcon name="chevron-down" class="ml-1 muted" />
-        </button>
-        <div v-if="menu.isOpen(menuId)" class="card absolute right-0 mt-1 z-10 p-1 w-40" @click.stop>
-          <button class="menu-item" type="button" :disabled="busy !== ''" @click="update">
+    <!-- 一行的样子：`[√] 字体内容 已就绪 8 分钟前更新 —— [操作|↓]`（docs/06 §5.2） -->
+    <div class="flex items-center gap-2 min-w-0">
+      <AppIcon :name="stateIcon" :style="{ color: dot }" />
+      <span class="font-medium truncate">{{ kb.name }}</span>
+      <span class="text-xs shrink-0" :style="{ color: dot }">{{ statusLabel }}</span>
+      <span class="flex-1" />
+      <SplitButton
+        :id="menuId"
+        :label="s.kbs.actions"
+        menu-only
+        :disabled="busy !== ''"
+      >
+        <template #default="{ close }">
+          <button class="menu-item" type="button" :disabled="busy !== ''" @click="close(); update()">
             {{ s.kbs.update }}
           </button>
-          <button class="menu-item" type="button" :disabled="busy !== ''" @click="updateAll">
+          <button
+            class="menu-item"
+            type="button"
+            :disabled="busy !== ''"
+            @click="close(); updateAll()"
+          >
             {{ s.kbs.updateAll }}
           </button>
-          <button class="menu-item" type="button" :disabled="busy !== ''" @click="toggle">
+          <button class="menu-item" type="button" @click="close(); openLog()">
+            {{ s.kbs.showLog }}
+          </button>
+          <button class="menu-item" type="button" @click="close(); revealPath(kb.rootPath)">
+            {{ s.common.reveal }}
+          </button>
+          <button class="menu-item" type="button" @click="close(); copyPath(kb.rootPath)">
+            {{ s.common.copyPath }}
+          </button>
+          <button
+            class="menu-item"
+            type="button"
+            :disabled="busy !== ''"
+            @click="close(); toggle()"
+          >
             {{ kb.enabled ? s.kbs.disable : s.kbs.enable }}
           </button>
           <button
             class="menu-item"
             type="button"
             :disabled="busy !== ''"
-            @click="menu.close(); renameTo = kb.name; renameOpen = true"
+            @click="close(); renameTo = kb.name; renameOpen = true"
           >
             {{ s.kbs.rename }}
           </button>
           <button
-            class="menu-item"
+            class="menu-item danger"
             type="button"
-            :style="{ color: 'var(--danger)' }"
             :disabled="busy !== ''"
-            @click="menu.close(); removeOpen = true"
+            @click="close(); removeOpen = true"
           >
             {{ s.kbs.remove }}
           </button>
-        </div>
-      </div>
+        </template>
+      </SplitButton>
     </div>
+
+    <p class="text-sm mt-1 ml-6">
+      {{ s.kbs.docCount(kb.entries) }} | {{ s.kbs.sectionCount(kb.sections) }} |
+      {{ humanBytes(kb.bytes) }}
+    </p>
+    <p v-if="progress" class="text-xs mt-1 ml-6" :style="{ color: 'var(--accent)' }">
+      {{ progress }}
+    </p>
+    <p v-if="kb.state === 'indexing'" class="text-xs muted mt-1 ml-6">
+      {{ s.kbs.indexingHint }}
+    </p>
 
     <p v-if="kb.error" class="note mt-3 text-sm">{{ s.kbs.failed }}：{{ kb.error }}</p>
     <p v-if="error" class="note mt-2 text-sm">{{ error }}</p>
@@ -163,27 +207,45 @@ async function doRemove() {
         </button>
       </template>
     </ModalShell>
+    <ModalShell :open="logOpen" :title="s.kbs.logTitle(kb.name)" wide @close="logOpen = false">
+      <p v-if="logError" class="note text-sm">{{ logError }}</p>
+      <p v-else-if="!report" class="muted text-sm">{{ s.common.loading }}</p>
+      <template v-else>
+        <p v-if="!report.updatedAt" class="text-sm">{{ s.kbs.logNever }}</p>
+        <template v-else>
+          <p class="text-sm">{{ s.kbs.logSummary(report.entries, report.sections) }}</p>
+          <p v-if="report.skippedTotal === 0 && report.warningTotal === 0" class="muted text-sm mt-2">
+            {{ s.kbs.logClean }}
+          </p>
+
+          <template v-if="report.skippedTotal > 0">
+            <p class="text-sm mt-3">{{ s.kbs.logSkipped(report.skippedTotal) }}</p>
+            <ul class="mt-1 space-y-1">
+              <li v-for="it in report.skipped" :key="it.path" class="text-sm">
+                <span class="mono break-all">{{ it.path }}</span>
+                <span class="muted">：{{ skipReason(it.reason) }}</span>
+              </li>
+            </ul>
+          </template>
+
+          <template v-if="report.warningTotal > 0">
+            <p class="text-sm mt-3">{{ s.kbs.logWarnings(report.warningTotal) }}</p>
+            <ul class="mt-1 space-y-1">
+              <li v-for="(w, i) in report.warnings" :key="i" class="text-sm">{{ w.message }}</li>
+            </ul>
+          </template>
+
+          <p
+            v-if="
+              report.skippedTotal > report.skipped.length ||
+              report.warningTotal > report.warnings.length
+            "
+            class="muted text-xs mt-2"
+          >
+            {{ s.kbs.logCapped }}
+          </p>
+        </template>
+      </template>
+    </ModalShell>
   </div>
 </template>
-
-<style scoped>
-.menu-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 14px;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-}
-.menu-item:hover:not(:disabled) {
-  background: var(--surface-2);
-}
-.menu-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-</style>

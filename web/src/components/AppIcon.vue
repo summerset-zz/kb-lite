@@ -5,7 +5,16 @@
  * 如果要加图标，从这个文件里加，别在组件里各处画 SVG。
  */
 defineProps<{
-  name: 'copy' | 'check' | 'folder' | 'drive' | 'chevron-down' | 'sun' | 'moon'
+  name:
+    | 'copy'
+    | 'check'
+    | 'folder'
+    | 'drive'
+    | 'chevron-down'
+    | 'sun'
+    | 'moon'
+    | 'alert-circle'
+    | 'clock'
 }>()
 </script>
 
@@ -26,6 +35,15 @@ defineProps<{
     </template>
     <path v-else-if="name === 'check'" d="M20 6 9 17l-5-5" />
     <path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
+    <template v-else-if="name === 'alert-circle'">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" x2="12" y1="8" y2="12" />
+      <line x1="12" x2="12.01" y1="16" y2="16" />
+    </template>
+    <template v-else-if="name === 'clock'">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </template>
     <template v-else-if="name === 'sun'">
       <circle cx="12" cy="12" r="4" />
       <path d="M12 2v2" />

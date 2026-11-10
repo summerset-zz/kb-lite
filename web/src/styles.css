@@ -142,6 +142,58 @@ body {
   color: var(--danger);
 }
 
+/* 分体按钮：文档里写成 `[按钮文本|↓]`（docs/06 §3）。
+   左半边是动作，右边那半只开菜单，两边共用一条边框。 */
+.split {
+  display: inline-flex;
+}
+
+.split > .btn {
+  border-radius: 0;
+}
+
+.split > .btn:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+/* 只认 button：菜单本体是个 div，不该被当成最后一段。 */
+.split > .btn:last-of-type {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding: 0 6px;
+  /* 两段共用一条边框：往左压 1px，否则中间会看着比别人粗。 */
+  margin-left: -1px;
+}
+
+/* 下拉菜单里的一行。三个地方用（服务状态、知识库、SKILL），写在一处免得漂。 */
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.menu-item.danger {
+  color: var(--danger);
+}
+
 .input {
   height: 34px;
   padding: 0 10px;

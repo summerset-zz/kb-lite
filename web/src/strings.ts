@@ -12,7 +12,10 @@ export const s = {
 
   nav: {
     kbs: '知识库',
-    search: '搜索',
+    // 放在第二个：新手最先要看的就是它。
+    help: '快速上手',
+    // 叫“检索测试”而不是“搜索”：这一页是给用户排查“为什么搜不到”的，不是搜索框。
+    search: '检索测试',
     agent: '给 AI 看',
     settings: '设置',
     about: '关于',
@@ -20,7 +23,8 @@ export const s = {
 
   // 顶栏的服务状态与配色开关。
   service: {
-    running: (mode: string) => `运行中（${mode}）`,
+    // 带上端口：首页那张“地址”卡片没了，用户要知道 ai 该连哪个地址，端口是最常被问的一段。
+    running: (port: number, mode: string) => `运行中（:${port}，${mode}）`,
     localMode: '本机可用',
     lanMode: '局域网可用',
     stopped: '已停止',
@@ -47,6 +51,9 @@ export const s = {
     saved: '已保存。',
     create: '创建',
     ok: '知道了',
+    copyPath: '复制路径',
+    reveal: '打开文件位置',
+    pathCopied: '路径已复制。',
   },
 
   // 目录选择器。它的字以前是写在组件里的，现在也收到这里。
@@ -145,12 +152,12 @@ export const s = {
     empty: '还没有添加知识库。',
     emptyHint: '选一个放着资料的文件夹，我们会把它整理成 AI 能查的形式。文件不会被改动。',
     add: '添加知识库',
-    addedAt: '上次整理',
-    never: '还没整理过',
-    pending: '待更新',
-    entries: '篇',
-    sections: '节',
-    skipped: '个文件没被收录',
+    // 一行的样子：`[√] 字体内容 已就绪 8 分钟前更新 —— [操作|↓]`
+    statusReady: (t: string) => (t ? `已就绪 ${t}更新` : '已就绪'),
+    // 有文件没进库时，状态就换成这一句。比“已就绪”诚实：AI 确实查不到那些文件。
+    statusNotIndexed: (n: number) => `${n} 篇文档未成功入库`,
+    docCount: (n: number) => `${n} 篇文档`,
+    sectionCount: (n: number) => `${n} 个章节`,
     actions: '操作',
     enable: '启用',
     disable: '关闭',
@@ -160,9 +167,25 @@ export const s = {
     remove: '移除',
     indexing: '正在整理',
     indexingHint: '整理期间 AI 查到的是上一次的结果。',
-    ready: '已就绪',
     disabled: '已关闭',
     failed: '这次没整理成',
+
+    // 入库日志（弹窗）。
+    showLog: '查看入库日志',
+    logTitle: (name: string) => `${name} 的入库日志`,
+    logNever: '这个知识库还没整理过，所以还没有日志。',
+    logSummary: (entries: number, sections: number) =>
+      `这次收录了 ${entries} 篇文档、${sections} 个章节。`,
+    logClean: '没有遇到问题，目录里的文件都进知识库了。',
+    logSkipped: (n: number) => `有 ${n} 个文件没有进知识库：`,
+    logWarnings: (n: number) => `另有 ${n} 条提醒。这些文件已经收录了，只是内容里有点问题：`,
+    logCapped: '只列出前 100 条。',
+    // 跳过原因（`GET /api/kbs/{name}/report` 的 skipped[].reason）。
+    // 认不出的原因（比如编码失败那句原文）直接原样显示，不编。
+    skipReason: {
+      frontmatter: '文件开头写着要跳过（draft 或 kb_ignore）',
+      empty: '只有文件开头的设置，没有正文',
+    } as Record<string, string>,
   },
 
   search: {
@@ -174,7 +197,7 @@ export const s = {
     multiWord: '多个词就都打进去，空格分开，它们会一起参与打分。',
     run: '搜索',
     empty: '这个词没有命中任何一篇文章。',
-    emptyNext: '先试试更短、更常见的说法；还是不行就在知识库页点「全部更新」重新整理一遍。',
+    emptyNext: '先试试更短、更常见的说法。还是不行就在知识库页点“全部更新”重新整理一遍。',
     noKB: '还没有知识库。先添加一个，再来这里试。',
     why: '为什么排在这里',
     keyword: '关键词',
@@ -215,18 +238,15 @@ export const s = {
 
   settings: {
     title: '设置',
-    location: '资料放在哪',
-    locationHint:
-      '设置和缓存都在这个目录里。想整个搬走，复制这个目录就行；缓存（index.db）删了不影响你的资料，重新整理就有。',
-    locationCopy: '复制路径',
+    location: '配置文件位置',
+    // 描述去掉了：这一行只需要回答“东西在哪”，下面那行路径就是答案。
+    openLocation: '打开文件夹位置',
     port: '端口',
     whoCanOpen: '谁可以打开',
     password: '访问密码',
     passwordOn: '开启',
     passwordOff: '关闭',
     passwordOnHint: '把下面这段话发给你的 AI，或填进它所在工具的配置里。少了它，AI 会连不上。',
-    passwordOffHint:
-      '关掉之后，这台电脑上的任何程序都能读你的知识库。你浏览器里打开的网页不行，它们打不开这个服务。',
     rotate: '换一个密码',
     rerunWizard: '重新运行向导',
     restartNeeded: '记录文件位置要重启 kb-lite 之后才生效。',
@@ -246,12 +266,19 @@ export const s = {
     startupCommand: '启动的命令',
     startupMismatch: (p: string) =>
       `开机自启现在指向另一份程序：${p}。关掉再打开一次，就会指向你现在用的这个。`,
+    startupFix: '改成指向现在这份',
     startupFragile:
       '程序现在在下载或临时文件夹里，那里随时会被清掉。建议先把它挪到一个固定位置（比如 D:\\Tools\\KBLite），再开开机自启。',
     shortcut: '创建桌面快捷方式',
     shortcutHint: '建一个放桌面上，以后双击它就够了。',
-    shortcutDone: '已创建',
+    shortcutRecreate: '重新创建',
+    shortcutDeleted: (p: string) =>
+      `桌面快捷方式指向的程序已经不在了：${p}。双击它会报错，重建一个就好。`,
     shortcutCreated: '快捷方式已经放到桌面上了。',
+    shortcutCurrent: '桌面上的快捷方式指向的就是现在这份程序。',
+    shortcutMismatch: (p: string) =>
+      `桌面上的快捷方式还指着另一份程序：${p}。双击它会跑起旧的那个。`,
+    shortcutUnsupported: '这个系统还不支持，暂时只能自己打开程序。',
     update: '检查更新',
     updateCurrent: (v: string) => `当前版本 ${v}`,
     updateChecking: '正在查…',
@@ -266,7 +293,7 @@ export const s = {
     stalePromptHint: '把这句话发给 AI，它就会重新取一份：',
     stalePrompt: (base: string) => `kb-lite 的服务地址是 ${base}，请重新读一遍它的 SKILL 再说。`,
     staleHow:
-      '想彻底更新，就去「知识库」页的「让 AI 用起来」，把带「有更新」的那几行右边的按钮点一遍。',
+      '想彻底更新，就去知识库页的“让 AI 用起来”，把带“有更新”的那几行右边的按钮点一遍。',
   },
 
   skill: {
@@ -281,9 +308,9 @@ export const s = {
     targetAgents: '通用目录',
     targetClaude: 'Claude Code',
 
-    stateMissing: '未安装',
-    stateFresh: (t: string) => (t ? `已是最新 · ${t}` : '已是最新'),
-    stateStale: '有更新',
+    stateMissing: 'SKILL 未安装',
+    stateFresh: (t: string) => (t ? `${t}更新` : '已是最新'),
+    stateStale: 'SKILL 有更新',
 
     install: '安装',
     update: '更新',
@@ -291,8 +318,8 @@ export const s = {
     installedToast: (path: string) => `已写入 ${path}`,
 
     whenStale:
-      '服务地址或访问密码变了之后，这里会显示「有更新」；知识库增删改名不用管，说明书里不写库列表。',
-    staleHint: '有目标落后了：服务地址或访问密码改过，点那一行右边的「更新」重装一次。',
+      '服务地址或访问密码变了之后，这里会显示“有更新”。知识库增删改名不用管，说明书里不写库列表。',
+    staleHint: '有目标落后了：服务地址或访问密码改过。点那一行右边的按钮装一次。',
     // Claude Code 会盯着目录（官方文档明确写了 live change detection），
     // 但它在会话启动时才知道有哪些顶层目录。所以第一次装要提一句。
     reloadHint:
@@ -301,7 +328,17 @@ export const s = {
     promptReadHint: '把这句话发给 AI，它就会来查这个知识库',
     promptRead: '用 kb-lite 去我的知识库里查一下……',
     promptAuthoringHint: '把这句话发给另一个 AI，让它把文件整理成能进知识库的样子',
-    promptAuthoring: '用 kb-lite-authoring 把这些文件整理进知识库「<知识库名称>」',
+    promptAuthoring: '用 kb-lite-authoring 把这些文件整理进知识库“<知识库名称>”',
+
+    // 不装 SKILL 的人：给 AI 一段能直接看懂的话，里面带着说明书地址。
+    // 访问密码开着时必须写进去，否则 AI 拿到 401 只会反复重试。
+    pasteHint: '不想安装也可以，把这一段贴给 AI：',
+    pasteRead: (base: string, token: string) =>
+      `我的知识库服务在 ${base}。请先读一遍 ${base}/skill.md，再按它说的查我的知识库。` +
+      (token ? `访问密码是 ${token}。` : ''),
+    pasteAuthoring: (base: string, token: string) =>
+      `请先读一遍 ${base}/authoring.md，再按它说的把文件整理成能进知识库的 markdown。` +
+      (token ? `访问密码是 ${token}。` : ''),
   },
 
   about: {
@@ -316,11 +353,22 @@ export const s = {
     soon: '之后再做',
   },
 
+  // 帮助页（#help）。正文在那个组件里，这里只放标题与首尾两句。
+  // 正文不放这儿：它是一整篇带结构的说明，塞进字符串表只会更难改（见 HelpView.vue 顶部注释）。
+  help: {
+    title: '快速上手',
+    lead: '从建一个知识库到让 AI 查得到，一共三步。',
+    done: '照这个顺序做完，AI 就能查到你的知识库了。',
+  },
+
   footer: {
     author: '作者 Summerset-zz',
     feedback: '反馈问题',
     checkUpdate: '检查更新',
     support: '支持作者',
+    help: '快速上手',
+    // 从设置页挪过来的：这句话对所有页面都成立，而且用户关掉浏览器前最该看到的就是它。
+    closeNote: '关闭配置页面不影响 kb-lite 运行。本配置界面可通过托盘区图标重新开启。',
   },
 
   errors: {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { Status } from '../types'
@@ -8,15 +8,12 @@ import KBCard from '../components/KBCard.vue'
 import SkillSection from '../components/SkillSection.vue'
 import DirPicker from '../components/DirPicker.vue'
 
-const props = defineProps<{ status: Status }>()
+defineProps<{ status: Status }>()
 const { refresh } = useStatus()
 
 const addOpen = ref(false)
 const adding = ref(false)
 const addError = ref('')
-
-const base = computed(() => `http://${location.hostname}:${props.status.port}`)
-const reach = computed(() => (props.status.lanExposed ? s.wizard.lan : s.wizard.loopback))
 
 function openAdd() {
   addOpen.value = true
@@ -37,37 +34,15 @@ async function submitAdd(path: string, name: string) {
     adding.value = false
   }
 }
-
-const copied = ref('')
-async function copyBase() {
-  try {
-    await navigator.clipboard.writeText(base.value)
-    copied.value = 'base'
-    window.setTimeout(() => (copied.value = ''), 1600)
-  } catch {
-    copied.value = ''
-  }
-}
 </script>
 
 <template>
   <div class="mx-auto max-w-3xl px-4 sm:px-6 py-6">
-    <!-- 运行状态 -->
-    <section class="card p-4 text-sm">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="muted">地址</span>
-        <button class="btn btn-ghost btn-xs mono" type="button" @click="copyBase">
-          {{ copied === 'base' ? s.common.copied : base }}
-        </button>
-      </div>
-      <p class="muted mt-1">谁可以打开：{{ reach }}</p>
-      <p v-if="status.requireToken" class="muted mt-1">
-        访问密码已开启，AI 连接时要带上它（在设置里能看到）。
-      </p>
-      <p v-if="status.dbMode === 'memory'" class="mt-2 note text-xs">
-        记录文件没能打开，这次是记在内存里的。不影响使用，但下次启动要重新整理一遍。
-      </p>
-    </section>
+    <!-- 地址与“谁可以打开”不在这里了：顶栏的服务状态下拉里都有（复制地址、运行中/已停止），
+         再重复一张卡片只是占掉第一屏。 -->
+    <p v-if="status.dbMode === 'memory'" class="note text-xs">
+      记录文件没能打开，这次是记在内存里的。不影响使用，但下次启动要重新整理一遍。
+    </p>
 
     <!-- 知识库列表 -->
     <div class="flex items-center justify-between mt-6 mb-2">
@@ -87,7 +62,7 @@ async function copyBase() {
 
     <!-- SKILL -->
     <h2 class="font-medium mt-8 mb-2">让 AI 用起来</h2>
-    <SkillSection />
+    <SkillSection :status="status" />
 
     <DirPicker
       :open="addOpen"

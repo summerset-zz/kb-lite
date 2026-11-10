@@ -2,8 +2,10 @@ import type {
   FsList,
   FsProbe,
   KB,
+  KBReport,
   PreviewResponse,
   SearchResponse,
+  ShortcutInfo,
   SkillState,
   SkillTarget,
   StartupInfo,
@@ -108,6 +110,13 @@ export const api = {
   fsMkdir: (path: string, name: string) =>
     request<{ ok: boolean; path: string }>('POST', '/api/fs/mkdir', { path, name }),
 
+  /** 用系统的文件管理器打开一个位置（只开窗口，不写文件）。 */
+  fsReveal: (path: string) => request<{ ok: boolean }>('POST', '/api/fs/reveal', { path }),
+
+  /** 这次收录的结果，尤其是没进去的文件与原因（「查看入库日志」弹窗）。 */
+  kbReport: (name: string) =>
+    request<KBReport>('GET', `/api/kbs/${encodeURIComponent(name)}/report`),
+
   /** 搜索调试页用：与 agent 面同一套打分，但走管理面（界面只有管理凭据）。 */
   search: (kb: string, query: string, limit = 5) =>
     request<SearchResponse>('POST', '/api/search', { kb, q: [query], limit }),
@@ -120,8 +129,11 @@ export const api = {
   startup: () => request<StartupInfo>('GET', '/api/startup'),
   setStartup: (enabled: boolean) => request<StartupInfo>('POST', '/api/startup', { enabled }),
 
-  /** 在桌面建一个快捷方式，返回它的路径。 */
-  shortcut: () => request<{ ok: boolean; path: string }>('POST', '/api/shortcut'),
+  /** 桌面快捷方式现在指向谁。用户换了新版本之后，它很可能还指着旧的。 */
+  shortcut: () => request<ShortcutInfo & { ok: boolean }>('GET', '/api/shortcut'),
+
+  /** 建一个快捷方式，或重建成指向当前这份程序。 */
+  createShortcut: () => request<ShortcutInfo & { ok: boolean }>('POST', '/api/shortcut'),
 
   /** 查一次新版本。整站只有这一个请求会访问外网，且只在用户点按钮时发。 */
   update: (refresh = false) =>
