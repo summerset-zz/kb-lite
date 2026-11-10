@@ -30,7 +30,6 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --host <addr>           默认 127.0.0.1；改成 0.0.0.0 会强制开启访问密码
     --open                  启动后打开浏览器
     --no-tray               不挂 Windows 托盘（服务器与脚本用）
-    --db <path>             缓存库位置（默认 <配置目录>/index.db，可以随时删）
     --no-db                 不落盘（纯内存，每次启动都重切）
     --force                 忽略缓存，全部重新切片
     --log-level <l>         error|warn|info|debug
@@ -46,7 +45,7 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
   rename <old> <new>        改显示名（条目不用重切）
   reindex [name] [--force] [--wait]
                             重新整理；不传名字就是全部
-  settings [--port <n>] [--host <addr>] [--db <path>] [--password on|off]
+  settings [--port <n>] [--host <addr>] [--password on|off]
                             查看/修改设置（不带参数就是查看）
 
   list                      列出已配置的知识库

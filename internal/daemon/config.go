@@ -80,9 +80,14 @@ type Config struct {
 	// Host 是监听地址。非回环地址时 requireToken 强制为真（ADR-015）。
 	Host string `json:"host"`
 	// RequireToken 是“读取面要不要密码”。新装默认为假；从 v1 迁过来的为真。
-	RequireToken bool   `json:"requireToken"`
-	DBPath       string `json:"dbPath"`
-	KBs          []KB   `json:"kbs"`
+	RequireToken bool `json:"requireToken"`
+	// DBPath 是记录文件（缓存）的位置。
+	//
+	// **它不是配置项**：永远等于 `<配置目录>/index.db`（ADR-018）。
+	// 字段还在，是因为老配置里可能有这个值，读进来之后会被忽略掉；
+	// 存回去时写的是真实值，用户打开 config.json 能一眼看到缓存落在哪。
+	DBPath string `json:"dbPath"`
+	KBs    []KB   `json:"kbs"`
 }
 
 // IsLoopbackHost 判断是不是只绑本机。
@@ -177,9 +182,9 @@ func Load(dir string) (*Config, error) {
 	if c.Host == "" {
 		c.Host = DefaultHost
 	}
-	if c.DBPath == "" {
-		c.DBPath = filepath.Join(dir, DBFileName)
-	}
+	// 记录文件永远跟 config.json 在一起（ADR-018）：老配置里写的别处一概忽略。
+	// 代价是那个旧文件变成孤儿（它只是缓存，重新整理就有），用户自己删掉即可。
+	c.DBPath = filepath.Join(dir, DBFileName)
 	if migrated {
 		// 迁移后立刻落盘：否则下次启动又会走一遍迁移，而用户此间的改动会丢。
 		_ = c.Save(dir)

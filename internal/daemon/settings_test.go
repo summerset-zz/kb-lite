@@ -122,27 +122,28 @@ func TestSettingsPortInUse(t *testing.T) {
 	}
 }
 
-// 记录文件放到不能写的地方要 400。
-func TestSettingsDBPathNotWritable(t *testing.T) {
-	srv := newTestServerWith(t, testServerOpts{features: DefaultFeatures, requireToken: false})
-
-	// 拿一个普通文件当目录用：MkdirAll / CreateTemp 都会失败。
-	notDir := filepath.Join(t.TempDir(), "file.txt")
-	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+// 记录文件的位置不是配置项：配置文件里写了别处，读进来也要被忽略（ADR-018）。
+//
+// 这条守的是“index.db 和 config.json 永远在一起”，否则用户删缓存时会连带困惑
+// “我的配置是不是也放在那个盘里”。
+func TestDBPathAlwaysFollowsConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	other := filepath.Join(t.TempDir(), "别处", "index.db")
+	body := `{"schemaVersion":2,"port":7331,"host":"127.0.0.1","dbPath":` + strconv.Quote(other) + `,"kbs":[]}`
+	if err := os.WriteFile(filepath.Join(dir, ConfigFileName), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	status, body, raw := doRequest(t, srv, "/api/settings", func(r *http.Request) {
-		r.Header.Set("X-KB-Admin", testAdminToken)
-		r.Header.Set("Origin", srv.URL)
-		r.Method = http.MethodPost
-		r.Body = nopCloser(`{"dbPath":` + strconv.Quote(filepath.Join(notDir, "index.db")) + `}`)
-	})
-	if status != http.StatusBadRequest {
-		t.Fatalf("status = %d：%s", status, raw)
+	c, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if body["error"].(map[string]any)["code"] != "dir_not_writable" {
-		t.Errorf("code = %v", body["error"])
+	want := filepath.Join(dir, DBFileName)
+	if c.DBPath != want {
+		t.Errorf("DBPath = %q，想要 %q", c.DBPath, want)
+	}
+	if _, err := os.Stat(other); !os.IsNotExist(err) {
+		t.Error("不该去那边建任何东西")
 	}
 }
 

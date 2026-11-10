@@ -15,10 +15,9 @@ const step = ref(0)
 const busy = ref(false)
 const error = ref('')
 
-// 第 1 步：记录文件位置
-const defaultDB = props.status.dbPath
-const dbCustom = ref(false)
-const dbPath = ref(props.status.dbPath)
+// 第 1 步：只是告诉用户东西放在哪儿，**不给选**。
+// 让用户挑一个缓存文件的位置，收益为零、困惑很大；真要搬走就把整个目录复制过去。
+const configDir = computed(() => props.status.configDir)
 
 // 第 2 步：端口与访问范围
 const port = ref(props.status.port)
@@ -33,7 +32,6 @@ const addError = ref('')
 const existing = computed(() => props.status.kbs ?? [])
 
 const canNext = computed(() => {
-  if (step.value === 0) return dbCustom.value ? dbPath.value.trim().length > 0 : true
   if (step.value === 1) return port.value > 0 && port.value < 65536
   // 第三步不强制有知识库：万一个目录都加不上（权限不对之类），用户也得能走完向导，
   // 否则就卡死在这一屏，连设置页都进不去。
@@ -67,13 +65,12 @@ async function finish() {
   try {
     // 顺序有讲究：
     //  1. 知识库在这之前已经建好了（第 3 步的弹窗里点“添加”就建了）；
-    //  2. 这里再把端口、范围、记录文件位置和「向导已完成」一起提交。
+    //  2. 这里再把端口、范围和「向导已完成」一起提交。
     //     如果端口真的换了，服务会当场上线新地址、旧地址立刻失效，
     //     所以这一次提交必须是**最后一次**对旧地址的调用，之后直接跳过去。
     const resp = await api.settings({
       port: port.value,
       host: lan.value ? '0.0.0.0' : '127.0.0.1',
-      dbPath: dbCustom.value ? dbPath.value.trim() : undefined,
       requireToken: lan.value ? true : undefined,
       setupCompleted: true,
     })
@@ -149,29 +146,12 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
         <h2 class="font-medium">{{ s.wizard.step1 }}</h2>
         <p class="muted text-sm mt-1">{{ s.wizard.step1Hint }}</p>
 
-        <div class="mt-4 space-y-2">
-          <label class="radio-row" :data-checked="!dbCustom">
-            <input v-model="dbCustom" type="radio" :value="false" class="mt-1" />
-            <span class="min-w-0">
-              <span class="block">{{ s.wizard.defaultLocation }}</span>
-              <span class="block mono muted truncate">{{ defaultDB }}</span>
-            </span>
-          </label>
-
-          <label class="radio-row" :data-checked="dbCustom">
-            <input v-model="dbCustom" type="radio" :value="true" class="mt-1" />
-            <span class="min-w-0 flex-1">
-              <span class="block">{{ s.wizard.customLocation }}</span>
-              <input
-                v-if="dbCustom"
-                v-model="dbPath"
-                class="input w-full mt-2 mono"
-                spellcheck="false"
-                placeholder="D:\kb-lite\index.db"
-              />
-            </span>
-          </label>
+        <div class="card p-3 mt-4">
+          <p class="text-xs muted">{{ s.wizard.configDirLabel }}</p>
+          <p class="mono text-xs mt-1 break-all">{{ configDir }}</p>
         </div>
+
+        <p class="note mt-3 text-sm">{{ s.wizard.configDirNote }}</p>
       </section>
 
       <section v-else-if="step === 1" class="mt-6">

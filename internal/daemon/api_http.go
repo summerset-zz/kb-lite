@@ -219,7 +219,7 @@ func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimSpace(r.URL.Query().Get("path"))
 	resp, err := ListDirs(p)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", "这个目录打不开："+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid_path", fsErrorMessage(err))
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -257,10 +257,11 @@ func (h *Handler) handleFSMkdir(w http.ResponseWriter, r *http.Request) {
 
 // handleSettings 是 `POST /api/settings`。
 //
-// 三种改动的生效方式不一样（docs/04）：
+// 两种改动的生效方式不一样（docs/04）：
 //   - 访问密码：当场生效；
-//   - 端口与绑定地址：**当场重开监听**（Reload），响应里回 moved 与新端口，UI 据此跳转；
-//   - 记录文件位置：仍要重启（换库要重开 SQLite，不在这一版里做）。
+//   - 端口与绑定地址：**当场重开监听**（Reload），响应里回 moved 与新端口，UI 据此跳转。
+//
+// 没有“换记录文件位置”这回事：它永远住在配置目录里（ADR-018）。
 func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	var patch SettingsPatch
 	if !decodeJSON(w, r, &patch) {
@@ -279,9 +280,6 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	effective := after.EffectiveRequireToken()
 	h.SetRequireToken(effective)
 
-	// 换位置要重启：它是缓存，重开 store 属于另一件事。
-	restart = restart && after.DBPath != before.DBPath
-
 	moved := false
 	if after.Host != before.Host || after.Port != before.Port {
 		if h.opts.Reload == nil {
@@ -294,6 +292,8 @@ func (h *Handler) handleSettings(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			moved = true
+			// 已经当场重开成功，就不需要用户再重启了。
+			restart = false
 			// 端口被占时自动 +1，写回配置，否则下次启动还是撞同一个端口。
 			if actual != after.Port {
 				_ = h.mgr.UpdateConfig(func(c *Config) error {
@@ -404,8 +404,6 @@ func writeSettingsError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid_port", "端口要在 1 到 65535 之间。")
 	case errors.Is(err, ErrPortInUse):
 		writeError(w, http.StatusBadRequest, "port_in_use", "这个端口被别的软件占用了，换一个。")
-	case errors.Is(err, ErrDirNotWrite):
-		writeError(w, http.StatusBadRequest, "dir_not_writable", "这个目录不能写入，换一个位置试试。")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 	}

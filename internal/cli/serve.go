@@ -24,7 +24,6 @@ func runServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	portFlag := fs.Int("port", 0, "")
 	host := fs.String("host", "", "")
-	dbPath := fs.String("db", "", "")
 	noDB := fs.Bool("no-db", false, "")
 	openBrowserFlag := fs.Bool("open", false, "")
 	force := fs.Bool("force", false, "")
@@ -55,9 +54,6 @@ func runServe(args []string) int {
 	}
 	if *host != "" {
 		cfg.Host = *host
-	}
-	if *dbPath != "" {
-		cfg.DBPath = *dbPath
 	}
 
 	// 单实例（docs/06 第二节）：已经有 kb-lite 在跑就**只把界面打开**，然后退出自己。

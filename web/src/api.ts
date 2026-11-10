@@ -125,7 +125,6 @@ export const api = {
   settings: (patch: {
     port?: number
     host?: string
-    dbPath?: string
     requireToken?: boolean
     setupCompleted?: boolean
   }) =>

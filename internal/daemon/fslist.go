@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -135,6 +136,22 @@ func CreateDir(parent, name string) (string, error) {
 		return "", err
 	}
 	return full, nil
+}
+
+// fsErrorMessage 把系统错误翻成一句用户能懂的话。
+//
+// 权限问题必须单独说：它的解决办法和“路径打错了”完全不同。用户看到
+// `Access is denied.` 只会以为程序坏了；告诉他“可能是另一个用户的文件”，
+// 他才知道该干什么。
+func fsErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, fs.ErrPermission):
+		return "没有访问权限。可能是这个文件夹属于另一个用户，或者被系统保护着（比如 Windows 的系统目录）。"
+	case errors.Is(err, fs.ErrNotExist):
+		return "这个位置不存在，可能被删掉或者改名了。"
+	default:
+		return "这个位置打不开：" + err.Error()
+	}
 }
 
 // startList 是「手上还没有路径」时的起点。

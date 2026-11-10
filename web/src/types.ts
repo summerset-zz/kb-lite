@@ -23,6 +23,9 @@ export interface KB {
 export interface Status {
   version: string
   port: number
+  /** 配置目录：config.json、index.db 与两个 token 文件都在这里。 */
+  configDir: string
+  /** 记录文件的位置，永远等于 <configDir>/index.db。 */
   dbPath: string
   dbMode: 'sqlite' | 'memory'
   setupCompleted: boolean

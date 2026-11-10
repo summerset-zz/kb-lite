@@ -7,8 +7,12 @@ package daemon
 type Status struct {
 	Version string `json:"version"`
 	Port    int    `json:"port"`
-	DBPath  string `json:"dbPath"`
-	DBMode  string `json:"dbMode"` // sqlite | memory
+	// ConfigDir 是配置目录。config.json、index.db 与两个 token 文件都在这里，
+	// 界面要能把它显示给用户看（换用户、搬目录、报障靠它）。
+	ConfigDir string `json:"configDir"`
+	// DBPath 是记录文件的位置，永远等于 <ConfigDir>/index.db。
+	DBPath string `json:"dbPath"`
+	DBMode string `json:"dbMode"` // sqlite | memory
 	// SetupCompleted 为 false 时 UI 进向导。
 	SetupCompleted bool `json:"setupCompleted"`
 	// LanExposed 表示绑了非回环地址，UI 要挂红条。
@@ -51,6 +55,7 @@ func (m *Manager) Status(port int, dbMode string, requireToken bool) Status {
 	st := Status{
 		Version:        Version,
 		Port:           port,
+		ConfigDir:      m.opts.ConfigDir,
 		DBPath:         m.cfg.DBPath,
 		DBMode:         dbMode,
 		SetupCompleted: m.cfg.SetupCompleted,

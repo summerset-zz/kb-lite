@@ -6,7 +6,6 @@ import type { StartupInfo, Status, UpdateInfo } from '../types'
 import { useStatus } from '../useStatus'
 import { useToast } from '../toast'
 import ModalShell from '../components/ModalShell.vue'
-import DirPicker from '../components/DirPicker.vue'
 
 const props = defineProps<{ status: Status }>()
 const { refresh } = useStatus()
@@ -17,7 +16,6 @@ const toast = useToast()
 const port = ref(props.status.port)
 const lan = ref(props.status.lanExposed)
 const requireToken = ref(props.status.requireToken)
-const dbPath = ref(props.status.dbPath)
 
 const busy = ref('')
 const error = ref('')
@@ -27,24 +25,6 @@ const movedTo = ref('')
 // ---- 访问密码 ----
 const token = ref('')
 const copied = ref('')
-const pickerOpen = ref(false)
-
-// 记录文件是个**文件**，选择器给的是**文件夹**：两边差一个文件名。
-// 直接拿文件夹当 dbPath 传下去的话，探测可写那一步建出来的是单个文件路径之外的目录，
-// 最后 SQLite 打不开。
-function dirOf(p: string): string {
-  const cut = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
-  return cut > 0 ? p.slice(0, cut) : p
-}
-
-function onPickDBDir(dir: string) {
-  const name = dbPath.value.split(/[\\/]/).filter(Boolean).pop() ?? 'index.db'
-  const sep = dir.includes('\\') ? '\\' : '/'
-  dbPath.value = dir.replace(/[\\/]+$/, '') + sep + name
-  pickerOpen.value = false
-}
-
-const dbFileName = computed(() => dbPath.value.split(/[\\/]/).filter(Boolean).pop() ?? 'index.db')
 
 const pasteText = computed(
   () => `我的知识库服务在 ${location.protocol}//${location.hostname}:${props.status.port}，访问密码是 ${token.value}`,
@@ -140,7 +120,6 @@ async function save() {
     const resp = await api.settings({
       port: port.value,
       host: lan.value ? '0.0.0.0' : '127.0.0.1',
-      dbPath: dbPath.value.trim() || undefined,
       requireToken: lan.value ? true : requireToken.value,
     })
     requireToken.value = lan.value ? true : requireToken.value
@@ -242,17 +221,17 @@ function setTheme(v: string) {
     <h1 class="font-medium mb-3">{{ s.settings.title }}</h1>
 
     <section class="card p-4 space-y-4">
-      <!-- 记录文件 -->
+      <!-- 配置与缓存都住在这个目录里，**不给改**：让用户挑一个缓存文件的位置，
+           收益为零，困惑很大。要整个搬走就把这个目录复制到新机器。 -->
       <div>
-        <p class="text-sm font-medium">{{ s.settings.dbPath }}</p>
-        <p class="muted text-xs mt-0.5">{{ s.settings.dbPathHint }}</p>
-        <div class="flex items-center gap-2 mt-2 flex-wrap">
-          <input v-model="dbPath" class="input flex-1 min-w-0 mono" spellcheck="false" />
-          <button class="btn btn-sm" type="button" @click="pickerOpen = true">换个位置</button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="text-sm font-medium flex-1">{{ s.settings.location }}</p>
+          <button class="btn btn-xs" type="button" @click="copy(status.configDir, 'dir')">
+            {{ copied === 'dir' ? s.common.copied : s.settings.locationCopy }}
+          </button>
         </div>
-        <p class="muted text-xs mt-1">
-          {{ s.settings.dbPickHint(dbFileName) }}
-        </p>
+        <p class="muted text-xs mt-0.5">{{ s.settings.locationHint }}</p>
+        <p class="mono text-xs mt-2 break-all">{{ status.configDir }}</p>
       </div>
 
       <!-- 端口 -->
@@ -427,9 +406,6 @@ function setTheme(v: string) {
         </button>
       </div>
     </section>
-
-    <!-- 记录文件位置：选择器自己就是弹窗，这里只管把选中的文件夹拼回文件名。 -->
-    <DirPicker :open="pickerOpen" :start="dirOf(dbPath)" @pick="onPickDBDir" @cancel="pickerOpen = false" />
 
     <ModalShell :open="quitOpen" :title="s.settings.quit" @close="quitOpen = false">
       <p class="text-sm">{{ s.settings.quitHint }}</p>

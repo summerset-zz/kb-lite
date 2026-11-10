@@ -761,12 +761,13 @@ func runToken(args []string) int {
 
 // ---- settings / stop ----
 
-// runSettings 查看或修改设置。改端口 / 绑定地址 / 记录文件位置要重启才生效。
+// runSettings 查看或修改设置。改端口 / 绑定地址要重启才生效。
+//
+// 没有“换记录文件位置”：它永远和 config.json 放在一起（ADR-018）。
 func runSettings(args []string) int {
 	fs := flag.NewFlagSet("settings", flag.ContinueOnError)
 	port := fs.Int("port", 0, "")
 	host := fs.String("host", "", "")
-	dbPath := fs.String("db", "", "")
 	password := fs.String("password", "", "on | off")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
@@ -784,9 +785,6 @@ func runSettings(args []string) int {
 	}
 	if *host != "" {
 		patch["host"] = *host
-	}
-	if *dbPath != "" {
-		patch["dbPath"] = *dbPath
 	}
 	if *password != "" {
 		switch *password {
@@ -806,6 +804,7 @@ func runSettings(args []string) int {
 		var st struct {
 			Port         int    `json:"port"`
 			RequireToken bool   `json:"requireToken"`
+			ConfigDir    string `json:"configDir"`
 			DBPath       string `json:"dbPath"`
 			DBMode       string `json:"dbMode"`
 		}
@@ -822,6 +821,7 @@ func runSettings(args []string) int {
 			fmt.Printf("绑定地址    %s\n", cfg.Host)
 		}
 		fmt.Printf("访问密码    %s\n", pw)
+		fmt.Printf("配置目录    %s\n", st.ConfigDir)
 		fmt.Printf("记录文件    %s（%s）\n", st.DBPath, st.DBMode)
 		return exitOK
 	}

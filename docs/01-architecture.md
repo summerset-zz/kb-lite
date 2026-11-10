@@ -60,13 +60,17 @@ desktop/         Tauri 壳（可选产物，见 06）
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/kb-lite/` |
 
 ```
-config.json      # 端口、绑定地址、数据库路径、KB 列表、读取面是否要密码
+config.json      # 端口、绑定地址、KB 列表、读取面是否要密码、向导是否完成
 read-token       # 读取面凭据，32 字节随机 hex，0600（仅 requireToken 打开时有意义）
 api-token        # 管理面凭据，同上；UI 靠 HttpOnly cookie 拿，界面上不显示（ADR-015）
-index.db         # SQLite（默认位置，用户可改）
+index.db         # SQLite 缓存。**永远和 config.json 放在一起**（ADR-018）
 lock             # pid + 实际端口，给单实例唤醒用
 logs/daemon.log  # 轮转，10 MB × 3
 ```
+
+**记录文件的位置不是配置项**，它永远等于 `<配置目录>/index.db`。让用户挑缓存放哪里，
+收益为零、困惑极大（为一个本质上可删的文件提供输入框），还会造出“config 指向 A、缓存落在 B”
+这种畸形的部署。要换地方就换配置目录，整包搬走。老配置里写了别处也不报错，读进来直接忽略。
 
 `config.json`：
 

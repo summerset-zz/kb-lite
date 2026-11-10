@@ -57,10 +57,11 @@ export const s = {
 
   wizard: {
     title: '先做三件事',
-    step1: '记录文件放在哪',
-    step1Hint: '这里只存索引缓存。删掉它不会丢失你的知识库文件，重建一下就好。',
-    defaultLocation: '默认位置',
-    customLocation: '换个位置',
+    step1: '东西放在哪儿',
+    step1Hint: '设置和缓存都放在同一个目录里，不用你选。',
+    configDirLabel: '这个目录：',
+    configDirNote:
+      '你的资料不在这个目录里，它只是 kb-lite 自己的东西（设置 + 一个随时可以删的缓存）。换一个电脑用户登录会看不到这份设置，但资料一个字节都不会动。',
     step2: '端口与访问范围',
     port: '端口',
     portHint: '端口一般不用改。被别的软件占用时会自动换一个。',
@@ -162,8 +163,10 @@ export const s = {
 
   settings: {
     title: '设置',
-    dbPath: '记录文件位置',    dbPathHint: '它只是个索引缓存，换位置会在新位置重新整理。',
-    dbPickHint: (name: string) => `点“换个位置”选文件夹，记录文件仍然叫 ${name}。`,
+    location: '资料放在哪',
+    locationHint:
+      '设置和缓存都在这个目录里。想整个搬走，复制这个目录就行；缓存（index.db）删了不影响你的资料，重新整理就有。',
+    locationCopy: '复制路径',
     port: '端口',
     whoCanOpen: '谁可以打开',
     password: '访问密码',

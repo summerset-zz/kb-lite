@@ -50,7 +50,8 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
 {
   "version": "0.3.0",
   "port": 7331,
-  "dbPath": "C:\\Users\\me\\AppData\\Roaming\\kb-lite\\index.db",
+  "configDir": "C:\\Users\\me\\AppData\\Roaming\\kb-lite",   // config.json / index.db / token 都在这
+  "dbPath": "C:\\Users\\me\\AppData\\Roaming\\kb-lite\\index.db", // 只读展示，不可改
   "dbMode": "sqlite",              // "sqlite" | "memory"
   "setupCompleted": true,
   "lanExposed": false,
@@ -217,26 +218,28 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 - `dev` 为真表示当前跑的是 `-dev` 构建；这种情况下数字版本一样时不说“有更新”。
 
 ### `POST /api/settings`
-改端口 / 绑定地址 / 数据库位置 / 读 token 开关。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
+改端口 / 绑定地址 / 读 token 开关 / 向导是否完成。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
 
 ```jsonc
-{ "port": 7400, "host": "127.0.0.1", "dbPath": "D:\\kb\\index.db", "requireToken": true }
+{ "port": 7400, "host": "127.0.0.1", "requireToken": true, "setupCompleted": true }
 ```
+
+**没有 `dbPath`**：记录文件永远是 `<配置目录>/index.db`（ADR-018）。旧客户端带上这个字段
+不报错，它只会被忽略。
 
 字段都可选，没传的不动。行为：
 
-- 先校验（端口真 bind 一次 / 目录真建一个临时文件再删 / `host` 非回环时把 `requireToken` 改成 `true`），
-  失败 `400` 并指向具体字段（`invalid_port` / `port_in_use` / `dir_not_writable`）。**校验全部通过才落盘**，
+- 先校验（端口真 bind 一次 / `host` 非回环时把 `requireToken` 改成 `true`），
+  失败 `400` 并指向具体字段（`invalid_port` / `port_in_use`）。**校验全部通过才落盘**，
   中途失败等于什么都没改。
 - 落盘 `config.json`（原子写）；
 - **访问密码当场生效**：响应回来后 `/kb/*` 就按新开关判定；
-- **端口与绑定地址当场重开监听**（"热重开"）：先把新地址真的绑上，成功了再关旧的。
+- **端口与绑定地址当场重开监听**（“热重开”）：先把新地址真的绑上，成功了再关旧的。
   绑不上就回 `500 reload_failed`，配置回滚，旧地址继续服务 —— 否则用户连「改回去」都做不到。
   响应里回 `"moved": true` 与 `effective.port`，UI 据此提示新地址并跳过去。
   端口被占时沿用「自动 +1」并写回 `config.json`。
-- **记录文件位置仍需重启**（换库要重开 SQLite，不在这一版里），这是唯一的 `restartRequired` 来源。
-
-> ⚠️ 不能“保存时直接把 `index.db` 建了”。Windows 上它正被 daemon 持有。探写权限要用临时文件。
+- `restartRequired` 只在“热重开不可用”（没有 Reload 回调的嵌入场景）时为真。
+  能当场重开的都当场做掉，用户不该为一个能自动完成的事被要求重启。
 
 ### `POST /api/auth/token`
 

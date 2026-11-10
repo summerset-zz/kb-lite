@@ -15,14 +15,14 @@ import (
 var (
 	ErrInvalidPort = errors.New("端口必须在 1 到 65535 之间")
 	ErrPortInUse   = errors.New("这个端口被别的软件占用了")
-	ErrDirNotWrite = errors.New("这个目录不能写入")
 )
 
 // SettingsPatch 是 `POST /api/settings` 的请求体，字段都可选，没传的不动。
+//
+// 这里**没有**记录文件位置：它永远和 config.json 放在一起（ADR-018）。
 type SettingsPatch struct {
 	Port         *int    `json:"port"`
 	Host         *string `json:"host"`
-	DBPath       *string `json:"dbPath"`
 	RequireToken *bool   `json:"requireToken"`
 	// SetupCompleted 由向导最后一步置真；设置页的“重新运行向导”置假。
 	SetupCompleted *bool `json:"setupCompleted"`
@@ -31,7 +31,8 @@ type SettingsPatch struct {
 // ApplySettings 落盘设置，并告诉调用方还有哪些改动要重启才生效。
 //
 // 访问密码可以**立刻生效**（Handler 里是原子开关）；端口与绑定地址由 Handler 当场
-// 重开监听（`HandlerOptions.Reload`）。只有记录文件位置得重启，因为换库要重开 SQLite。
+// 重开监听（`HandlerOptions.Reload`）。这一份里没有“换记录文件位置”这种事了：
+// 缓存永远住在配置目录里。
 func (m *Manager) ApplySettings(p SettingsPatch) (restart bool, err error) {
 	if p.Port != nil && (*p.Port < 1 || *p.Port > 65535) {
 		return false, ErrInvalidPort
@@ -62,12 +63,6 @@ func (m *Manager) ApplySettings(p SettingsPatch) (restart bool, err error) {
 			next.Host = h
 			portChanged = true // 监听地址变了也要重开
 		}
-		if p.DBPath != nil && *p.DBPath != next.DBPath {
-			if err := probeWritable(*p.DBPath); err != nil {
-				return err
-			}
-			next.DBPath = *p.DBPath
-		}
 		if p.RequireToken != nil {
 			next.RequireToken = *p.RequireToken
 		}
@@ -90,7 +85,7 @@ func (m *Manager) ApplySettings(p SettingsPatch) (restart bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	return portChanged || (p.DBPath != nil), nil
+	return portChanged, nil
 }
 
 // portFree 试绑一次，能绑就说明没被占。
@@ -104,28 +99,6 @@ func portFree(host string, port int) bool {
 	}
 	_ = ln.Close()
 	return true
-}
-
-// probeWritable 在目标目录建一个临时文件写完就删。
-//
-// **不能**真的建 `index.db`：Windows 上正被 daemon 拿着（docs/06 的保存校验第 2 步）。
-func probeWritable(dbPath string) error {
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return ErrDirNotWrite
-	}
-	f, err := os.CreateTemp(dir, ".kb-lite-probe-*")
-	if err != nil {
-		return ErrDirNotWrite
-	}
-	name := f.Name()
-	_, werr := f.WriteString("ok")
-	cerr := f.Close()
-	_ = os.Remove(name)
-	if werr != nil || cerr != nil {
-		return ErrDirNotWrite
-	}
-	return nil
 }
 
 // ---- 安装 SKILL ----
