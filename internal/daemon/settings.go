@@ -134,28 +134,88 @@ func skillRoots() (dsh, claude string, err error) {
 
 const agentsHomeDirName = ".agents"
 
+// skillDir 返回某个 (kind, target) 要写到哪个目录。
+//
+// 两个目标目录互不兼容：Claude Code 只认 `~/.claude/skills`，不读 `~/.agents/skills`。
+// 两者用的是**同一套文件格式**（SKILL.md + frontmatter），所以要各装一份，不是共享一份。
+func skillDir(kind, target string) (root, dirName string, err error) {
+	if kind != "read" && kind != "authoring" {
+		return "", "", errors.New("不认识的 skill 种类：" + kind)
+	}
+	dshRoot, claudeRoot, err := skillRoots()
+	if err != nil {
+		return "", "", err
+	}
+	switch target {
+	case "dsh":
+		root = dshRoot
+	case "claude":
+		root = claudeRoot
+	default:
+		return "", "", errors.New("不认识的安装目标：" + target)
+	}
+	dirName = "kb-lite"
+	if kind == "authoring" {
+		dirName = "kb-lite-authoring"
+	}
+	return root, dirName, nil
+}
+
+// SkillFilePath 是某个 (kind, target) 对应的 SKILL.md 路径（不碰磁盘）。
+func SkillFilePath(kind, target string) (string, error) {
+	root, dirName, err := skillDir(kind, target)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, dirName, "SKILL.md"), nil
+}
+
+// SkillState 是一个安装目标的现状。
+//
+// `UpToDate` 比的是**文件内容与现在应该装的那份是否逐字相同**：
+// 地址、密码、说明书本身只要变了一样，装过的那份就过时了。
+type SkillState struct {
+	Kind      string `json:"kind"`
+	Target    string `json:"target"`
+	Path      string `json:"path"`
+	Installed bool   `json:"installed"`
+	UpToDate  bool   `json:"upToDate"`
+	// ModifiedAt 是文件的修改时间（毫秒），没装就是 0。
+	ModifiedAt int64 `json:"modifiedAt"`
+}
+
+// SkillStateFor 看一个目标现在是什么情况。expected 是此刻应该装的内容。
+func SkillStateFor(kind, target, expected string) (SkillState, error) {
+	p, err := SkillFilePath(kind, target)
+	if err != nil {
+		return SkillState{}, err
+	}
+	st := SkillState{Kind: kind, Target: target, Path: p}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return st, nil // 没装不是错
+		}
+		return st, err
+	}
+	st.Installed = true
+	st.UpToDate = string(b) == expected
+	if info, err := os.Stat(p); err == nil {
+		st.ModifiedAt = info.ModTime().UnixMilli()
+	}
+	return st, nil
+}
+
 // InstallSkill 把一份渲染好的文本写到 agent 的 skill 目录。
 //
 // 写入前把旧文件备份成 `.bak`，失败就还原 —— 用户手上那份 SKILL 可能是他改过的，
 // 不能因为一次写入失败就没了。
 func InstallSkill(kind, target, content string) (SkillTarget, error) {
-	dshRoot, claudeRoot, err := skillRoots()
+	root, dirName, err := skillDir(kind, target)
 	if err != nil {
 		return SkillTarget{}, err
 	}
-	var root, dir string
-	switch target {
-	case "dsh":
-		root, dir = dshRoot, "kb-lite"
-	case "claude":
-		root, dir = claudeRoot, "kb-lite"
-	default:
-		return SkillTarget{}, errors.New("不认识的安装目标：" + target)
-	}
-	if kind == "authoring" {
-		dir = "kb-lite-authoring"
-	}
-	return writeSkillFile(root, dir, content)
+	return writeSkillFile(root, dirName, content)
 }
 
 func writeSkillFile(root, dirName, content string) (SkillTarget, error) {

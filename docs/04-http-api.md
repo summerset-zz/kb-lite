@@ -236,6 +236,22 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
   这是“这次没查到”，不是接口错误，界面照常显示一行提示即可。
 - `dev` 为真表示当前跑的是 `-dev` 构建；这种情况下数字版本一样时不说“有更新”。
 
+### `GET /api/skill/status`
+
+四个安装目标（两份说明书 × 两个目录）的**磁盘现状**。界面用它在每一行显示“未安装 / 已是最新 / 有更新”。
+
+```jsonc
+{ "ok": true, "items": [
+  { "kind": "read", "target": "dsh", "path": "C:\\Users\\me\\.agents\\skills\\kb-lite\\SKILL.md",
+    "installed": true, "upToDate": false, "modifiedAt": 1762690000000 }
+] }
+```
+
+- `upToDate` 比的是**文件内容与此刻应该装的那份是否逐字相同**：地址、密码、说明书本身变一样就算过时。
+- 读不了的目标直接跳过（不把整个列表拖垮）。
+- 两个目录互不兼容：Claude Code 只读 `~/.claude/skills`，不读 `~/.agents/skills`；
+  格式相同，所以要各装一份。
+
 ### `POST /api/settings`
 改端口 / 绑定地址 / 读 token 开关 / 向导是否完成。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
 

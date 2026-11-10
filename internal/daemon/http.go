@@ -160,6 +160,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
 	mux.HandleFunc("POST /api/auth/token", h.handleAuthToken)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
+	mux.HandleFunc("GET /api/skill/status", h.handleSkillStatus)
 	mux.HandleFunc("POST /api/pause", func(w http.ResponseWriter, r *http.Request) {
 		h.handlePaused(w, r, true)
 	})

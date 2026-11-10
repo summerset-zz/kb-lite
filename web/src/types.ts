@@ -55,6 +55,17 @@ export interface FsList {
   underHome?: boolean
 }
 
+/** 安装目标的现状（`GET /api/skill/status`）。 */
+export interface SkillState {
+  kind: 'read' | 'authoring'
+  target: 'dsh' | 'claude'
+  path: string
+  installed: boolean
+  /** 已装的內容与此刻应该装的是否逐字相同。 */
+  upToDate: boolean
+  modifiedAt: number
+}
+
 /** 添加目录之前的探测结果（`GET /api/fs/probe`）。 */
 export interface FsProbe {
   path: string

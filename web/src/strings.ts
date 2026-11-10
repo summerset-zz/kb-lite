@@ -266,20 +266,38 @@ export const s = {
     stalePromptHint: '把这句话发给 AI，它就会重新取一份：',
     stalePrompt: (base: string) => `kb-lite 的服务地址是 ${base}，请重新读一遍它的 SKILL 再说。`,
     staleHow:
-      '想彻底更新，就去「知识库」页点一次「更新检索 SKILL」。两个都做一遍最稳。',
+      '想彻底更新，就去「知识库」页的「让 AI 用起来」，把带「有更新」的那几行右边的按钮点一遍。',
   },
 
   skill: {
-    installRead: '安装检索 SKILL',
-    installReadHint: '让 AI 能查这个知识库',
-    installAuthoring: '安装整理 SKILL',
-    installAuthoringHint: '让 AI 把你的文件整理进知识库',
-    // 这句话必须说准：我们只能把文件写进去，能不能认到是 AI 工具自己的事。
-    afterInstall:
-      '装好后要重启一次 AI 工具才生效：它只在启动时读那个目录。不想重启，就把下面这段话直接贴给它，这一次也能用。',
+    readTitle: '检索 SKILL',
+    readDesc:
+      '让 AI 能查这个知识库：说明书里有地址、密码，也写清了“先搜再读、一次把多个说法一起搜”的用法。',
+    writeTitle: '整理 SKILL',
+    writeDesc:
+      '让 AI 把 docx、pdf、网页整理成能被检索的 markdown，并写进你指定的知识库目录。',
+
+    howToAsk: '怎么跟 AI 说',
+    targetAgents: '通用目录',
+    targetClaude: 'Claude Code',
+
+    stateMissing: '未安装',
+    stateFresh: (t: string) => (t ? `已是最新 · ${t}` : '已是最新'),
+    stateStale: '有更新',
+
+    install: '安装',
+    update: '更新',
+    reinstall: '重装',
+    installedToast: (path: string) => `已写入 ${path}`,
+
     whenStale:
-      '什么时候要重装：服务地址、访问密码变了之后。知识库增删改名不用重装 —— 说明书里不写库列表了，AI 每次自己取。',
-    installed: '已安装到',
+      '服务地址或访问密码变了之后，这里会显示「有更新」；知识库增删改名不用管，说明书里不写库列表。',
+    staleHint: '有目标落后了：服务地址或访问密码改过，点那一行右边的「更新」重装一次。',
+    // Claude Code 会盯着目录（官方文档明确写了 live change detection），
+    // 但它在会话启动时才知道有哪些顶层目录。所以第一次装要提一句。
+    reloadHint:
+      'Claude Code 会自己发现目录里的改动；如果那个目录是这次才建的，它可能要先运行 /reload-skills。其他 AI 工具不一定，保险起见重开一次会话。',
+
     promptReadHint: '把这句话发给 AI，它就会来查这个知识库',
     promptRead: '用 kb-lite 去我的知识库里查一下……',
     promptAuthoringHint: '把这句话发给另一个 AI，让它把文件整理成能进知识库的样子',

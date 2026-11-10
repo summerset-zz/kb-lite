@@ -366,6 +366,47 @@ type skillInstallReq struct {
 // handleSkillInstall 是 `POST /api/skill/install`。
 //
 // 两份 SKILL 分开装（ADR-017），落在不同的目录里，互不覆盖。
+// skillBase 是这个请求对应的对外地址。
+func (h *Handler) skillBase(r *http.Request) string {
+	if r.Host != "" {
+		return "http://" + r.Host
+	}
+	return "http://127.0.0.1:" + strconv.Itoa(h.Port())
+}
+
+// skillContent 渲染一份要装到用户目录的文档。安装与状态检查共用它，
+// 否则“装完立刻显示已是最新”会靠运气。
+func (h *Handler) skillContent(kind, base string) string {
+	tok := ""
+	if h.requireToken.Load() {
+		tok = h.ReadToken()
+	}
+	if kind == "authoring" {
+		return RenderAuthoringText(base, tok)
+	}
+	return RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
+}
+
+// handleSkillStatus 是 `GET /api/skill/status`：装没装、是不是最新的。
+//
+// 界面上“安装”的反馈以前离按钮很远（写在下面一段里），而且不装完不知道装没装过。
+// 这个接口把四个目标（两种说明书 × 两个目录）的现状一次性给它。
+func (h *Handler) handleSkillStatus(w http.ResponseWriter, r *http.Request) {
+	base := h.skillBase(r)
+	items := make([]SkillState, 0, 4)
+	for _, kind := range []string{"read", "authoring"} {
+		content := h.skillContent(kind, base)
+		for _, target := range []string{"dsh", "claude"} {
+			st, err := SkillStateFor(kind, target, content)
+			if err != nil {
+				continue // 读不了就当没装，不把整个列表拖垮
+			}
+			items = append(items, st)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "items": items})
+}
+
 func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 	var req skillInstallReq
 	if !decodeJSON(w, r, &req) {
@@ -382,10 +423,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		req.Targets = []string{"dsh"}
 	}
 
-	base := "http://" + r.Host
-	if r.Host == "" {
-		base = "http://127.0.0.1:" + strconv.Itoa(h.Port())
-	}
+	base := h.skillBase(r)
 	var content string
 	if req.Kind == "authoring" {
 		tok := ""
