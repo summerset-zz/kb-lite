@@ -63,11 +63,19 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
       "enabled": true, "state": "ready",       // ready | indexing | error | disabled
       "entries": 128, "sections": 743, "bytes": 2201398,
       "lastIndexedAt": 1762473600000, "warnings": 2,
+      "notIndexed": 2,                            // 这次真的没进知识库的文件数
       "progress": { "done": 120, "total": 530 }   // 仅 state == indexing 时出现
     }
   ]
 }
 ```
+
+`notIndexed` 与 `warnings` 不是一回事：
+
+- `notIndexed` 只数**真的没进去**的：整篇跳过的（`draft` / 空正文）、文件过大、编码认不出、读不了。
+  界面那一行拿它说“N 篇文档未成功入库”。
+- `warnings` 是所有告警条数，包含 frontmatter 不合法（正文已救回来、**已收录**）与缓存写入失败。
+  拿它当“漏了几篇”用会骗人。
 
 **要 admin 凭据**（见上面两级认证）。读取面是否要凭据看 `requireToken`：关着时 `/kb/*` 与 `/skill.md` 直接可用。
 
@@ -108,8 +116,26 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 - 已有任务在跑 → `409 {"error":{"code":"indexing","progress":{"done":120,"total":530}}}`。
 
 进度查询：`GET /api/kbs/{name}/index` → `{"state":"indexing","progress":{"done":120,"total":530},"startedAt":…}`。
-
 **索引期间照常提供旧数据**（读到的是上一次的结果），`/api/status` 里的 `state` 是 `indexing`。调用方可以据此判断数据新鲜度。
+
+### `GET /api/kbs/{name}/report`
+
+与读取面的 `GET /kb/{name}/report` **同一份数据**，走管理面。
+
+为什么要有两条：读取面在开了访问密码之后要带读 token，而界面手上只有管理凭据（ADR-015），
+自己发一定 401。两份实现会漂，所以服务端只做“找库 + 调同一个渲染”。
+
+```jsonc
+{ "ok": true, "name": "我的笔记", "entries": 128, "sections": 743, "bytes": 2201398,
+  "updatedAt": 1762473600000,
+  "skippedTotal": 2, "warningTotal": 1,
+  "skipped": [ { "path": "drafts/草稿.md", "reason": "frontmatter" } ],
+  "warnings": [ { "kind": "frontmatter", "message": "ops/runbook.md: …" } ] }
+```
+
+- 两张名单各封顶 100 条，总数看 `skippedTotal` / `warningTotal`。
+- 建了但还没整理过的库回 `200` 与空报告（`entries: 0`、没有 `updatedAt`），**不是 404**：
+  界面上那一行的「查看入库日志」照样能点，弹窗里说“还没整理过”。
 
 ### `GET /api/fs/list?path=<绝对路径>`
 
@@ -158,6 +184,20 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 - 父目录必须存在且是目录；同名已存在 → `409 already_exists`；父目录不在了 → `400 invalid_path`；
   系统层面拒绝的（`CON`、`PRN` 这类保留名、没权限）→ `400 mkdir_failed` 并把系统的话带回去。
 - **这是管理面上唯一会写磁盘的接口**，而且只建空目录（ADR-004 的例外）：不写文件、不改内容、不删东西。
+
+### `POST /api/fs/reveal`
+
+用系统的文件管理器打开一个位置（知识库根目录、装好的 SKILL 文件）。
+
+```jsonc
+{ "path": "D:\\notes" }   // → { "ok": true }
+```
+
+- 传目录就打开它本身，传文件就在它所在的目录里选中它。
+- Windows 用 `explorer`（文件走 `/select,`），macOS 用 `open -R`，其余平台 `xdg-open`。
+- **只开窗口，不写任何文件**，连 ADR-004 的例外都不需要。
+- 不等它退出：`explorer.exe` 即使成功也常回退出码 1。
+- 路径不存在 → `400 invalid_path`。不要假装成功：用户点了“打开文件位置”却什么都没出现，比一句话糟。
 
 ### `POST /api/search`
 
@@ -211,13 +251,27 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 - 写进去的命令是 `"<exe>" serve`，**不带 `--open`**：开机自动弹浏览器属于打扰，托盘会自己出现。
 - `command` 要原样展示给用户：这条路到底启动了什么，用户有权知道。
 
-### `POST /api/shortcut`
+### `GET /api/shortcut` · `POST /api/shortcut`
 
-在桌面建一个 `KBLite.lnk`（目标是 `"<exe>" serve --open`），返回它的路径。
+`POST` 在桌面建一个 `KBLite.lnk`（目标是 `"<exe>" serve --open`）。`GET` 读它现在指向谁。
+
+```jsonc
+// GET 与 POST 的响应同形
+{ "ok": true, "supported": true, "exists": true,
+  "path": "C:\\Users\\me\\Desktop\\KBLite.lnk",
+  "target": "C:\\Tools\\KBLite\\kb-lite.exe", "arguments": "serve --open",
+  "mismatch": false,    // 指向另一份 kb-lite（换了新版本之后很常见）
+  "missing": false }    // 指向的文件已经不在了
+```
 
 - 桌面目录向系统要（`[Environment]::GetFolderPath('Desktop')`），**不能拼 `~/Desktop`**：
   OneDrive 接管桌面后真实路径会变，写死家目录会建到用户看不见的地方。
-- 只做 Windows。建 `.lnk` 要走 COM，借用系统自带的 PowerShell 比手搓 `IShellLink` 稳。
+- 只做 Windows。建 `.lnk`、读 `.lnk` 都要走 COM，借用系统自带的 PowerShell 比手搓 `IShellLink` 稳。
+- **为什么要读回来**：用户升级最常见的动作是“把新的 exe 解压到另一个文件夹”，
+  桌面那个 `.lnk` 还指着旧的，双击跑起来的是旧版本。`mismatch` 与 `missing` 让界面能直说。
+- 比较 target 与当前 exe 时不能只比字符串：Windows 的 8.3 短名（`C:\Users\HUIJI-~1\…`）
+  与长名是同一个文件。先各自 realpath 再比（`samePath`）。开机自启那条也一样。
+- 两边走同一个出口：**重写一次**。不提供“改路径”这种半截能力。
 
 ### `GET /api/update`
 
@@ -364,6 +418,56 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 - 两份名单各封顶 100 条，`*Total` 是真的总数：一个几万篇的库真可能整片跳过。
 - `updatedAt` 是这次索引建好的时间。**取两次对比它**，就能知道用户到底点了没点「更新」。
 - 只读接口，不需要管理凭据：列的都是这个知识库自己的文件，agent 本来就读得到。
+
+### `POST /kb/{name}/check`
+
+写文件**之前**问一句“这样写会不会被收录”。整理侧的 AI 用它自查，不用等用户点一次更新才发现漏了。
+
+```jsonc
+// 请求
+{ "items": [
+  { "path": "docs/部署.md",           // 拟定的写入位置，相对 KB 根目录
+    "head": "---\ntitle: 部署\n---\n\n# 部署\n\n把服务发到线上。",  // 文件开头，≤ 2 KB
+    "chars": 8210,                    // 整个文件的字符数
+    "bytes": 18234 }                  // 整个文件的字节数
+] }
+
+// 响应
+{ "ok": true, "items": [
+  { "path": "docs/部署.md", "included": true,
+    "title": "部署", "summary": "把服务发布到线上的一组步骤。",
+    "warnings": [ { "kind": "frontmatter", "message": "不是合法 YAML，已按行宽松解析" } ] },
+  { "path": "drafts/x.md", "included": false, "reason": "ignored",
+    "message": "这个位置在你给这个知识库设的忽略列表里。" }
+] }
+```
+
+- **纯计算，不读磁盘**。`path` 是拟定位置，文件不需要存在，父目录也不需要建。
+  这条是刻意的：否则这个接口就是给 agent 开的任意文件探测器（docs/07）。
+- **不收全文**。一篇 10 KB 的中文 markdown 约 5k token，而决定能不能入库的只有路径规则、
+  frontmatter、正文是否为空、文件大小。`head` 给 2 KB 就够，多给只是浪费 token。
+- `included` 为假时 `reason` 取值固定：
+
+  | `reason` | 含义 |
+  |---|---|
+  | `outside` | 路径不合法（绝对路径、`..`、空） |
+  | `ignored` | 落在会被跳过的目录（`.git`、`node_modules`、以 `.` 开头的目录）或这个库的 `ignore` 里 |
+  | `not-matching` | 扩展名不在 `include` 里（默认只收 `.md`、`.markdown`、`.txt`） |
+  | `too-large` | 超过单文件上限 |
+  | `draft` | frontmatter 要求整篇跳过（`draft` / `publish: false` / `kb_ignore`） |
+  | `empty` | 去掉 frontmatter 之后没有正文 |
+  | `head-too-short` | 开头被截断，判不准。可能是截在 frontmatter 里，也可能是正文在 2 KB 之后 |
+
+- `head-too-short` 必须存在。开头是 `---` 却看不到闭合时，绝不能当成“没有 frontmatter”放过去，
+  那会把一份 `draft: true` 的草稿判成可收录。
+- `title` 与 `summary` 是**服务端算的**，这是这条接口最值钱的地方：`docs/api/README.md`
+  的标题会变成 `api`，写之前就能看见。
+- `warnings[].kind`：`frontmatter`（能收录，但写法有问题）、`replacement-char`（文本里有 U+FFFD，
+  多是从 PDF / docx 转的时候丢了字）。两者都**不影响**收录。
+- 上限：一次 20 条，单条 `head` 2 KB。超出回 `400 too_many_items` / `400 head_too_long`。
+- 判定与真正入库走同一套代码（位置规则用扫描的同一组函数，切片用 `core.BuildEntry`）。
+  两处只要有一处不同，就会出现“检查说行、点更新却被跳过”，那比没有这条接口更糟。
+- 读取面：要密码、暂停时 503、库被关闭时 `503 kb_disabled`。关闭的库写进去也不会被收录，答案没有意义。
 
 ### `GET /kb/{name}/search`
 
@@ -550,7 +654,6 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 **token 是条件渲染的**：访问密码关着时，`{{AUTH}}` 渲染成空串，文档里一句鉴权头都不留。
 不能只把值换成空而留下 `-H "Authorization: Bearer "`，那会让 agent 以为自己的头写错了。
 同理还有 `{{#if MANIFEST}}` 这类能力门控，没实现的东西一律不出现在文档里。
-
 **必须与实现同源**：这段文本里描述的参数名、返回字段、`note` 文案，都要从同一份常量生成，不许手写第二份。加了参数忘了改 skill，比没有 skill 更糟。
 
 ## `GET /authoring.md`
@@ -561,6 +664,13 @@ UI 的完成页与设置页各给一个“复制”按钮，取的就是这两�
 
 它同样带 `{{BASE_URL}}` 与 `{{AUTH}}`：整理完得知道**写到哪个目录**（`GET /kb` 的 `rootPath`），
 而那是要请求服务的。
+
+**能力门控与 `/skill.md` 是同一套**：`{{#if CHECK}}` 包着「写之前先问一句」那一段，
+路由不在 `HandlerOptions.Features` 里时整段消失，连编号都不留空。
+现在的默认功能表是 `{"manifest": true, "check": true}`。
+
+安装与「有没有更新」的判断共用同一个渲染函数（`skillContent`）：只要一边漏了 features，
+用户装完就会立刻看到「有更新」。所以两份模板里加接口时，**两处都要传递 features**。
 
 ## 其它
 
