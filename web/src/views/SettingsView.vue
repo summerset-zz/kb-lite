@@ -134,7 +134,10 @@ async function save() {
     } else {
       toast.ok(s.common.saved)
     }
+    // 地址或密码变了：装好的那份说明书就要重装，AI 也得知道一声。
+    const addrChanged = resp.moved || resp.effective.requireToken !== props.status.requireToken
     await refresh()
+    if (addrChanged) openStale()
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
   } finally {
@@ -149,6 +152,8 @@ async function rotate() {
     const resp = await api.authToken('rotate')
     token.value = resp.token
     toast.ok(s.settings.rotated)
+    // 密码换了，装好的说明书里那把就是旧的。
+    openStale()
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : s.errors.generic
   } finally {
@@ -168,25 +173,7 @@ async function rerunWizard() {
   }
 }
 
-async function togglePause() {
-  busy.value = 'pause'
-  error.value = ''
-  try {
-    const next = !props.status.paused
-    await api.setPaused(next)
-    if (next) {
-      toast.warn(s.settings.paused)
-    } else {
-      toast.ok(s.settings.resumed)
-    }
-    await refresh()
-  } catch (e) {
-    error.value = e instanceof ApiError ? e.message : s.errors.generic
-  } finally {
-    busy.value = ''
-  }
-}
-
+// 启动 / 停止已经搬到顶栏（全站状态就该一直在），设置页不再重复一份。
 const quitOpen = ref(false)
 async function quit() {
   busy.value = 'quit'
@@ -201,18 +188,16 @@ async function quit() {
   }
 }
 
-// ---- 配色 ----
-const theme = ref(localStorage.getItem('kb-lite-theme') ?? 'auto')
-function setTheme(v: string) {
-  theme.value = v
-  const root = document.documentElement
-  if (v === 'auto') {
-    delete root.dataset.theme
-    localStorage.removeItem('kb-lite-theme')
-  } else {
-    root.dataset.theme = v
-    localStorage.setItem('kb-lite-theme', v)
-  }
+// ---- SKILL 过期提示 ----
+//
+// 装好的 SKILL.md 里写着服务地址和访问密码。改了这两个东西，用户手上那份就不对了，
+// 而 AI 不会自己发现。所以改完当场追一句，并给一句可以直接贴给 AI 的话。
+const staleOpen = ref(false)
+const staleBase = ref('')
+
+function openStale() {
+  staleBase.value = `http://${location.hostname}:${port.value}`
+  staleOpen.value = true
 }
 </script>
 
@@ -363,35 +348,6 @@ function setTheme(v: string) {
     <!-- 其他 -->
     <section class="card p-4 mt-4 space-y-4">
       <div>
-        <p class="text-sm font-medium">{{ s.settings.service }}</p>
-        <p class="muted text-xs mt-0.5">{{ s.settings.pauseHint }}</p>
-        <button
-          class="btn btn-sm mt-2"
-          type="button"
-          :disabled="busy !== ''"
-          @click="togglePause"
-        >
-          {{ status.paused ? s.settings.resume : s.settings.pause }}
-        </button>
-      </div>
-
-      <div>
-        <p class="text-sm font-medium">{{ s.settings.theme }}</p>
-        <div class="flex gap-2 mt-2">
-          <button
-            v-for="opt in ['auto', 'light', 'dark'] as const"
-            :key="opt"
-            class="btn btn-sm"
-            :class="{ 'btn-primary': theme === opt }"
-            type="button"
-            @click="setTheme(opt)"
-          >
-            {{ opt === 'auto' ? s.settings.themeAuto : opt === 'light' ? s.settings.themeLight : s.settings.themeDark }}
-          </button>
-        </div>
-      </div>
-
-      <div>
         <p class="text-sm font-medium">{{ s.settings.rerunWizard }}</p>
         <button class="btn btn-sm mt-2" type="button" :disabled="busy !== ''" @click="rerunWizard">
           {{ s.settings.rerunWizard }}
@@ -406,6 +362,28 @@ function setTheme(v: string) {
         </button>
       </div>
     </section>
+
+    <!-- SKILL 过期：地址或密码变了，装好的那份说明书就不对了 -->
+    <ModalShell :open="staleOpen" :title="s.settings.staleTitle" @close="staleOpen = false">
+      <p class="text-sm">{{ s.settings.staleBody }}</p>
+      <p class="muted text-xs mt-3">{{ s.settings.stalePromptHint }}</p>
+      <div class="card p-2 mt-1 flex items-start gap-2">
+        <pre class="preview flex-1 min-w-0">{{ s.settings.stalePrompt(staleBase) }}</pre>
+        <button
+          class="btn btn-xs shrink-0"
+          type="button"
+          @click="copy(s.settings.stalePrompt(staleBase), 'stale')"
+        >
+          {{ copied === 'stale' ? s.common.copied : s.common.copy }}
+        </button>
+      </div>
+      <p class="muted text-xs mt-3">{{ s.settings.staleHow }}</p>
+      <template #footer>
+        <button class="btn btn-primary" type="button" @click="staleOpen = false">
+          {{ s.common.ok }}
+        </button>
+      </template>
+    </ModalShell>
 
     <ModalShell :open="quitOpen" :title="s.settings.quit" @close="quitOpen = false">
       <p class="text-sm">{{ s.settings.quitHint }}</p>

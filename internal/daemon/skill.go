@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -17,9 +16,19 @@ var authoringTemplate string
 
 // RenderAuthoringText 返回“教 AI 怎么写”的那份说明。
 //
+// 它也要带服务地址与鉴权：整理完得知道**写到哪个目录**（`GET /kb` 的 rootPath），
+// 而那是要请求服务的。不带地址的版本只能让用户自己拿主意，那是把难题还给他。
+//
 // 与 /skill.md **分成两份**（ADR-017）：合成一份后，agent 在只想查东西的时候
 // 也会照写作规范去动用户的文件。这里没有占位符，原样返回。
-func RenderAuthoringText() string { return authoringTemplate }
+func RenderAuthoringText(base, token string) string {
+	auth, authNote := authValues(token)
+	return renderSkill(authoringTemplate, map[string]string{
+		"BASE_URL":  base,
+		"AUTH":      auth,
+		"AUTH_NOTE": authNote,
+	}, nil)
+}
 
 // DefaultFeatures 是「这个版本已经实现了哪些可选接口」。
 //
@@ -57,29 +66,42 @@ func (h *Handler) handleSkill(w http.ResponseWriter, r *http.Request) {
 // 与 `/skill.md` 平级、分开取（ADR-017）：UI 的完成页与设置页各给一个“复制”按钮。
 // 它同样属于读取面，开了访问密码就要带密码。
 func (h *Handler) handleAuthoring(w http.ResponseWriter, r *http.Request) {
+	base := "http://" + r.Host
+	if r.Host == "" {
+		base = "http://127.0.0.1:" + strconv.Itoa(h.Port())
+	}
+	tok := ""
+	if h.requireToken.Load() {
+		tok = h.ReadToken()
+	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(RenderAuthoringText()))
+	_, _ = w.Write([]byte(RenderAuthoringText(base, tok)))
 }
 
 // RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。
 //
+// `idx` 已经用不上了（库列表改成让 agent 自己 `GET /kb` 取），但保留参数：
+// 调用方本来就拿着 Index，保留它免得以后要加回一点点动态信息时再改一圈。
+//
 // token 为空表示读取面不需要访问密码。这时 `{{AUTH}}` 渲染成空、`{{AUTH_NOTE}}`
 // 换成一句“不需要密码”。**不能**留一个空的 `Bearer `：agent 会以为自己的头写错了。
 func RenderSkillText(idx *Index, base, token string, features map[string]bool) string {
-	auth := ""
-	authNote := "这个服务没有启用访问密码，直接请求即可。"
-	if token != "" {
-		auth = `-H "Authorization: Bearer ` + token + `" `
-		authNote = fmt.Sprintf("每个请求都要带 `-H \"Authorization: Bearer %s\"`", token)
-	}
+	auth, authNote := authValues(token)
 	return renderSkill(skillTemplate, map[string]string{
 		"BASE_URL":  base,
 		"AUTH":      auth,
 		"AUTH_NOTE": authNote,
-		"KB_LIST":   kbListText(idx),
-		"KB_SAMPLE": url.PathEscape(sampleKBName(idx)),
 	}, features)
+}
+
+// authValues 把 token 翻成两个占位符的值。两份文档共用，口径必须一致。
+func authValues(token string) (auth, authNote string) {
+	if token == "" {
+		return "", "这个服务没有启用访问密码，直接请求即可。"
+	}
+	return `-H "Authorization: Bearer ` + token + `" `,
+		fmt.Sprintf("每个请求都要带 `-H \"Authorization: Bearer %s\"`", token)
 }
 
 // renderSkill 先处理 `{{#if X}}…{{/if}}`，再替换 `{{KEY}}`。

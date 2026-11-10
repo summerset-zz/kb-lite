@@ -41,7 +41,11 @@ func tail(s string, n int) string {
 }
 
 func TestRenderSkillGatesManifest(t *testing.T) {
-	values := map[string]string{"BASE_URL": "http://127.0.0.1:7331", "TOKEN": "t", "KB_LIST": "- 甲", "KB_SAMPLE": "甲"}
+	values := map[string]string{
+		"BASE_URL":  "http://127.0.0.1:7331",
+		"AUTH":      "",
+		"AUTH_NOTE": "不需要密码",
+	}
 
 	on := renderSkill(skillTemplate, values, map[string]bool{"manifest": true})
 	if !strings.Contains(on, "/manifest?budget=2000") {
@@ -58,10 +62,30 @@ func TestRenderSkillGatesManifest(t *testing.T) {
 	}
 
 	// 占位符必须全部被替换掉（条件块里的也算）。
-	for _, leftover := range []string{"{{TOKEN}}", "{{BASE_URL}}", "{{KB_LIST}}", "{{KB_SAMPLE}}", "{{#if", "{{/if}}"} {
+	for _, leftover := range []string{"{{BASE_URL}}", "{{AUTH}}", "{{AUTH_NOTE}}", "{{#if", "{{/if}}"} {
 		if strings.Contains(off, leftover) {
 			t.Errorf("渲染后仍残留 %s", leftover)
 		}
+	}
+}
+
+// 说明书里不该再出现写死的库列表：那是装到用户目录里的一份文件，不会随配置更新。
+func TestSkillTextHasNoKBList(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.md"), "正文\n")
+	// 名字故意取一个不会出现在样例里的：样例里有“我的笔记”，不能用它判断。
+	mgr := NewManager(&Config{KBs: []KB{{ID: "k1", Name: "独一无二的库名", RootPath: root, Enabled: true}}},
+		BuildOptions{Workers: 1})
+	if err := mgr.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+
+	text := RenderSkillText(mgr.Index(), "http://127.0.0.1:7331", "", DefaultFeatures)
+	if strings.Contains(text, "独一无二的库名") {
+		t.Error("说明书里不该写具体知识库的名字：让 agent 每次 GET /kb 自己取")
+	}
+	if !strings.Contains(text, "/kb\"") {
+		t.Error("说明书里应当告诉 agent 先 GET /kb")
 	}
 }
 

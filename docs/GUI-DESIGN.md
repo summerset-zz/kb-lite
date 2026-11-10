@@ -90,3 +90,8 @@ Hybrid Humanoid including features below: - product manager - designer - front-e
 ## 其他
 - 支持明暗两套配色。理论上系统配色在开GUI之前就能拿到，别开了之后再JS拿，会闪一下。
 关于“让Agent通过文件生成条目”要不要随着SKILL更新？
+
+
+# GUI调整（2026-11-10）
+本章基于`b8ca754`的功能和GUI做出调整，包括文案、功能布局等。
+

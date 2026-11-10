@@ -388,7 +388,11 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	var content string
 	if req.Kind == "authoring" {
-		content = RenderAuthoringText()
+		tok := ""
+		if h.requireToken.Load() {
+			tok = h.ReadToken()
+		}
+		content = RenderAuthoringText(base, tok)
 	} else {
 		tok := ""
 		if h.requireToken.Load() {

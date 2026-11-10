@@ -310,13 +310,28 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 
 ---
 
-## 检索接口 `/kb/{name}/*`
+## 检索接口 `/kb/*`
 
 这是给 agent 的部分，**响应大小要斤斤计较**。
 
-> `/kb` 单独一个路径**不是接口**：它返回 `404 kb_name_required` 并指向 `/skill.md`。
-> 不这么拦的话它会落到 UI 兜底，调错地址的 agent 会拿到一页 HTML 以为接口通了。
-> agent 的入口永远是 `/skill.md`。
+> `/kb` 不带名字**是一个接口**（见下一节），不是 404：agent 的第一件事就是问“现在有哪些库”。
+> 早先它回 `404 kb_name_required`，结果说明书只好把库列表写死在正文里，而那份说明书是**装到
+> 用户目录里的文件**，用户加一个库它就过期了。
+
+### `GET /kb`
+
+有哪些知识库，各自在磁盘上对应哪个目录。**库列表不放说明书里**，让 agent 每次自己取。
+
+```jsonc
+{ "ok": true, "kbs": [
+  { "name": "我的笔记", "entries": 128, "sections": 743, "bytes": 2201398,
+    "rootPath": "D:\\notes", "updatedAt": 1762473600000 }
+] }
+```
+
+- 只列**可用**的库（禁用的、整理失败的都在索引快照之外，列出来只会让 agent 白撞 503）。
+- `rootPath` 是给**整理侧**用的：AI 要把文件写进某个知识库时，靠它找目录（见 `authoring.md`）。
+- 它是读取面：`requireToken` 打开时要带密码，暂停时同样 503。
 
 ### `GET /kb/{name}/search`
 
@@ -495,7 +510,10 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 ## `GET /skill.md`
 
 返回给使用侧 agent 的说明文档（`text/markdown`）。内容模板见 [skill-template](./skill-template.md)，
-`{{BASE_URL}}`、`{{AUTH}}`、`{{AUTH_NOTE}}`、`{{KB_LIST}}`、`{{KB_SAMPLE}}` 由服务端在渲染时填入。
+`{{BASE_URL}}`、`{{AUTH}}`、`{{AUTH_NOTE}}` 由服务端在渲染时填入。
+
+**不含库列表**：这份文档会被装到用户目录里，不会随配置更新。库列表让 agent 每次 `GET /kb` 自己取，
+所以用户增删改名知识库之后**不需要**重新安装 SKILL。
 
 **token 是条件渲染的**：访问密码关着时，`{{AUTH}}` 渲染成空串，文档里一句鉴权头都不留。
 不能只把值换成空而留下 `-H "Authorization: Bearer "`，那会让 agent 以为自己的头写错了。
@@ -508,6 +526,9 @@ GET /kb/{name}/entry/{*path}/section?title=帮助:解析器函数#var系列函�
 与 `/skill.md` 平级的第二份说明（`text/markdown`，同样的条件鉴权）：教 AI 把文件**写成**能进知识库的格式。
 两份必须分开（ADR-017）：合成一份，agent 在只想查东西的时候也会去改用户的文件。
 UI 的完成页与设置页各给一个“复制”按钮，取的就是这两份全文。
+
+它同样带 `{{BASE_URL}}` 与 `{{AUTH}}`：整理完得知道**写到哪个目录**（`GET /kb` 的 `rootPath`），
+而那是要请求服务的。
 
 ## 其它
 

@@ -171,7 +171,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /", h.handleUI)
 	// 只有 `/kb`（没有库名）也要拦：否则它会落到 UI 兜底，让调错地址的 agent
 	// 拿到一页 HTML 还以为接口通了。docs/04 没有这个路由，agent 的入口是 /skill.md。
-	mux.HandleFunc("GET /kb", h.handleKBIndexHint)
+	// `/kb` 不带名字：告诉 agent 现在有哪些库、在磁盘上对应哪个目录。
+	// 它同时是“说明书里不再写死库列表”的前提（清单由 agent 每次自己取）。
+	mux.HandleFunc("GET /kb", h.handleKBIndexList)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
@@ -483,13 +485,39 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleKBIndexHint 是 `GET /kb` 的兜底：这里没有接口，只有 `/kb/{name}/...`。
+// handleKBIndexList 是 `GET /kb`：有哪些知识库，它们各自对应磁盘上哪个目录。
 //
-// 存在的理由很实际：地址写错时它会落到 UI 兜底，agent 拿到一页 HTML 会以为“接口通了”，
-// 然后在解析阶段莫名其妙地失败。给一条能读懂的 404 比什么都强。
-func (h *Handler) handleKBIndexHint(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotFound, "kb_name_required",
-		"这里要写知识库名：/kb/{name}/search、/kb/{name}/entry/…。不知道名字就先看 /skill.md。")
+// 为什么要有这个接口：说明书（SKILL.md）是**装到用户目录里的一份文件**，不会随配置更新。
+// 把库列表写进说明书，用户每加一个库它就过期了，还得让他重新装一次。
+// 改成让 agent 每次自己取，说明书就只依赖“地址 + 密码”这两件真正稳定的东西。
+//
+// 只列**可用**的库：禁用的、整理失败的都在索引快照之外，列出来只会让 agent 白撞 503。
+func (h *Handler) handleKBIndexList(w http.ResponseWriter, r *http.Request) {
+	type kbItem struct {
+		Name     string `json:"name"`
+		Entries  int    `json:"entries"`
+		Sections int    `json:"sections"`
+		Bytes    int64  `json:"bytes"`
+		// RootPath 是这些文件在磁盘上的实际位置，整理侧（写文件）要用。
+		RootPath  string `json:"rootPath"`
+		UpdatedAt int64  `json:"updatedAt"`
+	}
+	idx := h.mgr.Index()
+	items := make([]kbItem, 0, len(idx.KBs))
+	for _, kb := range idx.KBs {
+		item := kbItem{
+			Name:     kb.KB.Name,
+			Entries:  len(kb.Entries),
+			Sections: kb.Sections,
+			Bytes:    kb.Bytes,
+			RootPath: kb.KB.RootPath,
+		}
+		if !kb.IndexedAt.IsZero() {
+			item.UpdatedAt = kb.IndexedAt.UnixMilli()
+		}
+		items = append(items, item)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "kbs": items})
 }
 
 // handleStatus 是 `GET /api/status`（docs/04）。

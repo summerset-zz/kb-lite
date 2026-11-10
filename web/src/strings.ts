@@ -18,6 +18,21 @@ export const s = {
     about: '关于',
   },
 
+  // 顶栏的服务状态与配色开关。
+  service: {
+    running: (mode: string) => `运行中（${mode}）`,
+    localMode: '本机可用',
+    lanMode: '局域网可用',
+    stopped: '已停止',
+    start: '启动',
+    stop: '停止',
+    copyAddress: '复制地址',
+    startedToast: '已启动，AI 现在可以查了。',
+    stoppedToast: '已停止，AI 现在连不上。',
+    themeToDark: '换成深色',
+    themeToLight: '换成浅色',
+  },
+
   common: {
     save: '保存',
     cancel: '取消',
@@ -31,6 +46,7 @@ export const s = {
     close: '关闭',
     saved: '已保存。',
     create: '创建',
+    ok: '知道了',
   },
 
   // 目录选择器。它的字以前是写在组件里的，现在也收到这里。
@@ -135,6 +151,7 @@ export const s = {
     entries: '篇',
     sections: '节',
     skipped: '个文件没被收录',
+    actions: '操作',
     enable: '启用',
     disable: '关闭',
     update: '更新',
@@ -215,19 +232,11 @@ export const s = {
     restartNeeded: '记录文件位置要重启 kb-lite 之后才生效。',
     moved: '端口已经换好了，这个页面用的是旧地址。',
     moveNow: '跳到新地址',
-    theme: '配色',
-    themeAuto: '跟随系统',
-    themeLight: '浅色',
-    themeDark: '深色',
     quit: '退出 kb-lite',
     quitHint: '退出后 AI 就连不上了。关掉浏览器标签不算退出。',
-    service: '服务',
     paused: '服务已经暂停，AI 现在连不上。',
-    resumed: '已恢复，AI 现在可以查了。',
     rotated: '新密码已经生效，旧的立刻不能用了。',
     resume: '继续使用',
-    pause: '暂停服务',
-    pauseHint: '暂停只是让 AI 连不上，索引和进程都还在。点“继续使用”立刻恢复，不用重新整理。',
     startup: '开机自启',
     startupOn: '登录后自动跑起来，托盘会出现',
     startupOff: '关掉的话，每次开机要自己双击一次',
@@ -251,6 +260,13 @@ export const s = {
     updateFailed: '这次没查到，可能没联网。稍后再试一次。',
     updateDev: '你用的是开发中的版本，正式版可能还没它新。',
     updateDownload: '去下载',
+    staleTitle: 'SKILL 需要更新',
+    staleBody:
+      '你刚改了服务地址或访问密码，而装好的那份说明书里写的还是旧的。AI 不会自己发现这件事。',
+    stalePromptHint: '把这句话发给 AI，它就会重新取一份：',
+    stalePrompt: (base: string) => `kb-lite 的服务地址是 ${base}，请重新读一遍它的 SKILL 再说。`,
+    staleHow:
+      '想彻底更新，就去「知识库」页点一次「更新检索 SKILL」。两个都做一遍最稳。',
   },
 
   skill: {
@@ -261,11 +277,13 @@ export const s = {
     // 这句话必须说准：我们只能把文件写进去，能不能认到是 AI 工具自己的事。
     afterInstall:
       '装好后要重启一次 AI 工具才生效：它只在启动时读那个目录。不想重启，就把下面这段话直接贴给它，这一次也能用。',
+    whenStale:
+      '什么时候要重装：服务地址、访问密码变了之后。知识库增删改名不用重装 —— 说明书里不写库列表了，AI 每次自己取。',
     installed: '已安装到',
     promptReadHint: '把这句话发给 AI，它就会来查这个知识库',
     promptRead: '用 kb-lite 去我的知识库里查一下……',
     promptAuthoringHint: '把这句话发给另一个 AI，让它把文件整理成能进知识库的样子',
-    promptAuthoring: '用 kb-lite-authoring 把这些文件整理成可以进知识库的格式',
+    promptAuthoring: '用 kb-lite-authoring 把这些文件整理进知识库「<知识库名称>」',
   },
 
   about: {

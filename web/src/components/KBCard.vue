@@ -4,10 +4,16 @@ import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { KB } from '../types'
 import { humanBytes, humanTime } from '../format'
+import { useMenu } from '../menu'
 import ModalShell from './ModalShell.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ kb: KB }>()
 const emit = defineEmits<{ changed: [] }>()
+
+// 同时只开一个、点外面就关（用 details 做不到后两件事）。
+const menu = useMenu()
+const menuId = `kb-${props.kb.id}`
 
 const busy = ref('')
 const error = ref('')
@@ -93,9 +99,17 @@ async function doRemove() {
         <p v-if="kb.state === 'indexing'" class="text-xs muted mt-1">{{ s.kbs.indexingHint }}</p>
       </div>
 
-      <details class="relative shrink-0">
-        <summary class="btn btn-sm list-none">操作 ▾</summary>
-        <div class="card absolute right-0 mt-1 z-10 p-1 w-40">
+      <div class="relative shrink-0">
+        <button
+          class="btn btn-sm"
+          type="button"
+          :disabled="busy !== ''"
+          @click.stop="menu.toggle(menuId)"
+        >
+          {{ s.kbs.actions }}
+          <AppIcon name="chevron-down" class="ml-1 muted" />
+        </button>
+        <div v-if="menu.isOpen(menuId)" class="card absolute right-0 mt-1 z-10 p-1 w-40" @click.stop>
           <button class="menu-item" type="button" :disabled="busy !== ''" @click="update">
             {{ s.kbs.update }}
           </button>
@@ -109,7 +123,7 @@ async function doRemove() {
             class="menu-item"
             type="button"
             :disabled="busy !== ''"
-            @click="renameTo = kb.name; renameOpen = true"
+            @click="menu.close(); renameTo = kb.name; renameOpen = true"
           >
             {{ s.kbs.rename }}
           </button>
@@ -118,12 +132,12 @@ async function doRemove() {
             type="button"
             :style="{ color: 'var(--danger)' }"
             :disabled="busy !== ''"
-            @click="removeOpen = true"
+            @click="menu.close(); removeOpen = true"
           >
             {{ s.kbs.remove }}
           </button>
         </div>
-      </details>
+      </div>
     </div>
 
     <p v-if="kb.error" class="note mt-3 text-sm">{{ s.kbs.failed }}：{{ kb.error }}</p>
@@ -153,9 +167,6 @@ async function doRemove() {
 </template>
 
 <style scoped>
-summary::-webkit-details-marker {
-  display: none;
-}
 .menu-item {
   display: block;
   width: 100%;

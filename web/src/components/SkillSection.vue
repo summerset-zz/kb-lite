@@ -58,6 +58,7 @@ async function install(kind: 'read' | 'authoring') {
     </label>
 
     <p class="muted text-xs mt-2">{{ s.skill.afterInstall }}</p>
+    <p class="muted text-xs mt-1">{{ s.skill.whenStale }}</p>
 
     <div v-if="done" class="mt-2 text-xs">
       <p>{{ s.skill.installed }}：</p>

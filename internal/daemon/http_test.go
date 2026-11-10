@@ -276,8 +276,13 @@ func TestSkillEndpoint(t *testing.T) {
 	if !strings.Contains(string(body), testToken) {
 		t.Error("skill.md 里应当带着 token（用户要整段粘给 agent）")
 	}
-	if !strings.Contains(string(body), "- 笔记（1 篇") {
-		t.Errorf("KB 清单没渲染出来")
+	// 库列表**不**写进说明书：那份文件会被装到用户目录里，不会随配置更新。
+	// 改成让 agent 每次 GET /kb 自己取（见 handleKBIndexList）。
+	if strings.Contains(string(body), "- 笔记（1 篇") {
+		t.Error("说明书里不该再写死库列表")
+	}
+	if !strings.Contains(string(body), "/kb\"") {
+		t.Error("说明书里应当告诉 agent 先 GET /kb")
 	}
 	// v0.2 的 manifest 已经实装，所以文档里必须有它（路由与文档同源，见 skill.go）。
 	if !strings.Contains(string(body), "/manifest") {

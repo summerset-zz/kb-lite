@@ -10,7 +10,25 @@ description: 检索用户本地的 markdown 知识库（只读）。当问题涉
 服务地址：`{{BASE_URL}}`
 鉴权：{{AUTH_NOTE}}
 
-可用的知识库：{{KB_LIST}}
+## 先看有哪些知识库
+
+库列表**不写在这份文档里**。这份文档是装在你目录里的一份文件，不会随用户的操作自动更新；
+把列表写进来，用户每添一个库它就过期了。**每次会话先取一次**：
+
+```bash
+curl -s {{AUTH}}"{{BASE_URL}}/kb"
+```
+
+```json
+{ "ok": true, "kbs": [
+  { "name": "我的笔记", "entries": 128, "sections": 743, "bytes": 2201398,
+    "rootPath": "D:\\notes", "updatedAt": 1762473600000 }
+] }
+```
+
+- `name` 就是下面路径里的 `{知识库}`。中文名字要做 URL 编码（`我的笔记` → `%E6%88%91%E7%9A%84%E7%AC%94%E8%AE%B0`）。
+- 列表为空，说明用户还没添加知识库：告诉用户去 kb-lite 界面上加一个，**不要自己去找目录**。
+- `rootPath` 是这些文件在磁盘上的实际位置。只有要**写**文件时才用它（比如用户让你把资料整理进去）。
 
 ## 三条铁律
 
@@ -22,7 +40,7 @@ description: 检索用户本地的 markdown 知识库（只读）。当问题涉
 
 ```bash
 curl -s {{AUTH}}\
-  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/search?q=部署流程&q=deploy&limit=5"
+  "{{BASE_URL}}/kb/{知识库}/search?q=部署流程&q=deploy&limit=5"
 ```
 
 返回样例：
@@ -52,11 +70,11 @@ curl -s {{AUTH}}\
 ```bash
 # 按编号
 curl -s {{AUTH}}\
-  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?n=3"
+  "{{BASE_URL}}/kb/{知识库}/entry/ops/runbook.md/section?n=3"
 
 # 按标题（从 toc 里直接抄，不用数编号）
 curl -s {{AUTH}}\
-  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/section?title=回滚"
+  "{{BASE_URL}}/kb/{知识库}/entry/ops/runbook.md/section?title=回滚"
 ```
 
 成功时返回 `{ ok: true, sectionTitle, pathText, content, note? }`。
@@ -83,7 +101,7 @@ curl -s {{AUTH}}\
 {{#if MANIFEST}}
 ```bash
 curl -s {{AUTH}}\
-  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/manifest?budget=2000"
+  "{{BASE_URL}}/kb/{知识库}/manifest?budget=2000"
 ```
 
 返回按预算裁剪的分层概览（目录 → 条目），用来决定「先看哪一块」。看到具体条目后再 `search` 或直接 `toc`：
@@ -91,7 +109,7 @@ curl -s {{AUTH}}\
 {{/if}}
 ```bash
 curl -s {{AUTH}}\
-  "{{BASE_URL}}/kb/{{KB_SAMPLE}}/entry/ops/runbook.md/toc"
+  "{{BASE_URL}}/kb/{知识库}/entry/ops/runbook.md/toc"
 ```
 
 ## 不要做的事

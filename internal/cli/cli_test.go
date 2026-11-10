@@ -375,8 +375,13 @@ func TestReadTOCSkillFallBackOffline(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("离线 skill 退出码 = %d：%s", code, out)
 	}
-	if !strings.Contains(out, "- 笔记（1 篇") {
-		t.Errorf("离线 skill 没渲染出 KB 清单：\n%s", out)
+	// 库列表不再写进说明书（它会被装到用户目录，不随配置更新），
+	// 改成让 agent 每次自己取。
+	if strings.Contains(out, "- 笔记（1 篇") {
+		t.Errorf("离线 skill 不该再写死 KB 清单：\n%s", out)
+	}
+	if !strings.Contains(out, "先看有哪些知识库") {
+		t.Errorf("离线 skill 少了“先看有哪些知识库”那段：\n%s", out)
 	}
 }
 
