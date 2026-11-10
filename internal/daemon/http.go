@@ -479,11 +479,68 @@ func (h *Handler) handleKB(w http.ResponseWriter, r *http.Request) {
 		h.handleSearch(w, r, kb)
 	case "manifest":
 		h.handleManifest(w, r, kb)
+	case "report":
+		h.handleKBReport(w, r, kb)
 	case "entry":
 		h.handleEntryFamily(w, r, kb, tail)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "没有这个接口："+seg)
 	}
+}
+
+// handleKBReport 是 `GET /kb/{name}/report`：这次收录的结果，尤其那些没进去的文件与原因。
+//
+// 为什么给 agent 看：整理侧（写文件的 AI）写完要让用户点一次「更新」，然后它得能**自己**
+// 核对结果。没有这个接口时，它只能看到总数变了没，而“有 3 个文件没被收录”的名单只在
+// 管理面（`/api/status` 的 warnings 只是个数）。结果就是用户看着 AI 说“都放进去了”，
+// 实际上漏了几篇，两边都不知道。
+//
+// 只读接口，不需要管理凭据：列的都是这个知识库自己的文件，agent 本来就能读到。
+func (h *Handler) handleKBReport(w http.ResponseWriter, r *http.Request, kb *KBIndex) {
+	type skipped struct {
+		Path   string `json:"path"`
+		Reason string `json:"reason"`
+	}
+	type warning struct {
+		Kind    string `json:"kind"`
+		Message string `json:"message"`
+	}
+
+	// 名单要封顶：一个几万篇的库真有可能整片跳过，别把 agent 的上下文撑爆。
+	const maxEach = 100
+
+	resp := map[string]any{
+		"ok":           true,
+		"name":         kb.KB.Name,
+		"entries":      len(kb.Entries),
+		"sections":     kb.Sections,
+		"bytes":        kb.Bytes,
+		"skippedTotal": len(kb.Skipped),
+		"warningTotal": len(kb.Warnings),
+	}
+	if !kb.IndexedAt.IsZero() {
+		resp["updatedAt"] = kb.IndexedAt.UnixMilli()
+	}
+
+	sk := make([]skipped, 0, len(kb.Skipped))
+	for _, s := range kb.Skipped {
+		if len(sk) >= maxEach {
+			break
+		}
+		sk = append(sk, skipped{Path: s.RelPath, Reason: s.Reason})
+	}
+	resp["skipped"] = sk
+
+	ws := make([]warning, 0, len(kb.Warnings))
+	for _, w2 := range kb.Warnings {
+		if len(ws) >= maxEach {
+			break
+		}
+		ws = append(ws, warning{Kind: w2.Kind, Message: w2.Message})
+	}
+	resp["warnings"] = ws
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleKBIndexList 是 `GET /kb`：有哪些知识库，它们各自对应磁盘上哪个目录。

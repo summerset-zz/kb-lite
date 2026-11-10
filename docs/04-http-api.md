@@ -349,6 +349,22 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 - `rootPath` 是给**整理侧**用的：AI 要把文件写进某个知识库时，靠它找目录（见 `authoring.md`）。
 - 它是读取面：`requireToken` 打开时要带密码，暂停时同样 503。
 
+### `GET /kb/{name}/report`
+
+这次收录的结果，**尤其是没进去的文件与原因**。整理侧（写文件的 AI）用它核对“我写的那几篇进去了吗”。
+
+```jsonc
+{ "ok": true, "name": "我的笔记", "entries": 128, "sections": 743, "bytes": 2201398,
+  "updatedAt": 1762473600000,
+  "skipped": [ { "path": "草稿/坏.md", "reason": "编码认不出来，没有收录" } ],
+  "warnings": [ { "kind": "frontmatter", "message": "a.md: frontmatter 不合法……" } ],
+  "skippedTotal": 1, "warningTotal": 1 }
+```
+
+- 两份名单各封顶 100 条，`*Total` 是真的总数：一个几万篇的库真可能整片跳过。
+- `updatedAt` 是这次索引建好的时间。**取两次对比它**，就能知道用户到底点了没点「更新」。
+- 只读接口，不需要管理凭据：列的都是这个知识库自己的文件，agent 本来就读得到。
+
 ### `GET /kb/{name}/search`
 
 | 参数 | 说明 |
