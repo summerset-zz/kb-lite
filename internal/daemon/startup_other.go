@@ -39,3 +39,20 @@ func SetStartup(exePath string, on bool) error { return errNotSupported }
 
 // DesktopShortcut 在非 Windows 上直接报不支持。
 func DesktopShortcut(exePath string) (string, error) { return "", errNotSupported }
+
+// ShortcutInfo 与 Windows 版同形，只是 Supported 恒为假。
+type ShortcutInfo struct {
+	Supported bool   `json:"supported"`
+	Exists    bool   `json:"exists"`
+	Path      string `json:"path,omitempty"`
+	Target    string `json:"target,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	Mismatch  bool   `json:"mismatch"`
+	Missing   bool   `json:"missing"`
+	Error     string `json:"error,omitempty"`
+}
+
+// ShortcutStatus 在非 Windows 上永远报告“不支持”。
+func ShortcutStatus(exePath string) ShortcutInfo {
+	return ShortcutInfo{Supported: false, Error: errNotSupported.Error()}
+}

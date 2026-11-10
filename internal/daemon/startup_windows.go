@@ -93,8 +93,28 @@ func StartupStatus(exePath string) StartupInfo {
 	}
 	info.Enabled = true
 	info.ExePath = exeFromCommand(value)
-	info.Mismatch = info.ExePath != "" && !strings.EqualFold(info.ExePath, exePath)
+	info.Mismatch = info.ExePath != "" && !samePath(info.ExePath, exePath)
 	return info
+}
+
+// samePath 比较两个 exe 路径是不是同一个文件。
+//
+// 不能只比字符串：Windows 的 8.3 短名（`C:\Users\HUIJI-~1\…`）与长名指的是同一个文件，
+// 注册表与 .lnk 里通常存长名，而 `os.Executable()` 可能拿到短名。
+// 比之前先各自 realpath 一遍（它会把短名展开成长名）。
+func samePath(a, b string) bool {
+	if strings.EqualFold(a, b) {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	if errA == nil {
+		a = ra
+	}
+	if errB == nil {
+		b = rb
+	}
+	return strings.EqualFold(a, b)
 }
 
 // SetStartup 打开或关闭开机自启。
@@ -168,6 +188,25 @@ func isRegNotFound(err error) bool {
 
 // ---- 桌面快捷方式 ----
 
+// ShortcutInfo 是 `GET /api/shortcut` 的响应：桌面那个快捷方式现在指向谁。
+//
+// 为什么要有它：用户换新版本时，常常只是把新的 exe 解压到另一个文件夹，
+// 桌面上那个 .lnk 还指着旧的（或者旧的已经被删掉了）。双击之后跑起来的是旧版本，
+// 用户却以为“新版没生效”。把 target 读出来比一比，界面就能直接说清楚。
+type ShortcutInfo struct {
+	Supported bool `json:"supported"`
+	Exists    bool `json:"exists"`
+	// Path 是 .lnk 的路径（排查时用）。
+	Path      string `json:"path,omitempty"`
+	Target    string `json:"target,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+	// Mismatch 为真表示它指向另一份 kb-lite。
+	Mismatch bool `json:"mismatch"`
+	// Missing 为真表示它指向的文件已经不存在了（旧版本被删了）。
+	Missing bool   `json:"missing"`
+	Error   string `json:"error,omitempty"`
+}
+
 // DesktopShortcut 在桌面建一个 KBLite 的快捷方式，返回它的完整路径。
 func DesktopShortcut(exePath string) (string, error) {
 	desktop, err := desktopDir()
@@ -175,6 +214,56 @@ func DesktopShortcut(exePath string) (string, error) {
 		return "", err
 	}
 	return shortcutIn(desktop, exePath)
+}
+
+// ShortcutStatus 读桌面快捷方式的现状。
+func ShortcutStatus(exePath string) ShortcutInfo {
+	desktop, err := desktopDir()
+	if err != nil {
+		return ShortcutInfo{Supported: true, Error: err.Error()}
+	}
+	return shortcutStatusIn(desktop, exePath)
+}
+
+// shortcutStatusIn 是 ShortcutStatus 的可测试版：目录当参数传。
+func shortcutStatusIn(dir, exePath string) ShortcutInfo {
+	info := ShortcutInfo{Supported: true, Path: filepath.Join(dir, "KBLite.lnk")}
+	if _, err := os.Stat(info.Path); err != nil {
+		return info // 没建过，不是错误
+	}
+	info.Exists = true
+
+	// 读 .lnk 的 target 要走 COM，与创建时同一个理由：不自己手捣 IShellLink。
+	out, err := runPowerShell(strings.Join([]string{
+		"$w = New-Object -ComObject WScript.Shell",
+		"$s = $w.CreateShortcut(" + psQuote(info.Path) + ")",
+		"Write-Output $s.TargetPath",
+		"Write-Output $s.Arguments",
+	}, "; "))
+	if err != nil {
+		info.Error = err.Error()
+		return info
+	}
+	lines := make([]string, 0, 2)
+	for _, ln := range strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n") {
+		if t := strings.TrimSpace(ln); t != "" {
+			lines = append(lines, t)
+		}
+	}
+	if len(lines) > 0 {
+		info.Target = lines[0]
+	}
+	if len(lines) > 1 {
+		info.Arguments = lines[1]
+	}
+	if info.Target == "" {
+		return info
+	}
+	info.Mismatch = !samePath(info.Target, exePath)
+	if _, err := os.Stat(info.Target); err != nil {
+		info.Missing = true
+	}
+	return info
 }
 
 // desktopDir 问系统要桌面目录。

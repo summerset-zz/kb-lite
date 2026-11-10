@@ -19,22 +19,29 @@ var authoringTemplate string
 // 它也要带服务地址与鉴权：整理完得知道**写到哪个目录**（`GET /kb` 的 rootPath），
 // 而那是要请求服务的。不带地址的版本只能让用户自己拿主意，那是把难题还给他。
 //
+// features 与 /skill.md 同一套 `{{#if NAME}}` 门控：没注册的接口不能出现在文档里，
+// 否则 agent 会照着说明一直撞 404（docs/04 末段）。
+//
 // 与 /skill.md **分成两份**（ADR-017）：合成一份后，agent 在只想查东西的时候
-// 也会照写作规范去动用户的文件。这里没有占位符，原样返回。
-func RenderAuthoringText(base, token string) string {
+// 也会照写作规范去动用户的文件。
+func RenderAuthoringText(base, token string, features map[string]bool) string {
 	auth, authNote := authValues(token)
 	return renderSkill(authoringTemplate, map[string]string{
 		"BASE_URL":  base,
 		"AUTH":      auth,
 		"AUTH_NOTE": authNote,
-	}, nil)
+	}, features)
 }
 
 // DefaultFeatures 是「这个版本已经实现了哪些可选接口」。
 //
-// 只有**真的存在路由**的才能出现在 /skill.md 里（docs/04 末段：加了参数忘了改 skill，
+// 只有**真的存在路由**的才能出现在两份说明书里（docs/04 末段：加了参数忘了改 skill，
 // 比没有 skill 更糟；反过来写了不存在的接口，agent 会一直撞 404）。
-var DefaultFeatures = map[string]bool{"manifest": true}
+var DefaultFeatures = map[string]bool{
+	"manifest": true,
+	// `POST /kb/{name}/check`：写之前自查。authoring.md 第 4 步靠它。
+	"check": true,
+}
 
 // handleSkill 渲染 `GET /skill.md`（docs/04 末段 + docs/skill-template.md）。
 //
@@ -76,7 +83,7 @@ func (h *Handler) handleAuthoring(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(RenderAuthoringText(base, tok)))
+	_, _ = w.Write([]byte(RenderAuthoringText(base, tok, h.opts.Features)))
 }
 
 // RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。

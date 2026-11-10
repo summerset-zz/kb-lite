@@ -71,4 +71,45 @@ func TestKBReport(t *testing.T) {
 	if status != http.StatusNotFound {
 		t.Errorf("不存在的库 status = %d，想要 404", status)
 	}
+
+	// 界面走管理面这条（它拿不到读取密码）：同一份数据，字段一致。
+	status, adminBody, raw := adminReq(t, srv, http.MethodGet,
+		"/api/kbs/"+url.PathEscape("报告库")+"/report", nil)
+	if status != http.StatusOK {
+		t.Fatalf("管理面 report status = %d：%s", status, raw)
+	}
+	if adminBody["skippedTotal"].(float64) != 2 || adminBody["entries"].(float64) != 1 {
+		t.Errorf("管理面 report 与读取面不一致：%s", raw)
+	}
+
+	// 建了但还没整理过的库：空报告，不是 404（那一行的「查看入库日志」照样能点）。
+	status, _, raw = adminReq(t, srv, http.MethodPost, "/api/kbs",
+		kbWriteReq{Name: "空报告库", RootPath: t.TempDir()})
+	if status != http.StatusCreated {
+		t.Fatalf("建库失败：%s", raw)
+	}
+	waitIndexed(t, srv, "空报告库")
+	status, emptyBody, raw := adminReq(t, srv, http.MethodGet,
+		"/api/kbs/"+url.PathEscape("空报告库")+"/report", nil)
+	if status != http.StatusOK {
+		t.Fatalf("空库 report status = %d：%s", status, raw)
+	}
+	if emptyBody["skippedTotal"].(float64) != 0 {
+		t.Errorf("空库不该有 skipped：%s", raw)
+	}
+
+	// /api/status 的 notIndexed 要与“真的没进库”对上：
+	// 坏.md（编码）+ 草稿.md（draft）两篇，frontmatter 不规范不算。
+	_, st, raw := adminReq(t, srv, http.MethodGet, "/api/status", nil)
+	kbs, _ := st["kbs"].([]any)
+	var notIndexed float64 = -1
+	for _, it := range kbs {
+		m := it.(map[string]any)
+		if m["name"] == "报告库" {
+			notIndexed = m["notIndexed"].(float64)
+		}
+	}
+	if notIndexed != 2 {
+		t.Errorf("notIndexed = %v，想要 2：%s", notIndexed, raw)
+	}
 }

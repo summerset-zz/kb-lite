@@ -55,6 +55,19 @@ func TestSkillStatus(t *testing.T) {
 	if got["installed"] != true || got["upToDate"] != false {
 		t.Fatalf("内容变了应当报“有更新”：%v", got)
 	}
+
+	// 整理那份走另一条渲染路径（RenderAuthoringText）。它也要与状态检查共用
+	// 同一份 features，否则装完立刻就会显示“有更新”。
+	status, _, raw = adminReq(t, srv, http.MethodPost, "/api/skill/install",
+		skillInstallReq{Kind: "authoring", Targets: []string{"claude"}})
+	if status != http.StatusOK {
+		t.Fatalf("安装整理 SKILL 失败：%s", raw)
+	}
+	items = skillStatusItems(t, srv)
+	got = pickSkill(t, items, "authoring", "claude")
+	if got["installed"] != true || got["upToDate"] != true {
+		t.Fatalf("刚装完的整理 SKILL 应当是最新的（安装与状态检查用的不是同一份渲染？）：%v", got)
+	}
 }
 
 // skillStatusItems 取一次 `/api/skill/status` 的 items。

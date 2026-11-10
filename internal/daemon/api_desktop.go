@@ -49,11 +49,24 @@ func (h *Handler) handleStartup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, StartupStatus(exe))
 }
 
-// handleShortcut 是 `POST /api/shortcut`：在桌面建一个快捷方式。
+// shortcutResp 是快捷方式接口的响应：ok 加现状。
+type shortcutResp struct {
+	OK bool `json:"ok"`
+	ShortcutInfo
+}
+
+// handleShortcut 是 `GET /api/shortcut` 与 `POST /api/shortcut`。
+//
+// GET：桌面那个快捷方式现在指向谁（用户换了新版本之后，它很可能还指着旧的）。
+// POST：建/重建成指向当前这份 exe。
 func (h *Handler) handleShortcut(w http.ResponseWriter, r *http.Request) {
 	exe, err := ExePath()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, shortcutResp{OK: true, ShortcutInfo: ShortcutStatus(exe)})
 		return
 	}
 	path, err := DesktopShortcut(exe)
@@ -61,7 +74,11 @@ func (h *Handler) handleShortcut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "shortcut_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": path})
+	info := ShortcutStatus(exe)
+	if info.Path == "" {
+		info.Path = path
+	}
+	writeJSON(w, http.StatusOK, shortcutResp{OK: true, ShortcutInfo: info})
 }
 
 // handleUpdate 是 `GET /api/update`（docs/04）。

@@ -81,3 +81,59 @@ func TestAutostartCommandQuotesPath(t *testing.T) {
 		t.Errorf("命令不对：%s", got)
 	}
 }
+
+// 换新版本之后，桌面那个 .lnk 很可能还指着旧的 exe。界面要能看出来。
+//
+// 三态：没建过 / 指向现在这份 / 指向另一份（那个文件可能已经不在了）。
+func TestShortcutStatus(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "new", "kb-lite.exe")
+	old := filepath.Join(dir, "old", "kb-lite.exe")
+	for _, p := range []string{current, old} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("exe"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 1. 还没建过：Exists 为假，不是错误。
+	info := shortcutStatusIn(dir, current)
+	if !info.Supported || info.Exists {
+		t.Fatalf("还没建就报存在：%+v", info)
+	}
+
+	// 2. 建一个指向旧版本的：必须报 mismatch。
+	if _, err := shortcutIn(dir, old); err != nil {
+		t.Fatalf("建快捷方式失败：%v", err)
+	}
+	info = shortcutStatusIn(dir, current)
+	if !info.Exists || !info.Mismatch {
+		t.Fatalf("指向旧版本却没报出来：%+v", info)
+	}
+	if info.Missing {
+		t.Errorf("旧文件还在，不该报 missing：%+v", info)
+	}
+
+	// 3. 旧版本被删掉：Missing 要置真（这种情况双击之后还不如报错）。
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+	info = shortcutStatusIn(dir, current)
+	if !info.Missing {
+		t.Errorf("旧文件已经删了，应当报 missing：%+v", info)
+	}
+
+	// 4. 重建成指向当前这份：既不多也不少。
+	if _, err := shortcutIn(dir, current); err != nil {
+		t.Fatalf("重建失败：%v", err)
+	}
+	info = shortcutStatusIn(dir, current)
+	if !info.Exists || info.Mismatch || info.Missing {
+		t.Fatalf("重建之后应当是干净的：%+v", info)
+	}
+	if !strings.Contains(info.Arguments, "serve") {
+		t.Errorf("参数里应当有 serve：%q", info.Arguments)
+	}
+}

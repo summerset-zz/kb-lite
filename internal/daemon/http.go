@@ -148,13 +148,17 @@ func (h *Handler) Routes() http.Handler {
 	})
 	mux.HandleFunc("POST /api/kbs/{name}/reindex", h.handleKBReindex)
 	mux.HandleFunc("GET /api/kbs/{name}/index", h.handleKBIndex)
+	// 与读取面的 `/kb/{name}/report` 同一份数据：界面只有管理凭据（ADR-015）。
+	mux.HandleFunc("GET /api/kbs/{name}/report", h.handleKBReportAdmin)
 	mux.HandleFunc("GET /api/fs/list", h.handleFSList)
 	mux.HandleFunc("GET /api/fs/probe", h.handleFSProbe)
 	mux.HandleFunc("POST /api/fs/mkdir", h.handleFSMkdir)
+	mux.HandleFunc("POST /api/fs/reveal", h.handleFSReveal)
 	mux.HandleFunc("POST /api/search", h.handleAdminSearch)
 	mux.HandleFunc("POST /api/preview", h.handlePreview)
 	mux.HandleFunc("GET /api/startup", h.handleStartup)
 	mux.HandleFunc("POST /api/startup", h.handleStartup)
+	mux.HandleFunc("GET /api/shortcut", h.handleShortcut)
 	mux.HandleFunc("POST /api/shortcut", h.handleShortcut)
 	mux.HandleFunc("GET /api/update", h.handleUpdate)
 	mux.HandleFunc("POST /api/settings", h.handleSettings)
@@ -175,6 +179,9 @@ func (h *Handler) Routes() http.Handler {
 	// `/kb` 不带名字：告诉 agent 现在有哪些库、在磁盘上对应哪个目录。
 	// 它同时是“说明书里不再写死库列表”的前提（清单由 agent 每次自己取）。
 	mux.HandleFunc("GET /kb", h.handleKBIndexList)
+	// 写文件之前问一句“这样写会不会被收录”（docs/04）。放读取面，因为整理侧的 AI
+	// 手里只有读取密码；它是纯计算，不读磁盘。
+	mux.HandleFunc("POST /kb/{name}/check", h.handleKBCheck)
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)

@@ -268,6 +268,109 @@ func (h *Handler) handleFSMkdir(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleFSReveal 是 `POST /api/fs/reveal`：用系统的文件管理器打开一个位置。
+//
+// 只开窗口，不写文件（ADR-004 的例外只给了 mkdir，这条连例外都不算）。
+// 它替用户省掉的是“去资源管理器里一层层找到那个目录”这一步，
+// 而这一步恰恰是最容易让人放弃的。
+func (h *Handler) handleFSReveal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	err := RevealPath(req.Path)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	case errors.Is(err, ErrInvalidRoot):
+		writeError(w, http.StatusBadRequest, "invalid_path", "没给路径。")
+	case errors.Is(err, ErrPathMissing):
+		writeError(w, http.StatusBadRequest, "invalid_path",
+			"这个位置不在了。可能刚被删掉或改了名。")
+	default:
+		writeError(w, http.StatusInternalServerError, "reveal_failed",
+			"没能打开文件管理器："+err.Error())
+	}
+}
+
+// handleKBCheck 是 `POST /kb/{name}/check`：写文件之前问一句“这样写会不会被收录”。
+//
+// 它在读取面上，因为整理侧的 AI 手里只有读取密码。判定用 core 的同一套切片，
+// 位置规则用扫描时的同一组函数，所以不会出现“检查说能收、点更新却被跳过”。
+//
+// 它**不读磁盘**：path 是拟定的写入位置，只做词法检查。这是刻意设计，
+// 否则这条接口就等于给 agent 开了一个任意文件探测器（docs/07）。
+func (h *Handler) handleKBCheck(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	kb, ok := h.mgr.cfgKB(name)
+	if !ok {
+		writeError(w, http.StatusNotFound, "kb_not_found", "没有这个知识库："+name)
+		return
+	}
+	// 关闭的库与其它读取面一致回 503：这时写进去也不会被收录，答案没有意义。
+	if !kb.Enabled {
+		writeError(w, http.StatusServiceUnavailable, "kb_disabled", "这个知识库当前是关闭的。")
+		return
+	}
+
+	var req struct {
+		Items []CheckItem `json:"items"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if len(req.Items) == 0 {
+		writeError(w, http.StatusBadRequest, "empty_items", "至少给一条要检查的内容。")
+		return
+	}
+	if len(req.Items) > MaxCheckItems {
+		writeError(w, http.StatusBadRequest, "too_many_items",
+			"一次最多检查 20 条，分两次发吧。")
+		return
+	}
+	for _, it := range req.Items {
+		if len(it.Head) > MaxCheckHead {
+			writeError(w, http.StatusBadRequest, "head_too_long",
+				"head 最多 2 KB。只发文件开头就够，判定用不到全文。")
+			return
+		}
+	}
+
+	out := make([]CheckResult, 0, len(req.Items))
+	for _, it := range req.Items {
+		out = append(out, CheckContent(kb, h.mgr.opts.MaxFileBytes, it))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "items": out})
+}
+
+// handleKBReportAdmin 是 `GET /api/kbs/{name}/report`：与 `/kb/{name}/report` **同一份数据**。
+//
+// 为什么还要一条管理面路由：读取面在开了访问密码之后要带读 token，
+// 而界面手上只有管理凭据（ADR-015），自己发一定 401。两份实现会漂，
+// 所以这里只做“找库 + 调同一个 handler”。
+//
+// 知识库建了但还没整理过时回空报告，不是 404：界面上那一行的「查看入库日志」照样能点，
+// 弹窗里说“还没整理过”比一个错误码好懂。
+func (h *Handler) handleKBReportAdmin(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if kb, ok := h.mgr.KB(name); ok {
+		h.handleKBReport(w, r, kb)
+		return
+	}
+	if _, exists := h.mgr.cfgKB(name); !exists {
+		writeManagerError(w, ErrKBNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "name": name,
+		"entries": 0, "sections": 0, "bytes": 0,
+		"skippedTotal": 0, "warningTotal": 0,
+		"skipped": []any{}, "warnings": []any{},
+	})
+}
+
 // handleSettings 是 `POST /api/settings`。
 //
 // 两种改动的生效方式不一样（docs/04）：
@@ -382,7 +485,7 @@ func (h *Handler) skillContent(kind, base string) string {
 		tok = h.ReadToken()
 	}
 	if kind == "authoring" {
-		return RenderAuthoringText(base, tok)
+		return RenderAuthoringText(base, tok, h.opts.Features)
 	}
 	return RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
 }
@@ -430,7 +533,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		if h.requireToken.Load() {
 			tok = h.ReadToken()
 		}
-		content = RenderAuthoringText(base, tok)
+		content = RenderAuthoringText(base, tok, h.opts.Features)
 	} else {
 		tok := ""
 		if h.requireToken.Load() {

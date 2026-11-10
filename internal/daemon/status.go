@@ -38,14 +38,19 @@ type StatusKB struct {
 	RootPath string `json:"rootPath"`
 	Enabled  bool   `json:"enabled"`
 	// State 是 ready | indexing | error | disabled。
-	State         string          `json:"state"`
-	Error         string          `json:"error,omitempty"`
-	Entries       int             `json:"entries"`
-	Sections      int             `json:"sections"`
-	Bytes         int64           `json:"bytes"`
-	LastIndexedAt int64           `json:"lastIndexedAt"` // 毫秒；0 = 还没索引过
-	Warnings      int             `json:"warnings"`
-	Progress      *StatusProgress `json:"progress,omitempty"`
+	State         string `json:"state"`
+	Error         string `json:"error,omitempty"`
+	Entries       int    `json:"entries"`
+	Sections      int    `json:"sections"`
+	Bytes         int64  `json:"bytes"`
+	LastIndexedAt int64  `json:"lastIndexedAt"` // 毫秒；0 = 还没索引过
+	Warnings      int    `json:"warnings"`
+	// NotIndexed 是这次**没进知识库**的文件篇数：整篇跳过的（draft / 空正文）
+	// 加上被跳过的（太大 / 编码认不出 / 读不了）。
+	// 界面那一行据此显示“N 篇文档未成功入库”，比一个笼统的告警数字有用：
+	// “frontmatter 写法不规范”不影响收录，混在一起说会让人以为少了文件。
+	NotIndexed int             `json:"notIndexed"`
+	Progress   *StatusProgress `json:"progress,omitempty"`
 }
 
 // StatusProgress 是 reindex 进度（只有 state == indexing 时才有）。
@@ -110,9 +115,30 @@ func (m *Manager) kbStatusOf(kb KB) StatusKB {
 		item.Sections = k.Sections
 		item.Bytes = k.Bytes
 		item.Warnings = len(k.Warnings)
+		item.NotIndexed = countNotIndexed(k)
 		if !k.IndexedAt.IsZero() {
 			item.LastIndexedAt = k.IndexedAt.UnixMilli()
 		}
 	}
 	return item
+}
+
+// countNotIndexed 数一下这次有多少篇**真的没进**知识库。
+//
+// 两类要分开看：
+//   - `Skipped` 里已经有了：draft / 空正文 / 编码认不出来（编码失败**同时**会记一条
+//     WarnEncoding 告警，不能重复算）；
+//   - 只在 `Warnings` 里：文件过大、读不了。这两类连解码都没走到，进不了 Skipped。
+//
+// frontmatter 宽松解析与缓存写入失败都不算：前者内容已经收录了，后者跟文件无关。
+// 这两类仍然出现在 Warnings 里，给「查看入库日志」弹窗用。
+func countNotIndexed(k *KBIndex) int {
+	n := len(k.Skipped)
+	for _, w := range k.Warnings {
+		switch w.Kind {
+		case WarnTooLarge, WarnRead:
+			n++
+		}
+	}
+	return n
 }
