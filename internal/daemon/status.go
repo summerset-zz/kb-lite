@@ -24,6 +24,11 @@ type Status struct {
 	// Paused 为真时给 AI 的那一面（/kb/*、/skill.md）返回 503 paused。
 	Paused bool       `json:"paused"`
 	KBs    []StatusKB `json:"kbs"`
+	// User 是跑这个服务的系统用户名。界面用它说“这个目录只有 <user> 能访问”。
+	User string `json:"user"`
+	// LanAddrs 是本机的局域网 IPv4 地址，用告诉用户局域网上该用哪个地址访问。
+	// 拿不到就是空的，界面退回不带具体地址的说法。
+	LanAddrs []string `json:"lanAddrs,omitempty"`
 }
 
 // StatusKB 是一个知识库的状态。
@@ -63,6 +68,8 @@ func (m *Manager) Status(port int, dbMode string, requireToken bool) Status {
 		RequireToken:   requireToken,
 		AdminAuth:      true,
 		KBs:            m.kbStatuses(),
+		User:           currentUserName(),
+		LanAddrs:       lanAddrs(),
 	}
 	return st
 }

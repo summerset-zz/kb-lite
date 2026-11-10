@@ -1,4 +1,15 @@
 <script setup lang="ts">
+/*
+ * 首次启动向导，四屏：
+ *   0 欢迎 + 东西放在哪（只告知，不给选，见 ADR-018）
+ *   1 端口与接口公开范围
+ *   2 创建知识库（选目录、起名字、添加都在弹窗里完成）
+ *   3 总结（配置项 + 网络 + 知识库 + 装 SKILL）
+ *
+ * 四屏里有三屏是“读一眼、点下一步”，只有第二屏真的改东西。这是故意的：
+ * 目标用户第一次打开时最需要知道的是“它把我东西放哪了”和“别人能不能看到”，
+ * 而不是被要求做一串技术决定。
+ */
 import { computed, ref, watch } from 'vue'
 import { api, ApiError } from '../api'
 import { s } from '../strings'
@@ -6,6 +17,8 @@ import type { Status } from '../types'
 import { useStatus } from '../useStatus'
 import DirPicker from '../components/DirPicker.vue'
 import CopyBlock from '../components/CopyBlock.vue'
+import SkillSection from '../components/SkillSection.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps<{ status: Status }>()
 const emit = defineEmits<{ done: [] }>()
@@ -15,31 +28,47 @@ const step = ref(0)
 const busy = ref(false)
 const error = ref('')
 
-// 第 1 步：只是告诉用户东西放在哪儿，**不给选**。
-// 让用户挑一个缓存文件的位置，收益为零、困惑很大；真要搬走就把整个目录复制过去。
+// ---- 第 0 屏 ----
 const configDir = computed(() => props.status.configDir)
+const copied = ref('')
+async function copy(text: string, key: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    copied.value = key
+    window.setTimeout(() => {
+      if (copied.value === key) copied.value = ''
+    }, 1600)
+  } catch {
+    error.value = '没复制成。手动选中复制吧。'
+  }
+}
 
-// 第 2 步：端口与访问范围
+// ---- 第 1 屏 ----
 const port = ref(props.status.port)
 const lan = ref(props.status.lanExposed)
+const shownPort = computed(() => (port.value > 0 && port.value < 65536 ? port.value : 7331))
+const localUrls = computed(
+  () => `http://127.0.0.1:${shownPort.value} 或 http://localhost:${shownPort.value}`,
+)
+const localUrl = computed(() => `http://127.0.0.1:${shownPort.value}`)
+// 拿不到局域网地址时不编一个：界面上写“这台机器的局域网地址”，让用户自己看。
+const lanUrl = computed(() => {
+  const ip = props.status.lanAddrs?.[0]
+  return ip ? `http://${ip}:${shownPort.value}` : `http://这台机器的局域网地址:${shownPort.value}`
+})
 
-// 第 3 步：知识库。点“添加”开弹窗，在弹窗里选文件夹、起名字、确认 —— 确认完就真的建好了。
+// ---- 第 2 屏 ----
 const pickerOpen = ref(false)
 const addBusy = ref(false)
 const addError = ref('')
-
-// 已经加好的知识库：重新运行向导的人第一件事就是确认它们还在。
 const existing = computed(() => props.status.kbs ?? [])
 
 const canNext = computed(() => {
   if (step.value === 1) return port.value > 0 && port.value < 65536
-  // 第三步不强制有知识库：万一个目录都加不上（权限不对之类），用户也得能走完向导，
-  // 否则就卡死在这一屏，连设置页都进不去。
   return true
 })
 
-// 在弹窗里点“添加这个知识库”之后走这里。失败就留在弹窗里（文案就显示在按钮上方），
-// 用户改个名字就能重试，不用重新选一遍文件夹。
+// 在弹窗里点“添加”之后走这里。失败就留在弹窗里，改个名字就能重试。
 async function addKB(path: string, name: string) {
   addBusy.value = true
   addError.value = ''
@@ -64,7 +93,7 @@ async function finish() {
   error.value = ''
   try {
     // 顺序有讲究：
-    //  1. 知识库在这之前已经建好了（第 3 步的弹窗里点“添加”就建了）；
+    //  1. 知识库在这之前已经建好了（第 2 屏的弹窗里点“添加”就建了）；
     //  2. 这里再把端口、范围和「向导已完成」一起提交。
     //     如果端口真的换了，服务会当场上线新地址、旧地址立刻失效，
     //     所以这一次提交必须是**最后一次**对旧地址的调用，之后直接跳过去。
@@ -76,15 +105,13 @@ async function finish() {
     })
 
     if (resp.moved && resp.effective.port !== Number(location.port)) {
-      const target = `http://${location.hostname}:${resp.effective.port}/`
-      location.replace(target)
+      location.replace(`http://${location.hostname}:${resp.effective.port}/`)
       return
     }
     port.value = resp.effective.port
     await refresh()
-    // 服务端已经收下了，本地也立刻记住“向导做完了”。
-    // 不看紧着的那次刷新结果：万一它拿到旧数据（或者被另一个还在跑的旧实例应答），
-    // 用户刚填完三步又会被扔回第一步。
+    // 服务端已经收下了，本地也立刻记住“向导做完了”：不看紧着那次刷新的结果，
+    // 否则它拿到旧数据就会把刚填完的用户扔回第一屏。
     if (shared.value) shared.value.setupCompleted = true
     step.value = 3
   } catch (e) {
@@ -94,12 +121,13 @@ async function finish() {
   }
 }
 
-// ---- 完成页的四段“给 AI 用的东西”：先露内容，再给复制（docs/06 §5.1 ⁄ §8.5）----
+// ---- 第 3 屏（总结）----
 
+const token = ref('')
 const skillText = ref('')
 const authoringText = ref('')
 
-// 走到完成页才去取两份文档，不然第一步就多两个请求。
+// 走到总结页才去取：两份说明全文 + （开了密码时）当前访问密码。
 watch(step, async (v) => {
   if (v !== 3) return
   try {
@@ -109,10 +137,17 @@ watch(step, async (v) => {
   } catch {
     error.value = '两份说明没读出来。刷新一下页面再试。'
   }
+  if (lan.value) {
+    try {
+      token.value = (await api.authToken('show')).token
+    } catch {
+      token.value = ''
+    }
+  }
 })
 
-const base = computed(() => `http://${location.hostname}:${port.value}`)
-const needsAuth = computed(() => props.status.requireToken || lan.value)
+const base = computed(() => `http://${location.hostname}:${shownPort.value}`)
+const needsAuth = computed(() => lan.value || props.status.requireToken)
 
 const cmdText = computed(
   () =>
@@ -131,7 +166,9 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
   <div class="flex-1">
     <div class="mx-auto max-w-2xl px-4 sm:px-6 py-10">
       <p class="text-xs muted tracking-widest uppercase">KBLite</p>
-      <h1 class="text-xl font-semibold mt-1">{{ s.wizard.title }}</h1>
+      <h1 class="text-xl font-semibold mt-1">
+        {{ step === 0 ? s.wizard.welcome(status.version) : s.wizard.title }}
+      </h1>
 
       <div v-if="step < 3" class="flex items-center gap-2 mt-5">
         <span
@@ -142,18 +179,23 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
         />
       </div>
 
+      <!-- 第 0 屏：欢迎 + 东西放在哪 -->
       <section v-if="step === 0" class="mt-6">
-        <h2 class="font-medium">{{ s.wizard.step1 }}</h2>
-        <p class="muted text-sm mt-1">{{ s.wizard.step1Hint }}</p>
+        <p class="muted text-sm">{{ s.wizard.welcomeHint }}</p>
 
-        <div class="card p-3 mt-4">
-          <p class="text-xs muted">{{ s.wizard.configDirLabel }}</p>
-          <p class="mono text-xs mt-1 break-all">{{ configDir }}</p>
+        <p class="text-sm mt-5">{{ s.wizard.configWhere }}</p>
+        <div class="card p-3 mt-2 flex items-start gap-2">
+          <pre class="preview flex-1 min-w-0">{{ configDir }}</pre>
+          <button class="btn btn-sm shrink-0" type="button" @click="copy(configDir, 'dir')">
+            <AppIcon :name="copied === 'dir' ? 'check' : 'copy'" />
+            <span class="ml-1">{{ copied === 'dir' ? s.common.copied : s.common.copy }}</span>
+          </button>
         </div>
 
-        <p class="note mt-3 text-sm">{{ s.wizard.configDirNote }}</p>
+        <p class="muted text-xs mt-2">{{ s.wizard.configOwner(status.user) }}</p>
       </section>
 
+      <!-- 第 1 屏：端口与接口公开范围 -->
       <section v-else-if="step === 1" class="mt-6">
         <h2 class="font-medium">{{ s.wizard.step2 }}</h2>
 
@@ -167,70 +209,121 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
             min="1"
             max="65535"
           />
-          <span class="muted text-sm">{{ s.wizard.portHint }}</span>
         </div>
+        <p class="muted text-xs mt-1">{{ s.wizard.portHint }}</p>
 
         <p class="text-sm mt-5 mb-2">{{ s.wizard.whoCanOpen }}</p>
         <div class="space-y-2">
           <label class="radio-row" :data-checked="!lan">
             <input v-model="lan" type="radio" :value="false" class="mt-1" />
-            <span>{{ s.wizard.loopback }}</span>
+            <span class="min-w-0">
+              <span class="block">{{ s.wizard.loopback }}</span>
+              <span class="block muted text-xs mt-1">{{ s.wizard.localHint(localUrls) }}</span>
+            </span>
           </label>
+
           <label class="radio-row" :data-checked="lan">
             <input v-model="lan" type="radio" :value="true" class="mt-1" />
-            <span>{{ s.wizard.lan }}</span>
+            <span class="min-w-0">
+              <span class="block">{{ s.wizard.lan }}</span>
+              <span v-if="lan" class="block muted text-xs mt-1">{{ s.wizard.lanHint(lanUrl) }}</span>
+            </span>
           </label>
         </div>
 
-        <p v-if="lan" class="note mt-3 text-sm">{{ s.wizard.lanWarn }}</p>
+        <div v-if="lan" class="note mt-3 text-sm space-y-1">
+          <p>{{ s.wizard.lanVpn }}</p>
+          <p>{{ s.wizard.lanPassword }}</p>
+        </div>
       </section>
 
+      <!-- 第 2 屏：创建知识库 -->
       <section v-else-if="step === 2" class="mt-6">
-        <h2 class="font-medium">{{ existing.length ? s.wizard.step3Again : s.wizard.step3 }}</h2>
-        <p class="muted text-sm mt-1">
-          {{ existing.length ? s.wizard.step3AgainHint : s.wizard.pickFolderHint }}
-        </p>
+        <h2 class="font-medium">{{ s.wizard.step3 }}</h2>
+        <p class="muted text-sm mt-1">{{ s.wizard.step3Hint }}</p>
+        <p class="muted text-sm mt-1">{{ s.wizard.step3HintMore }}</p>
 
-        <ul v-if="existing.length" class="mt-4 space-y-2">
-          <li v-for="kb in existing" :key="kb.id" class="card px-3 py-2">
-            <p class="text-sm">{{ kb.name }}</p>
-            <p class="mono text-xs muted break-all mt-0.5">{{ kb.rootPath }}</p>
-          </li>
-        </ul>
+        <template v-if="existing.length">
+          <p class="text-sm mt-5">{{ s.wizard.existing }}</p>
+          <ul class="mt-2 space-y-2">
+            <li v-for="kb in existing" :key="kb.id" class="card px-3 py-2">
+              <p class="text-sm">{{ kb.name }}</p>
+              <p class="mono text-xs muted break-all mt-0.5">{{ kb.rootPath }}</p>
+            </li>
+          </ul>
+        </template>
+        <p v-else class="note mt-4 text-sm">{{ s.wizard.needKB }}</p>
 
-        <p v-if="!existing.length" class="note mt-4 text-sm">{{ s.wizard.needKB }}</p>
-
-        <!-- 这里是唯一的“添加”入口：选文件夹、起名字、确认都在弹窗里完成。
-             以前名字留在页面上，于是“选文件夹”和“真的建一个”看起来是两件事。 -->
         <button class="btn btn-primary mt-4" type="button" @click="openPicker">
-          {{ s.wizard.addKB }}
+          {{ s.wizard.addDir }}
         </button>
       </section>
 
+      <!-- 第 3 屏：总结 -->
       <section v-else class="mt-6">
-        <h2 class="font-medium">{{ s.wizard.done }}</h2>
-        <p class="muted text-sm mt-1">{{ s.wizard.doneHint }}</p>
+        <h2 class="font-medium">{{ s.wizard.summary }}</h2>
+        <p class="muted text-sm mt-1">{{ s.wizard.summaryHint }}</p>
 
-        <p class="note mt-4 text-sm">{{ s.agentNote }}</p>
+        <div class="card p-4 mt-4 space-y-4 text-sm">
+          <div>
+            <p class="font-medium">{{ s.wizard.sumConfig }}</p>
+            <p class="mono text-xs muted mt-1 break-all">{{ status.configDir }}</p>
+          </div>
 
-        <div class="mt-3 grid grid-cols-1 gap-3">
-          <CopyBlock
-            :label="s.wizard.copySkill"
-            :hint="s.wizard.copySkillHint"
-            :text="skillText"
-          />
-          <CopyBlock
-            :label="s.wizard.copySkillUrl"
-            :hint="s.wizard.copySkillUrlHint"
-            :text="skillUrl"
-          />
-          <CopyBlock
-            :label="s.wizard.copyAuthoring"
-            :hint="s.wizard.copyAuthoringHint"
-            :text="authoringText"
-          />
-          <CopyBlock :label="s.wizard.copyCurl" :hint="s.wizard.copyCurlHint" :text="cmdText" />
+          <div>
+            <p class="font-medium">{{ s.wizard.sumNetwork }}</p>
+            <p v-if="!lan" class="muted text-xs mt-1">{{ s.wizard.sumLocal(localUrl) }}</p>
+            <template v-else>
+              <p class="muted text-xs mt-1">{{ s.wizard.sumLan(lanUrl) }}</p>
+              <p class="text-xs mt-2">{{ s.wizard.sumPassword }}</p>
+              <pre v-if="token" class="preview mt-1">{{ token }}</pre>
+              <p v-else class="muted text-xs mt-1">
+                密码在设置页里能看到，也可以在那里换一个。
+              </p>
+            </template>
+          </div>
+
+          <div>
+            <p class="font-medium">{{ s.wizard.sumKB }}</p>
+            <ul v-if="existing.length" class="mt-1 space-y-2">
+              <li v-for="kb in existing" :key="kb.id">
+                <p class="text-xs">{{ kb.name }}</p>
+                <p class="mono text-xs muted break-all">{{ kb.rootPath }}</p>
+              </li>
+            </ul>
+            <p v-else class="muted text-xs mt-1">{{ s.wizard.sumKBEmpty }}</p>
+          </div>
         </div>
+
+        <!-- SKILL 不自动装：写进用户 home 的目录是显式动作，而且装了也要重启 AI 工具 -->
+        <p class="font-medium mt-6">{{ s.wizard.sumSkill }}</p>
+        <p class="muted text-xs mt-1">{{ s.wizard.sumSkillHint }}</p>
+        <div class="mt-3">
+          <SkillSection />
+        </div>
+
+        <details class="mt-5">
+          <summary class="text-sm cursor-pointer">{{ s.wizard.aiStuff }}</summary>
+          <p class="note mt-3 text-sm">{{ s.agentNote }}</p>
+          <div class="mt-3 grid grid-cols-1 gap-3">
+            <CopyBlock
+              :label="s.wizard.copySkill"
+              :hint="s.wizard.copySkillHint"
+              :text="skillText"
+            />
+            <CopyBlock
+              :label="s.wizard.copySkillUrl"
+              :hint="s.wizard.copySkillUrlHint"
+              :text="skillUrl"
+            />
+            <CopyBlock
+              :label="s.wizard.copyAuthoring"
+              :hint="s.wizard.copyAuthoringHint"
+              :text="authoringText"
+            />
+            <CopyBlock :label="s.wizard.copyCurl" :hint="s.wizard.copyCurlHint" :text="cmdText" />
+          </div>
+        </details>
       </section>
 
       <p v-if="error" class="note mt-4 text-sm">{{ error }}</p>
@@ -265,7 +358,7 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
           :disabled="busy || !canNext"
           @click="finish"
         >
-          {{ busy ? s.common.loading : s.common.start }}
+          {{ busy ? s.common.loading : s.common.next }}
         </button>
         <button v-else class="btn btn-primary" type="button" @click="emit('done')">
           {{ s.common.start }}

@@ -13,6 +13,7 @@ import { api, ApiError } from '../api'
 import { s } from '../strings'
 import type { FsList } from '../types'
 import ModalShell from './ModalShell.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   open: boolean
@@ -40,6 +41,12 @@ const mkOpen = ref(false)
 const mkName = ref('')
 const mkBusy = ref(false)
 const mkError = ref('')
+
+// 添加前的确认：先探一眼（是不是磁盘根、里面有多少 markdown），再问一句。
+// 不探就直接加，用户很可能把整个 D:\\ 加进去，然后等好几分钟。
+const probeOpen = ref(false)
+const probing = ref(false)
+const probeMsg = ref('')
 
 const path = computed(() => cur.value?.path ?? '')
 
@@ -106,6 +113,36 @@ watch(
 
 function confirm() {
   if (!canConfirm.value) return
+  // 只是选个文件夹（不建知识库）时不必追问。
+  if (!props.askName) {
+    emit('pick', path.value, '')
+    return
+  }
+  void probeAndAsk()
+}
+
+async function probeAndAsk() {
+  probing.value = true
+  error.value = ''
+  try {
+    const p = await api.fsProbe(path.value)
+    probeMsg.value = p.isRoot
+      ? s.picker.confirmRoot
+      : p.capped
+        ? s.picker.confirmCapped(p.markdownCount)
+        : p.markdownCount === 0
+          ? s.picker.confirmEmpty
+          : s.picker.confirmCount(p.markdownCount)
+    probeOpen.value = true
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : s.errors.generic
+  } finally {
+    probing.value = false
+  }
+}
+
+function confirmed() {
+  probeOpen.value = false
   emit('pick', path.value, name.value.trim())
 }
 
@@ -163,6 +200,7 @@ async function createDir() {
     </div>
 
     <p v-if="error" class="note mt-3 text-sm">{{ error }}</p>
+    <p v-if="askName" class="text-sm mt-3">{{ s.picker.pickHint }}</p>
     <p class="muted text-xs mt-2">{{ s.picker.pathHint }}</p>
 
     <div class="mt-3 max-h-72 overflow-auto -mx-1 px-1">
@@ -173,7 +211,7 @@ async function createDir() {
              确认按钮也点不了。先告诉他要干什么。 -->
         <p v-if="!path" class="muted text-sm py-6 text-center">{{ s.picker.emptyRoot }}</p>
 
-        <p v-else-if="cur.dirs.length === 0" class="muted text-sm py-6 text-center">
+        <p v-else-if="cur.dirs.length === 0 && !cur.drives?.length" class="muted text-sm py-6 text-center">
           {{ s.picker.emptyHere }}
         </p>
 
@@ -185,20 +223,23 @@ async function createDir() {
           :disabled="busy === d.path"
           @click="go(d.path)"
         >
+          <AppIcon name="folder" class="muted" />
           <span class="truncate">{{ d.name }}</span>
         </button>
 
-        <div v-if="cur.drives?.length" class="mt-3 flex flex-wrap gap-2">
-          <button
-            v-for="dr in cur.drives"
-            :key="dr"
-            class="btn btn-sm mono"
-            type="button"
-            @click="go(dr)"
-          >
-            {{ dr }}
-          </button>
-        </div>
+        <!-- 盘符像目录一样渲染，只是图标不同。不单独放一行按钮：对用户来说
+             它们就是“上一层里的文件夹”。 -->
+        <button
+          v-for="dr in cur.drives"
+          :key="dr"
+          type="button"
+          class="w-full text-left px-2 py-2 rounded-md flex items-center gap-2 hover:bg-(--surface-2) disabled:opacity-50"
+          :disabled="busy === dr"
+          @click="go(dr)"
+        >
+          <AppIcon name="drive" class="muted" />
+          <span class="mono">{{ dr }}</span>
+        </button>
       </template>
     </div>
 
@@ -222,10 +263,32 @@ async function createDir() {
       <button
         class="btn btn-primary"
         type="button"
-        :disabled="!canConfirm || loading || submitting"
+        :disabled="!canConfirm || loading || submitting || probing"
         @click="confirm"
       >
-        {{ submitting ? s.common.loading : askName ? s.picker.confirmCreate : s.picker.confirmPick }}
+        {{
+          submitting
+            ? s.common.loading
+            : probing
+              ? s.picker.probing
+              : askName
+                ? s.picker.confirmCreate
+                : s.picker.confirmPick
+        }}
+      </button>
+    </template>
+  </ModalShell>
+
+  <!-- 添加前的最后一次追问：磁盘根 / 已有 N 个文件 / 没有文件。 -->
+  <ModalShell :open="probeOpen" :title="s.picker.confirmCreate" @close="probeOpen = false">
+    <p class="text-sm">{{ probeMsg }}</p>
+    <p class="mono text-xs muted mt-2 break-all">{{ path }}</p>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="probeOpen = false">
+        {{ s.common.cancel }}
+      </button>
+      <button class="btn btn-primary" type="button" @click="confirmed">
+        {{ s.picker.confirmCreate }}
       </button>
     </template>
   </ModalShell>

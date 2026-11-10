@@ -75,7 +75,7 @@ func ListDirs(p string) (*FSListResp, error) {
 	if parent := filepath.Dir(abs); parent != abs {
 		resp.Parent = parent
 	}
-	if abs == filepath.VolumeName(abs)+string(filepath.Separator) {
+	if isVolumeRoot(abs) {
 		resp.Drives = listDrives()
 	}
 
@@ -95,6 +95,55 @@ func ListDirs(p string) (*FSListResp, error) {
 	}
 	sort.Slice(resp.Dirs, func(i, j int) bool { return resp.Dirs[i].Name < resp.Dirs[j].Name })
 	return resp, nil
+}
+
+// ---- 添加前探一眼 ----
+
+// FSProbe 是 `GET /api/fs/probe` 的结果：把目录加进知识库之前，先让用户看清代价。
+type FSProbe struct {
+	Path   string `json:"path"`
+	IsRoot bool   `json:"isRoot"`
+	// MarkdownCount 是这个目录（含子目录）里数到的 markdown 数量。
+	MarkdownCount int `json:"markdownCount"`
+	// Capped 表示数到上限就停了，count 只能当“至少这么多”看。
+	Capped bool `json:"capped"`
+}
+
+// MaxProbeFiles 是探测时最多数多少篇。
+//
+// 这个数字只在“用户点了添加”时跑一次，但仍然要封顶：有人会选一个几十万文件的目录。
+const MaxProbeFiles = 2000
+
+// ProbeDir 数一下这个目录里有多少 markdown。
+//
+// 不在列目录时数（那样每换一层都要走整棵子树），只在提交前数一次。
+func ProbeDir(p string) (*FSProbe, error) {
+	absp := strings.TrimSpace(p)
+	if absp == "" {
+		return nil, ErrInvalidRoot
+	}
+	abs, err := filepath.Abs(absp)
+	if err != nil {
+		return nil, ErrInvalidRoot
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	if ok, err := statDir(abs); err != nil || !ok {
+		return nil, ErrInvalidRoot
+	}
+	// 磁盘根不数：走一遍整盘要几分钟，而这种情况界面走的是另一套问法
+	// （“整块磁盘都会进知识库，确定吗”），根本不需要数字。
+	if isVolumeRoot(abs) {
+		return &FSProbe{Path: abs, IsRoot: true}, nil
+	}
+	count := countMarkdown(abs, MaxProbeFiles)
+	return &FSProbe{
+		Path:          abs,
+		IsRoot:        false,
+		MarkdownCount: count,
+		Capped:        count >= MaxProbeFiles,
+	}, nil
 }
 
 // ---- 新建空文件夹 ----
@@ -141,6 +190,14 @@ func CreateDir(parent, name string) (string, error) {
 		return "", err
 	}
 	return full, nil
+}
+
+// isVolumeRoot 判断一个绝对路径是不是某个卷/文件系统的根。
+//
+// Windows 上是 `D:\`，Unix 上是 `/`。这两处要特殊处理：前者要给盘符列表，
+// 后者加进知识库等于把整台机器当数据源，得让用户再确认一次。
+func isVolumeRoot(abs string) bool {
+	return abs == filepath.VolumeName(abs)+string(filepath.Separator)
 }
 
 // underHome 判断这个位置是不是在当前用户的用户目录里。

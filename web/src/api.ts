@@ -1,5 +1,6 @@
 import type {
   FsList,
+  FsProbe,
   KB,
   PreviewResponse,
   SearchResponse,
@@ -98,6 +99,9 @@ export const api = {
     ),
 
   fsList: (path: string) => request<FsList>('GET', `/api/fs/list${q({ path })}`),
+
+  /** 添加目录之前探一眼：是不是磁盘根、里面有多少 markdown。 */
+  fsProbe: (path: string) => request<FsProbe>('GET', `/api/fs/probe${q({ path })}`),
 
   /** 在 `path` 下建一个空文件夹（管理面唯一会写磁盘的接口）。 */
   fsMkdir: (path: string, name: string) =>

@@ -23,6 +23,10 @@ export interface KB {
 export interface Status {
   version: string
   port: number
+  /** 跑这个服务的系统用户名，第 1 屏用它说“这个目录只有 <名字> 能访问”。 */
+  user: string
+  /** 本机的局域网 IPv4 地址（可能为空）。 */
+  lanAddrs?: string[]
   /** 配置目录：config.json、index.db 与两个 token 文件都在这里。 */
   configDir: string
   /** 记录文件的位置，永远等于 <configDir>/index.db。 */
@@ -49,6 +53,15 @@ export interface FsList {
   drives?: string[]
   /** 这个位置在当前用户的用户目录里：换一个电脑用户就读不到，索引也更新不了。 */
   underHome?: boolean
+}
+
+/** 添加目录之前的探测结果（`GET /api/fs/probe`）。 */
+export interface FsProbe {
+  path: string
+  isRoot: boolean
+  markdownCount: number
+  /** 数到上限就停了，count 只能当“至少这么多”看。 */
+  capped: boolean
 }
 
 export interface SkillTarget {

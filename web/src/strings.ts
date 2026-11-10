@@ -35,52 +35,85 @@ export const s = {
 
   // 目录选择器。它的字以前是写在组件里的，现在也收到这里。
   picker: {
-    titlePick: '选一个放着资料的文件夹',
+    titlePick: '选择知识库目录',
     titleBrowse: '选一个文件夹',
     root: '先选一个磁盘',
     go: '前往',
     pathInputTitle: '可以点、可以改，也能把路径直接粘进来',
     pathHint: '路径可以直接粘进来，按回车跳过去。从资源管理器的地址栏复制就行。',
+    pickHint:
+      '这个目录下的所有 md 文件都会当成知识库的数据源。第一次用可以先建一个空目录；也可以直接把文件夹路径粘到上面。',
     emptyRoot: '先选一个磁盘，里面就是你的文件夹。',
-    emptyHere: '这个位置下面没有子文件夹。直接点下面的确认按钮就选它自己。',
+    emptyHere: '这个位置下面没有子文件夹。直接点下面的按钮就选它自己。',
     confirmPick: '用这个文件夹',
-    confirmCreate: '添加这个知识库',
+    confirmCreate: '添加',
     newFolder: '新建文件夹',
     newFolderName: '文件夹名字',
     newFolderPlaceholder: '比如：产品文档',
     newFolderHint: '会在当前位置里建一个空文件夹，不会动任何已有的文件。',
     nameLabel: '知识库名称',
-    nameHint:
-      'AI 按这个名字找你问的东西，比如“字体内容”“项目文档”。刚才那个文件夹名只是默认值，随时可以改。',
+    nameHint: 'AI 能看到这个名称，并按你的描述查对应条目。',
     sharedHint:
       '这个文件夹在你自己用户目录里，只有你能读。换一个电脑用户登录后，kb-lite 读不到它，索引也就更新不了。想多人共用，把资料放到 D:\\ 这类公共位置。',
+    probing: '正在数文件…',
+    confirmRoot: '这个位置是磁盘根目录，整块磁盘上的 markdown 文件都会进知识库。确定要添加吗？',
+    confirmEmpty: '这个目录里还没有 markdown 文件。以后往里放就行，确认要添加吗？',
+    confirmCount: (n: number) => `这个目录下已经有 ${n} 个 markdown 文件，确认要添加吗？`,
+    confirmCapped: (n: number) => `这个目录下已经有 ${n} 个以上 markdown 文件，确认要添加吗？`,
     defaultName: '新的知识库',
   },
 
   wizard: {
-    title: '先做三件事',
-    step1: '东西放在哪儿',
-    step1Hint: '设置和缓存都放在同一个目录里，不用你选。',
-    configDirLabel: '这个目录：',
-    configDirNote:
-      '你的资料不在这个目录里，它只是 kb-lite 自己的东西（设置 + 一个随时可以删的缓存）。换一个电脑用户登录会看不到这份设置，但资料一个字节都不会动。',
-    step2: '端口与访问范围',
+    title: '配置向导',
+
+    // 第 1 屏：欢迎 + 东西放在哪
+    welcome: (v: string) => `欢迎使用 KBLite v${v}`,
+    welcomeHint: '这个向导会带你做完三项设置。以后随时可以重新运行它。',
+    configWhere: '你的配置文件和索引都存放在这个位置：',
+    configOwner: (user: string) =>
+      user
+        ? `这个目录只有当前用户（${user}）能访问。备份的时候把它整个复制走就行。`
+        : '这个目录只有当前用户能访问。备份的时候把它整个复制走就行。',
+
+    // 第 2 屏：端口与接口公开范围
+    step2: '端口与接口公开范围',
     port: '端口',
-    portHint: '端口一般不用改。被别的软件占用时会自动换一个。',
-    whoCanOpen: '谁可以打开',
-    loopback: '只有这台电脑',
-    lan: '同一个 WiFi 下的其他设备也能打开',
+    portHint: '默认为 7331，如果被占用会自动换一个。',
+    whoCanOpen: '接口公开范围',
+    loopback: '仅本设备',
+    lan: '共享到局域网',
+    localHint: (urls: string) => `推荐：在本设备用 ${urls} 访问。`,
+    lanHint: (addr: string) => `局域网里的其他设备可以用 ${addr} 访问。`,
+    lanVpn: '如果你连着 VPN，或者用了 Tailscale 这类工具，那个网络里的设备同样能访问。',
+    lanPassword:
+      '为了安全，会自动生成一个访问密码。它只影响给 AI 用的接口，不影响你打开这个界面。',
     lanWarn:
       '打开后，同一个网络里的人只要知道地址就能看到你的知识库。不推荐。如果你确实需要，比如想用手机上的 AI，会自动帮你打开访问密码。',
-    step3: '第一个知识库',
-    pickFolderHint: '我们会把它整理成 AI 能查的形式。文件不会被改动。',
-    // 重新运行向导时：已经加好的库要看得见，否则用户会以为它们没了。
-    step3Again: '知识库',
-    step3AgainHint: '下面这些已经加好了，不用再动。想加新的就再选一个文件夹。',
-    addKB: '添加一个知识库',
+
+    // 第 3 屏：创建知识库
+    step3: '创建知识库',
+    step3Hint:
+      'KBLite 的数据源是你设备上的一个文件夹。我们会把那个文件夹里的 markdown 文件录进知识库。',
+    step3HintMore:
+      '如果你平时用别的工具写文档，最后一步还有一个“让 AI 把文档整理成 markdown”的 skill。',
+    existing: '当前已有以下知识库：',
+    addDir: '添加目录',
     needKB: '还没有知识库。先添加一个，再继续。',
-    done: '准备好了',
-    doneHint: '下面这几段都是给 AI 用的，你不用看懂。想用的时候点“复制”粘给它。',
+
+    // 第 4 屏：总结
+    summary: '配置完成',
+    summaryHint: '你的知识库已经准备好了。以后可以重新运行这个向导，也可以在设置里单独改某一项。',
+    sumConfig: '配置文件位置',
+    sumNetwork: '网络',
+    sumLocal: (url: string) => `仅本设备：在本设备用 ${url} 访问知识库。`,
+    sumLan: (addr: string) => `共享到局域网：局域网里的其他设备用 ${addr} 访问知识库。`,
+    sumPassword: '访问密码',
+    sumKB: '知识库',
+    sumKBEmpty: '还没有添加知识库，你可以稍后自己添加。',
+    sumSkill: '给 AI 用的说明书',
+    sumSkillHint:
+      '装好之后要重启一次 AI 工具才生效，它只在启动时读那个目录。懒得重启，就把下面那段话直接贴给它。',
+    aiStuff: '给 AI 用的东西（现在不想看就收起）',
     copyCurl: '命令示例',
     copyCurlHint: '想自己试试接口时用',
     copySkill: '给 AI 的说明书',

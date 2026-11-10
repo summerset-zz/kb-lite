@@ -56,6 +56,8 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
   "setupCompleted": true,
   "lanExposed": false,
   "requireToken": false,           // 读取面是否需要 token
+  "user": "me",                    // 跑这个服务的系统用户名（界面第 1 屏用）
+  "lanAddrs": ["192.168.1.5"],      // 本机局域网 IPv4，可能为空
   "kbs": [
     { "name": "我的笔记", "id": "k1f3a9c2", "rootPath": "D:\\notes",
       "enabled": true, "state": "ready",       // ready | indexing | error | disabled
@@ -131,8 +133,21 @@ UI 上必须二次确认，且确认文案要写明“目录里的文件不会�
 
 限制：只列目录不列文件内容；跳过 `.` 开头的目录与 `node_modules`；单层最多 500 项；不接受网络路径（`\\server\share`）以外的非本地路径时不做特殊处理，但要求路径可 `realpath`。
 
-### `POST /api/fs/mkdir`
+### `GET /api/fs/probe?path=<绝对路径>`
 
+把目录加进知识库之前探一眼：界面拿它决定追问哪一句。
+
+```jsonc
+{ "path": "D:\\notes", "isRoot": false, "markdownCount": 128, "capped": false }
+```
+
+- `isRoot`：磁盘根（Unix 上是 `/`）。**这种情况不数文件**，直接回 0：走一遍整盘要几分钟，
+  而界面走的是另一套问法（“整块磁盘都会进知识库，确定吗”），根本不需要数字。
+- `markdownCount`：递归数一次，封顶 2000 篇，到顶就把 `capped` 置真（“2000 个以上”）。
+- 只在用户点“添加”时调一次，**不跟着列目录走**。
+- 目录不存在 / 不是目录 / 没权限 → `400 invalid_path`，文案与 `/api/fs/list` 一致。
+
+### `POST /api/fs/mkdir`
 在指定目录下建一个**空文件夹**（目录选择器里的“新建文件夹”）。
 
 ```jsonc

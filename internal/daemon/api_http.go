@@ -225,6 +225,19 @@ func (h *Handler) handleFSList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleFSProbe 是 `GET /api/fs/probe?path=`：把目录加进知识库之前探一眼。
+//
+// 不数目录时数（那样每换一层都要走整棵子树），只在用户点“添加”时数一次。
+func (h *Handler) handleFSProbe(w http.ResponseWriter, r *http.Request) {
+	p := strings.TrimSpace(r.URL.Query().Get("path"))
+	probe, err := ProbeDir(p)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_path", fsErrorMessage(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, probe)
+}
+
 // handleFSMkdir 是 `POST /api/fs/mkdir`：在指定目录下建一个空文件夹。
 //
 // 管理面上**唯一**会写用户磁盘的接口，而且只建空目录（docs/04）。
