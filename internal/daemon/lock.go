@@ -103,3 +103,44 @@ func portAnswers(port int) bool {
 	defer resp.Body.Close()
 	return true
 }
+
+// UIWatching 问正在跑的那个实例：最近有没有界面在心跳。
+//
+// 用途只有一个：`serve --open`（含双击 exe）之前问一句。页面已经开着就别再开一个标签页，
+// 浏览器里的那一页会在几秒内自己从“已关闭”恢复过来。
+//
+// 拿不到答案时一律返回 false：宁可多开一个标签页，也不要双击之后什么都不发生。
+// 那对不懂命令行的人来说等于“程序坏了”。
+func UIWatching(port int, apiToken string) bool {
+	if port <= 0 || apiToken == "" {
+		return false
+	}
+	base := "http://127.0.0.1:" + strconv.Itoa(port)
+	req, err := http.NewRequest(http.MethodGet, base+"/api/status", nil)
+	if err != nil {
+		return false
+	}
+	// 管理面要凭据 + 同源信号。这里主动给 Origin，跟 CLI 其他地方一致。
+	req.Header.Set("X-KB-Admin", apiToken)
+	req.Header.Set("Origin", base)
+
+	client := &http.Client{
+		Timeout:   700 * time.Millisecond,
+		Transport: &http.Transport{Proxy: nil},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var st struct {
+		UIAlive bool `json:"uiAlive"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&st); err != nil {
+		return false
+	}
+	return st.UIAlive
+}

@@ -28,6 +28,27 @@ const (
 	authFailureMax    = 10
 )
 
+// UIActiveHeader 是界面心跳带的请求头。只有 web/src/api.ts 会带它，
+// CLI 与 curl 都不带，所以服务端能把「有人在看页面」和「有人调了一次接口」分开。
+const UIActiveHeader = "X-KB-UI"
+
+// uiAliveWindow 是多长时间内来过心跳才算页面还开着。
+//
+// 页面每 5 秒一次，这里留三倍余量。浏览器在后台时心跳会停，过了这个窗口就不算开着：
+// 那种情况下用户双击 exe，应该正常开一个新标签页，而不是什么都不发生。
+const uiAliveWindow = 15 * time.Second
+
+// UIAlive 报告最近有没有界面在看这个服务。
+//
+// 用途只有一个：`serve --open` 之前问一句，页面已经开着就别再开一个标签页。
+func (h *Handler) UIAlive() bool {
+	ts := h.uiSeen.Load()
+	if ts == 0 {
+		return false
+	}
+	return time.Since(time.UnixMilli(ts)) < uiAliveWindow
+}
+
 // HandlerOptions 是 Handler 的构造参数。
 type HandlerOptions struct {
 	// Port 是**实际**监听端口（端口被占时会 +1，所以不能从配置里读）。
@@ -75,6 +96,9 @@ type Handler struct {
 	access *accessRing
 	// hosts 缓存 IP 到设备名的反查，只在日志展示时用，不阻塞请求。
 	hosts *hostResolver
+	// uiSeen 是最近一次“界面还活着”的时间（毫秒）。页面心跳时带 `X-KB-UI: 1`，
+	// 这里记一笔。`serve --open` 靠它决定要不要再开一个浏览器标签页。
+	uiSeen atomic.Int64
 }
 
 // NewHandler 建一个 Handler。
@@ -601,10 +625,16 @@ func (h *Handler) handleKBIndexList(w http.ResponseWriter, r *http.Request) {
 // 它**也要 token**：除了 `/skill.md`（它本身就是把 token 递出去的那张纸）之外，
 // 这个服务没有兔认证的路由。
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
+	// 带了 `X-KB-UI` 的请求就说明“有人在看这个页面”，记一笔。
+	// 只有界面会带这个头，`kb-lite status` 不会，所以 CLI 不会被误判成页面。
+	if r.Header.Get(UIActiveHeader) != "" {
+		h.uiSeen.Store(time.Now().UnixMilli())
+	}
 	// 端口要取“现在实际监听的那个”：热重开之后 opts.Port 是旧值，
 	// 而 UI 正是从这个字段拼地址的（横幅、页头、复制的那句口令）。
 	st := h.mgr.Status(h.Port(), h.opts.DBMode, h.requireToken.Load())
 	st.Paused = h.paused.Load()
+	st.UIAlive = h.UIAlive()
 	writeJSON(w, http.StatusOK, st)
 }
 

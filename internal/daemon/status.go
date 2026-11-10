@@ -29,6 +29,9 @@ type Status struct {
 	// LanAddrs 是本机的局域网 IPv4 地址，用告诉用户局域网上该用哪个地址访问。
 	// 拿不到就是空的，界面退回不带具体地址的说法。
 	LanAddrs []string `json:"lanAddrs,omitempty"`
+	// UIAlive 表示 15 秒内有界面在心跳（见 http.go 的 uiAliveWindow）。
+	// 界面上不显示它，它是给 `serve --open` 用的：页面已经开着就不再开一个标签页。
+	UIAlive bool `json:"uiAlive"`
 }
 
 // StatusKB 是一个知识库的状态。

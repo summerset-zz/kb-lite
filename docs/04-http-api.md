@@ -45,7 +45,6 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
 ## 管理接口 `/api/*`
 
 ### `GET /api/status`
-
 ```jsonc
 {
   "version": "0.3.0",
@@ -58,6 +57,7 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
   "requireToken": false,           // 读取面是否需要 token
   "user": "me",                    // 跑这个服务的系统用户名（界面第 1 屏用）
   "lanAddrs": ["192.168.1.5"],      // 本机局域网 IPv4，可能为空
+  "uiAlive": true,                 // 15 秒内有界面在心跳（见下面）
   "kbs": [
     { "name": "我的笔记", "id": "k1f3a9c2", "rootPath": "D:\\notes",
       "enabled": true, "state": "ready",       // ready | indexing | error | disabled
@@ -80,6 +80,16 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
 **要 admin 凭据**（见上面两级认证）。读取面是否要凭据看 `requireToken`：关着时 `/kb/*` 与 `/skill.md` 直接可用。
 
 `state == "indexing"` 时，`entries/sections` 还是**上一次**索引的数字。调用方据此判断新鲜度（docs/01）。
+
+#### 界面心跳头 `X-KB-UI`
+
+界面发的所有请求都带 `X-KB-UI: 1`。服务端据此记一笔“刚才有页面在”，`/api/status` 里的 `uiAlive`
+就是“15 秒内来过心跳”。页面每 5 秒轮一次，所以后台标签页会让它过期，这是对的。
+
+它只有一个用途：`serve --open`（含双击 exe）之前问一句，**页面已经开着就不再开一个浏览器标签页**。
+浏览器里的那一页会在几秒内自己从“已关闭”恢复，再开一个只会变成两个页面各自轮询。
+判断不出来时一律当作“没页面”（宁可多开一个标签页，也不要双击之后什么都不发生）。
+CLI 与 `curl` 不带这个头，所以不会被误判成页面。
 
 ### `GET /api/kbs` / `POST /api/kbs`
 

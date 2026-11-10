@@ -38,7 +38,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     resp = await fetch(path, {
       method,
       credentials: 'same-origin',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: {
+        // 告诉服务端“这是界面在说话”。服务端靠它判断有没有页面开着，
+        // 决定 `serve --open` 要不要再开一个标签页（CLI 不带这个头）。
+        'X-KB-UI': '1',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {

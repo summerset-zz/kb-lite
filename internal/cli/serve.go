@@ -63,10 +63,10 @@ func runServe(args []string) int {
 	// 撞在一起时，都会走到这里。
 	if prev, running := daemon.AnotherInstance(dir); running {
 		base := "http://127.0.0.1:" + strconv.Itoa(prev.Port)
-		fmt.Fprintf(os.Stderr, "kb-lite 已经在跑了（pid %d，%s），这次直接打开界面。\n", prev.PID, base)
+		fmt.Fprintf(os.Stderr, "kb-lite 已经在跑了（pid %d，%s）。\n", prev.PID, base)
 		fmt.Fprintln(os.Stderr, "要重启请先 `kb-lite quit`。")
 		if prev.Port > 0 {
-			openInBrowser(base)
+			openUIOrExplain(base, prev.Port, readAPIToken(dir))
 		}
 		return exitOK
 	}
@@ -170,7 +170,7 @@ func runServe(args []string) int {
 	printBanner(base, dir, len(mgr.Index().KBs), cfg.EffectiveRequireToken())
 
 	if *openBrowserFlag {
-		openInBrowser(base)
+		openUIOrExplain(base, srv.Handler().Port(), apiToken)
 	}
 
 	// Windows 上顺手挂个托盘（docs/06 第四节）：暂停/启动、设置、在命令行中打开、退出。
@@ -249,6 +249,22 @@ func openInBrowser(u string) {
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "打不开浏览器：", err)
 	}
+}
+
+// openUIOrExplain 决定要不要打开浏览器，而不是无脑 open。
+//
+// 用户双击 exe 的典型场景是“配置页面还开着，但服务刚退”，那一页顶上正写着
+// “kb-lite 已关闭，请重新运行”。这时候再开一个标签页只会变成两个页面各自轮询、
+// 各自显示，而他真正想看的就是原来那一页，它几秒内会自己恢复。
+//
+// 判断靠页面心跳（http.go 的 UIActiveHeader）。问不到答案就照常打开：
+// 宁可多一个标签页，也不要双击之后什么都不发生。
+func openUIOrExplain(base string, port int, apiToken string) {
+	if daemon.UIWatching(port, apiToken) {
+		fmt.Fprintln(os.Stderr, "配置页面已经开着，这次不重复打开浏览器。")
+		return
+	}
+	openInBrowser(base)
 }
 
 // startTray 挂上 Windows 托盘（其他平台什么都不做，见 tray.Available）。

@@ -18,7 +18,7 @@ import ToastHost from './components/ToastHost.vue'
 // 'agent' 暂时不在导航里，但 #agent 仍然可用（docs/06 §5.4）。
 type Tab = 'kbs' | 'search' | 'agent' | 'settings' | 'about' | 'help' | 'logs'
 
-const { status, loading, error, refresh, needWizard } = useStatus()
+const { status, loading, error, offline, refresh, needWizard } = useStatus()
 
 // 页签跟着 URL 锚点走：托盘的“设置”直接打开 /#settings，刷新也不丢当前页。
 const tabFromHash = (): Tab => {
@@ -73,6 +73,24 @@ async function resume() {
             这个页面本来是 kb-lite 自己启动的服务送出来的。它退出了，页面就失效了。重新打开一次 kb-lite 就好。
           </p>
           <button class="btn mt-4" type="button" @click="refresh()">{{ s.common.retry }}</button>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="offline">
+      <!-- 服务中途没了。整页换掉，不是弹 toast：这时候页面上的按钮点下去一定失败，
+           一个 3 秒就消失的提示拦不住用户继续点。心跳还在跑，服务回来会自己恢复。 -->
+      <div class="flex-1 grid place-items-center px-6">
+        <div class="card p-6 max-w-md w-full">
+          <p class="font-medium">{{ s.offline.title }}</p>
+          <p class="muted text-sm mt-2">{{ s.offline.body }}</p>
+          <p class="muted text-xs mt-4 flex items-center gap-2">
+            <span
+              class="h-2 w-2 rounded-full shrink-0 animate-pulse"
+              :style="{ background: 'var(--text-muted)' }"
+            />
+            {{ s.offline.checking }}
+          </p>
         </div>
       </div>
     </template>

@@ -81,6 +81,68 @@ kb-lite doctor                # 哪儿不对就让它先看一眼
 kb-lite quit                  # 退出（stop 只是暂停，AI 连不上但进程还在）
 ```
 
+## 本地开发与构建
+
+只改 Go 的话，装个 Go 1.22 以上就够了。要改界面才需要 Node 22 与 `pnpm`。
+**这两样只在你的开发机上用，用户那边永远不需要。**
+
+### 一条命令
+
+```bash
+cd web
+pnpm serve
+```
+
+它按这个顺序做完四件事，顺序是有讲究的：
+
+1. 调 `dist/kb-lite.exe quit` 停掉旧进程。Windows 上正在运行的 exe 不能覆盖，不停下来 `go build` 会报拒绝访问；不停的话新进程还会因为端口被占自动换一个，浏览器却停在旧地址。
+2. `pnpm build`：类型检查、构建界面、把产物拷进 `internal/daemon/static/`。
+3. `go build -o dist/kb-lite.exe ./cmd/kb-lite`。
+4. 前台起服务并打开浏览器。`Ctrl+C` 停。
+
+只动了 Go 的话加 `--no-web` 跳过第 2 步，快很多。
+
+### 分步跑
+
+```bash
+cd web && pnpm build          # 界面：类型检查 + 构建 + 拷到 static
+go build -o dist/kb-lite.exe ./cmd/kb-lite   # 二进制
+./dist/kb-lite.exe serve --open              # 跑起来
+```
+
+**界面必须在 `go build` 之前构建好。** 界面是 `//go:embed` 打进二进制的，嵌入发生在编译那一刻；反过来做（先编译再建界面）编出来的还是旧界面。
+
+### 产物在哪
+
+| 路径 | 是什么 | 谁生成 |
+|---|---|---|
+| `web/dist/` | 界面产物：`index.html`、`assets/`、`public/` 里的静态文件 | `vite build` |
+| `internal/daemon/static/` | 上面那份的拷贝，加一个 `.gitkeep` | `scripts/sync-static.mjs` |
+| `dist/kb-lite.exe` | 二进制，界面已经在里面了 | `go build` |
+
+三个都不进版本库。`dist/` 这个目录本身要留着，`go build -o` 不会自己建父目录。
+
+### 改界面时的快速循环
+
+```bash
+cd web
+pnpm dev
+```
+
+开在 `http://localhost:5199`，把 `/api`、`/kb`、`/skill.md`、`/authoring.md` 代理到 `127.0.0.1:7331` 的 daemon。所以先把 daemon 起起来，改界面时不用重编二进制。daemon 端口改过的话，`web/vite.config.ts` 里那个 `daemon` 常量也要跟着改。
+
+`pnpm preview` 只预览静态产物，没配代理，`/api` 一律 404，别看它验功能。
+
+### 检查
+
+```bash
+go vet ./...
+go test ./...
+cd web && pnpm typecheck
+```
+
+三项都是只读的，随时可以跑。
+
 ## 文档
 
 给实现者读的完整规格在 [`docs/`](./docs/)：
