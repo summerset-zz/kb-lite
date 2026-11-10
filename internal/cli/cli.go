@@ -25,6 +25,7 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
 
 用法：kb-lite <command> [options]
 
+  不带参数       等同于 serve --open（双击 exe 时就是这样）
   serve                     前台起服务（Ctrl+C 退出）
     --port <n>              端口；被占时自动 +1 并写回 config
     --host <addr>           默认 127.0.0.1；改成 0.0.0.0 会强制开启访问密码
@@ -92,9 +93,15 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
 
 // Run 是 CLI 的入口，返回进程退出码。
 func Run(args []string) int {
+	// 双击 exe 时参数是空的。docs/09 的验收标准是“从 Releases 下载 → 双击 → 见到界面”，
+	// 所以这里**不打印用法**，直接按 `serve --open` 走（docs/06 第二节）。
+	// 重复双击由单实例锁兜住：它会把已经跑着的界面打开，然后自己退出。
+	// 想看用法给 `help` 或 `--help`，它们不受影响。
 	if len(args) == 0 {
-		fmt.Print(usage)
-		return exitOK
+		fmt.Println("正在启动 KBLite，浏览器会自动打开。")
+		fmt.Println("这个窗口不要关：关了服务就停了。要停下来，按 Ctrl+C 或从托盘菜单退出。")
+		fmt.Println()
+		args = []string{"serve", "--open"}
 	}
 
 	cmd, rest := args[0], args[1:]
