@@ -175,7 +175,7 @@ const skillUrl = computed(() => `${base.value}/skill.md`)
           v-for="i in 3"
           :key="i"
           class="h-1 rounded-full flex-1"
-          :style="{ background: i - 1 <= step ? 'var(--accent)' : 'var(--border)' }"
+          :style="{ background: i - 1 <= step ? 'var(--accent-bright)' : 'var(--border)' }"
         />
       </div>
 

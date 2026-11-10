@@ -81,7 +81,7 @@ const tabs = [
           >
             <span
               class="h-2 w-2 rounded-full shrink-0"
-              :style="{ background: running ? 'var(--accent)' : 'var(--text-muted)' }"
+              :style="{ background: running ? 'var(--accent-bright)' : 'var(--text-muted)' }"
             />
             <span class="ml-1.5">{{ stateText }}</span>
             <AppIcon name="chevron-down" class="ml-1 muted" />
@@ -124,7 +124,7 @@ const tabs = [
           type="button"
           class="px-3 py-2 text-sm border-b-2 bg-transparent cursor-pointer whitespace-nowrap shrink-0"
           :style="{
-            borderColor: tab === t.id ? 'var(--accent)' : 'transparent',
+            borderColor: tab === t.id ? 'var(--accent-bright)' : 'transparent',
             color: tab === t.id ? 'var(--text)' : 'var(--text-muted)',
             fontWeight: tab === t.id ? 600 : 400,
           }"

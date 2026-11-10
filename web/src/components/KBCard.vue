@@ -39,11 +39,11 @@ const stateIcon = computed<'clock' | 'alert-circle' | 'check'>(() => {
 })
 
 const dot = computed(() => {
-  if (props.kb.state === 'indexing') return 'var(--accent)'
+  if (props.kb.state === 'indexing') return 'var(--accent-bright)'
   if (props.kb.state === 'error') return 'var(--danger)'
   if (!props.kb.enabled) return 'var(--text-muted)'
   if (props.kb.notIndexed > 0) return 'var(--danger)'
-  return 'var(--accent)'
+  return 'var(--accent-bright)'
 })
 
 const progress = computed(() => {

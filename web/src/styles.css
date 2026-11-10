@@ -13,8 +13,13 @@
   --border: #e4e4e0;
   --text: #1c1c1a;
   --text-muted: #6b6b66;
+  /* 文字的强调色与按钮底色。白字压在上面是 5.76:1，达到 AA。
+     它和图标主色同色相（约 160°），只是被压暗了 —— 直接拿图标那个亮度压白字只有 3.16:1。 */
   --accent: #3f6f5f;
   --accent-text: #ffffff;
+  /* 纯图形用的亮一档的强调色，取自图标主色。
+     只给状态点、步骤条、页签下划线这类不承载文字的地方用：图形只要 3:1，文字要 4.5:1。 */
+  --accent-bright: #3da185;
   --danger: #b3261e;
   --warn-bg: #fdf3e0;
   --warn-border: #e8c98a;
@@ -32,6 +37,7 @@
     --text-muted: #9a9a8f;
     --accent: #6fb59a;
     --accent-text: #0f1a16;
+    --accent-bright: #5cc9a9;
     --danger: #f2b8b5;
     --warn-bg: #2a2317;
     --warn-border: #5a4a25;
@@ -48,6 +54,7 @@
   --text-muted: #9a9a8f;
   --accent: #6fb59a;
   --accent-text: #0f1a16;
+  --accent-bright: #5cc9a9;
   --danger: #f2b8b5;
   --warn-bg: #2a2317;
   --warn-border: #5a4a25;
