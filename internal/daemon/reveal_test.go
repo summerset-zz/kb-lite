@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"net/http"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -30,20 +32,47 @@ func TestFSRevealValidation(t *testing.T) {
 	}
 }
 
-// TestRevealCommandShape 守“目录开自己、文件选中它”这个差别。
+// TestRevealCommandShape 守“打开一个位置”这件事在三个平台上的具体形态。
+//
+// 三个平台对“选中一个文件”的支持不一样，所以断言也必须分平台写：
+//
+//	Windows  explorer.exe <目录>            / explorer.exe /select,<文件>
+//	macOS    open -R <路径>                （-R 本身就是“在 Finder 里选中”，文件目录都适用）
+//	Linux    xdg-open <目录>               （文件退回到打开它所在的目录，没有统一的选择约定）
+//
+// 之前这里写的是“最后一项不能等于文件路径”，在 macOS 上直接把正确实现判成了错。
 func TestRevealCommandShape(t *testing.T) {
 	dir := t.TempDir()
-	cmdDir := revealCommand(dir, true)
-	if len(cmdDir.Args) < 2 || cmdDir.Args[len(cmdDir.Args)-1] != dir {
-		t.Errorf("目录的命令参数 = %v，想要最后一项是目录本身", cmdDir.Args)
-	}
 	file := filepath.Join(dir, "a.md")
+
+	cmdDir := revealCommand(dir, true)
 	cmdFile := revealCommand(file, false)
-	if len(cmdFile.Args) < 2 {
-		t.Fatalf("文件的命令参数 = %v", cmdFile.Args)
-	}
-	last := cmdFile.Args[len(cmdFile.Args)-1]
-	if last == file {
-		t.Errorf("文件应当被“选中”而不是直接打开，实际参数 = %v", cmdFile.Args)
+	last := func(c *exec.Cmd) string { return c.Args[len(c.Args)-1] }
+
+	switch runtime.GOOS {
+	case "windows":
+		if got := last(cmdDir); got != dir {
+			t.Errorf("目录：%v，想要最后一项是目录本身", cmdDir.Args)
+		}
+		if want := "/select," + file; last(cmdFile) != want {
+			t.Errorf("文件：%v，想要最后一项是 %q", cmdFile.Args, want)
+		}
+	case "darwin":
+		// 目录与文件都用 `open -R`，路径原样放最后。
+		for _, c := range []*exec.Cmd{cmdDir, cmdFile} {
+			if len(c.Args) < 3 || c.Args[1] != "-R" {
+				t.Errorf("%v：macOS 上要用 open -R", c.Args)
+			}
+		}
+		if last(cmdFile) != file {
+			t.Errorf("文件：%v，想要最后一项是文件本身", cmdFile.Args)
+		}
+	default:
+		if got := last(cmdDir); got != dir {
+			t.Errorf("目录：%v，想要最后一项是目录本身", cmdDir.Args)
+		}
+		if got := last(cmdFile); got != filepath.Dir(file) {
+			t.Errorf("文件：%v，想要最后一项是它所在的目录", cmdFile.Args)
+		}
 	}
 }
