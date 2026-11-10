@@ -1,6 +1,6 @@
 {
   "name": "kb-lite-web",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "kb-lite 的界面。产物会被拷到 internal/daemon/static/ 并打进 Go 二进制，用户侧不需要 Node。",

@@ -6,6 +6,7 @@
 //
 // 产物：
 //   web/public/favicon.png            浏览器标签页
+//   website/favicon.png               宣传页（favicon 与顶欄品牌图标）
 //   cmd/kb-lite/rsrc_windows_*.syso   exe 的图标与版本信息（go build 自动吃）
 //
 // 用法（在 web/ 下）：pnpm icons
@@ -83,9 +84,11 @@ if (failed) {
   process.exit(1)
 }
 
-// 2. 浏览器标签页。直接给 512 的 PNG，浏览器自己缩；省掉一个有损的中间步骤。
+// 2. 浏览器标签页与宣传页。直接给 512 的 PNG，浏览器自己缩；省掉一个有损的中间步骤。
 await copyFile(join(assets, 'normal.png'), join(webDir, 'public', 'favicon.png'))
 console.log('· 写好 web/public/favicon.png')
+await copyFile(join(assets, 'normal.png'), join(root, 'website', 'favicon.png'))
+console.log('· 写好 website/favicon.png')
 
 // 3. exe 的图标与版本信息。
 //

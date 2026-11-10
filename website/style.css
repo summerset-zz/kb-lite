@@ -18,6 +18,9 @@
   --muted: #6b6b66;
   --accent: #3f6f5f;
   --accent-text: #ffffff;
+  /* 与界面同一套：--accent 承载文字与按钮（白字 5.76:1），
+     --accent-bright 是图标主色，只给图形（左侧强调条这类）用。 */
+  --accent-bright: #3da185;
   --radius: 10px;
 }
 
@@ -31,6 +34,7 @@
     --muted: #9a9a8f;
     --accent: #6fb59a;
     --accent-text: #0f1a16;
+    --accent-bright: #5cc9a9;
   }
 }
 
@@ -67,6 +71,17 @@ footer {
 .brand {
   font-weight: 600;
   letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 0;
+}
+
+/* 图标就是程序里那两张（internal/tray/assets/），拷一份过来当 favicon 与品牌标识。 */
+.brand img {
+  width: 22px;
+  height: 22px;
+  display: block;
 }
 
 .top nav {
@@ -138,7 +153,7 @@ a:hover {
 .note {
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--accent-bright);
   border-radius: 6px;
   background: var(--surface);
   color: var(--muted);

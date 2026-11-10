@@ -101,10 +101,6 @@ kb-lite token [--show] [--rotate]
    # ⚠️ `--show` 在开启读取密码时才有意义；关着时直接告诉你“当前没有启用访问密码”
 kb-lite mcp
    # v0.4 尚未实现（ADR-006：把 stdio 的 MCP 调用转发到本地 HTTP 的薄壳）
-kb-lite sync <name> [--wait]
-   # v0.5 尚未实现。git -C <root> pull --ff-only，然后 reindex。
-   # 只 pull，不 add/commit/push。冲突或非 fast-forward 时不强行处理，
-   # 打印 git 的输出并退出码 2，让用户自己解决。
 kb-lite stop
    # 暂停服务：AI 那一面（/kb/*、/skill.md）返回 503，**进程、索引、托盘、管理面都保留**；
    # 再 `start` 立刻恢复，不重切。监听不关 —— 否则 `start` 就没有可以唤醒它的通道
@@ -143,7 +139,7 @@ kb-lite version
 |---|---|
 | `search` / `toc` / `read` / `manifest` / `status` / `skill` / `list` | **自动降级为离线只读**：进程内扫目录，并用 SQLite（**只读连接**）按 sha1 跳过没变过的文件。SQLite 不存在或 `--no-db` 时现场全量切片（慢一点，但结果一致） |
 | `add` | 优先走管理接口；daemon 没跑时退回直接改 `config.json`（过渡行为） |
-| `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `sync` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon**。用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
+| `remove` / `enable` / `disable` / `rename` / `reindex` / `settings` / `skill --install` / `stop` / `start` / `quit` | 报错退出（码 4）并提示 `先运行 kb-lite serve`。**不要静默替你起一个后台 daemon**。用户不知道它在跑，之后端口占用、日志找不到、升级时进程还在，全是麻烦 |
 
 > `settings` / `skill --install` 之所以也必须走 daemon：它们要改的是**正在运行的那份配置**，
 > 自己改 `config.json` 会和内存里的状态对不上（端口、监听地址、skill 渲染日期）。

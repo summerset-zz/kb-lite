@@ -9,6 +9,9 @@
       content="把一个 markdown 目录变成 agent 可以直接 curl 的只读知识库。零 LLM、零依赖、目录即真相。"
     />
     <link rel="stylesheet" href="./style.css" />
+    <!-- 图标与程序里那份同一张（internal/tray/assets/normal.png 拷过来的）。
+         路径用相对形式：站点挂在 /kb-lite/ 下面也不会 404。 -->
+    <link rel="icon" href="./favicon.png" type="image/png" />
   </head>
   <body>
     <!--
@@ -22,7 +25,7 @@
       定位句必须与 README 逐字一致（docs/08 末段）：两处说法不同，用户会认为两边都在夸张。
     -->
     <header class="top">
-      <a class="brand" href="./">kb-lite</a>
+      <a class="brand" href="./"><img src="./favicon.png" alt="" width="22" height="22" />kb-lite</a>
       <nav>
         <a href="https://github.com/summerset-zz/kb-lite">GitHub</a>
         <a href="https://github.com/summerset-zz/kb-lite/releases/latest">下载</a>
