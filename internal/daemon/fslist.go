@@ -18,6 +18,11 @@ type FSListResp struct {
 	Parent string   `json:"parent,omitempty"`
 	Dirs   []FSDir  `json:"dirs"`
 	Drives []string `json:"drives,omitempty"`
+	// UnderHome 表示这个位置在当前用户的用户目录里（含子目录）。
+	//
+	// 界面据此提醒一句：放在自己用户目录里的资料，换一个电脑用户登录就读不到，
+	// 索引也更新不了。不说清楚的话，用户会以为是程序坏了。
+	UnderHome bool `json:"underHome,omitempty"`
 }
 
 // FSDir 是一个候选子目录。
@@ -66,7 +71,7 @@ func ListDirs(p string) (*FSListResp, error) {
 		return nil, err
 	}
 
-	resp := &FSListResp{Path: abs, Dirs: make([]FSDir, 0, len(dirs))}
+	resp := &FSListResp{Path: abs, Dirs: make([]FSDir, 0, len(dirs)), UnderHome: underHome(abs)}
 	if parent := filepath.Dir(abs); parent != abs {
 		resp.Parent = parent
 	}
@@ -136,6 +141,21 @@ func CreateDir(parent, name string) (string, error) {
 		return "", err
 	}
 	return full, nil
+}
+
+// underHome 判断这个位置是不是在当前用户的用户目录里。
+//
+// 只用来决定界面要不要提一句“这个目录别的电脑用户读不到”，
+// 不当成任何安全判断：真正能不能读由系统权限决定。
+func underHome(p string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		home = resolved
+	}
+	return within(home, p)
 }
 
 // fsErrorMessage 把系统错误翻成一句用户能懂的话。

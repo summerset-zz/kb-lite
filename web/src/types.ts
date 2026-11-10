@@ -47,6 +47,8 @@ export interface FsList {
   parent?: string
   dirs: FsDir[]
   drives?: string[]
+  /** 这个位置在当前用户的用户目录里：换一个电脑用户就读不到，索引也更新不了。 */
+  underHome?: boolean
 }
 
 export interface SkillTarget {

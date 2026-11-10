@@ -209,6 +209,10 @@ async function createDir() {
       <p class="muted text-xs mt-1">{{ s.picker.nameHint }}</p>
     </div>
 
+    <!-- 在用户目录里就提醒一句：别的电脑用户读不到，索引也更新不了。
+         不说的话，用户换个人登录看到“读不到目录”会以为是程序坏了。 -->
+    <p v-if="askName && cur?.underHome" class="note mt-3 text-sm">{{ s.picker.sharedHint }}</p>
+
     <p v-if="submitError" class="note mt-3 text-sm">{{ submitError }}</p>
 
     <template #footer>
