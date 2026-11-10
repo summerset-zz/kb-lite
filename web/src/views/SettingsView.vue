@@ -414,6 +414,12 @@ function openStale() {
     <!-- 其他 -->
     <section class="card p-4 mt-4 space-y-4">
       <div>
+        <p class="text-sm font-medium">{{ s.logs.title }}</p>
+        <p class="muted text-xs mt-0.5">{{ s.logs.hint }}</p>
+        <a class="btn btn-sm mt-2" href="#logs">{{ s.logs.title }}</a>
+      </div>
+
+      <div>
         <p class="text-sm font-medium">{{ s.settings.rerunWizard }}</p>
         <button class="btn btn-sm mt-2" type="button" :disabled="busy !== ''" @click="rerunWizard">
           {{ s.settings.rerunWizard }}

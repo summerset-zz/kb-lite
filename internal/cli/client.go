@@ -94,6 +94,7 @@ func (c *client) get(path string, q url.Values) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", userAgent())
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
@@ -125,6 +126,12 @@ func (c *client) get(path string, q url.Values) ([]byte, error) {
 	return body, nil
 }
 
+// userAgent 让服务端能认出“这次是命令行在调”。
+//
+// 不设的话 Go 会发 `Go-http-client/1.1`，跟任何别的 Go 程序长得一样。
+// 访问日志里的“方式”一列就是按它分的（docs/04 的 `/api/logs`）。
+func userAgent() string { return "kb-lite/" + daemon.Version }
+
 // kbPath 拼 `/kb/<name>/...`。KB 名字里可能有中文和空格，必须按段转义。
 func kbPath(name string, tail string) string {
 	return "/kb/" + url.PathEscape(name) + "/" + tail
@@ -155,6 +162,7 @@ func (c *client) admin(method, path string, payload any) ([]byte, error) {
 	}
 	req.Header.Set("X-KB-Admin", c.apiToken)
 	req.Header.Set("Origin", c.base)
+	req.Header.Set("User-Agent", userAgent())
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	}

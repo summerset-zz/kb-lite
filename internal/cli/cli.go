@@ -76,6 +76,10 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --target dsh|claude|both  装到哪，默认 dsh
     --url <base>            覆盖服务地址
   token [--show] [--rotate] 看/换读取面的访问密码（管理凭据不提供打印）
+  logs                      看访问日志（只在内存里，重开即空）
+    --limit <n>             最新 N 条，默认 50
+    --json                  输出 JSON
+    --clear                 清空
   stop                      暂停：AI 那一面返回 503，进程与索引都还在
   start                     从暂停恢复（不重新整理）
   quit                      退出：关监听、关记录文件、进程结束
@@ -133,6 +137,8 @@ func Run(args []string) int {
 		return runSkill(rest)
 	case "token":
 		return runToken(rest)
+	case "logs":
+		return runLogs(rest)
 	case "doctor":
 		return runDoctor(rest)
 	case "autostart":
@@ -168,7 +174,7 @@ func (s *stringsFlag) Set(v string) error {
 var boolFlagNames = map[string]bool{
 	"explain": true, "json": true, "open": true, "no-db": true, "no-tray": true,
 	"show": true, "help": true, "force": true, "rotate": true, "yes": true, "wait": true,
-	"install": true, "install-authoring": true, "refresh": true,
+	"install": true, "install-authoring": true, "refresh": true, "clear": true,
 }
 
 // splitFlags 把参数拆成「flag」与「位置参数」两半边。

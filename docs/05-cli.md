@@ -111,6 +111,9 @@ kb-lite shortcut
    # 在桌面建一个 KBLite 快捷方式（Windows）
 kb-lite update [--refresh]
    # 查一次有没有新版本。**这是唯一会访问外网的命令**，只在明确敲它时发一次请求
+kb-lite logs [--limit <n>] [--json] | [--clear]
+   # 看访问日志：谁、什么方式、干了什么、状态码。默认最近 50 条
+   # 数据只在 daemon 内存里，daemon 一退就空；`--clear` 清空
 kb-lite version
 ```
 

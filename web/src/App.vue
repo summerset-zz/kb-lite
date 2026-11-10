@@ -12,17 +12,18 @@ import AgentView from './views/AgentView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AboutView from './views/AboutView.vue'
 import HelpView from './views/HelpView.vue'
+import LogsView from './views/LogsView.vue'
 import ToastHost from './components/ToastHost.vue'
 
 // 'agent' 暂时不在导航里，但 #agent 仍然可用（docs/06 §5.4）。
-type Tab = 'kbs' | 'search' | 'agent' | 'settings' | 'about' | 'help'
+type Tab = 'kbs' | 'search' | 'agent' | 'settings' | 'about' | 'help' | 'logs'
 
 const { status, loading, error, refresh, needWizard } = useStatus()
 
 // 页签跟着 URL 锚点走：托盘的“设置”直接打开 /#settings，刷新也不丢当前页。
 const tabFromHash = (): Tab => {
   const h = location.hash.replace('#', '')
-  const known: Tab[] = ['settings', 'about', 'search', 'agent', 'help']
+  const known: Tab[] = ['settings', 'about', 'search', 'agent', 'help', 'logs']
   return (known as string[]).includes(h) ? (h as Tab) : 'kbs'
 }
 const tab = ref<Tab>(tabFromHash())
@@ -100,6 +101,7 @@ async function resume() {
         <AgentView v-else-if="tab === 'agent'" :status="status" />
         <SettingsView v-else-if="tab === 'settings'" :status="status" />
         <HelpView v-else-if="tab === 'help'" />
+        <LogsView v-else-if="tab === 'logs'" />
         <AboutView v-else :status="status" />
       </main>
       <AppFooter :status="status" />

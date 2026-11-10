@@ -10,8 +10,8 @@ import { useToast } from '../toast'
 import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ status: Status }>()
-// 'help' 与 'agent' 都不在导航里：它们走 #hash，模型类型必须认得这两个值。
-const tab = defineModel<'kbs' | 'search' | 'agent' | 'settings' | 'about' | 'help'>('tab', {
+// 'help'、'agent'、'logs' 都不在导航里：它们走 #hash，模型类型必须认得这三个值。
+const tab = defineModel<'kbs' | 'search' | 'agent' | 'settings' | 'about' | 'help' | 'logs'>('tab', {
   required: true,
 })
 
@@ -100,6 +100,9 @@ const tabs = [
             <button class="menu-item" type="button" @click="copyBase(); menu.close()">
               {{ s.service.copyAddress }}
             </button>
+            <!-- 排查“AI 到底来没来”用得最多。用 a 而不是 button，
+                 让浏览器自己能改掉 hash，App 那边接 hashchange。 -->
+            <a class="menu-item" href="#logs" @click="menu.close()">{{ s.nav.logs }}</a>
           </div>
         </div>
 

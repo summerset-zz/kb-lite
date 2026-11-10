@@ -371,6 +371,50 @@ func (h *Handler) handleKBReportAdmin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleLogs 是 `GET /api/logs`：访问日志，给界面的「访问日志」页用。
+//
+// 只读内存里的环形缓冲，不碰磁盘。`since` 是上次拿到的最大序号，
+// 前端靠它做增量：不传就返回最近 limit 条，传了就只返回更新的。
+func (h *Handler) handleLogs(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	since := int64(atoiDefault(q.Get("since"), 0))
+	limit := atoiDefault(q.Get("limit"), 200)
+	if limit <= 0 {
+		limit = 200
+	}
+
+	items := h.access.list(since, limit)
+	if items == nil {
+		items = []AccessEntry{}
+	}
+	// 设备名从缓存里补，没查到就是空。这里**不做同步反查**：那会把一个日志请求
+	// 拖成全站最慢的请求。
+	for i := range items {
+		if items[i].Self || items[i].Host != "" {
+			continue
+		}
+		items[i].Host = h.hosts.name(items[i].IP)
+	}
+
+	total, dropped := h.access.stats()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"items":   items,
+		"latest":  h.access.latest(),
+		"total":   total,
+		"dropped": dropped,
+		"max":     maxAccessEntries,
+	})
+}
+
+// handleLogsClear 是 `POST /api/logs/clear`：清空访问日志。
+//
+// 只清内存，不动任何配置文件。序号不重置（见 accessRing.seq 的注释）。
+func (h *Handler) handleLogsClear(w http.ResponseWriter, r *http.Request) {
+	h.access.clear()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // handleSettings 是 `POST /api/settings`。
 //
 // 两种改动的生效方式不一样（docs/04）：

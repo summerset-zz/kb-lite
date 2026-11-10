@@ -3,6 +3,7 @@ import type {
   FsProbe,
   KB,
   KBReport,
+  LogsResponse,
   PreviewResponse,
   SearchResponse,
   ShortcutInfo,
@@ -158,6 +159,11 @@ export const api = {
 
   /** 装没装、是不是最新（从磁盘读，不是记在内存里）。 */
   skillStatus: () => request<{ ok: boolean; items: SkillState[] }>('GET', '/api/skill/status'),
+
+  /** 访问日志（内存里的，重启即空）。since 传上次的 latest 做增量。 */
+  logs: (since: number) =>
+    request<LogsResponse>('GET', `/api/logs${q({ since: since > 0 ? since : undefined })}`),
+  clearLogs: () => request<{ ok: boolean }>('POST', '/api/logs/clear'),
 
   /** 暂停与恢复只影响给 AI 的那一面；索引与进程都不动。 */
   setPaused: (paused: boolean) =>

@@ -198,6 +198,38 @@ export interface ShortcutInfo {
   error?: string
 }
 
+/** 一条访问记录（`GET /api/logs`）。 */
+export interface AccessEntry {
+  seq: number
+  /** 毫秒时间戳。 */
+  at: number
+  ip: string
+  /** 来自本机（回环地址）。 */
+  self: boolean
+  /** 反查到的设备名，尽力而为，拿不到就是空。 */
+  host?: string
+  /** 推断出来的客户端类型。other 时用 ua 展示。 */
+  client: 'cli' | 'curl' | 'browser' | 'other' | 'unknown'
+  ua?: string
+  method: string
+  path: string
+  status: number
+  ms: number
+  /** 一句人话。 */
+  action: string
+}
+
+export interface LogsResponse {
+  ok: boolean
+  items: AccessEntry[]
+  /** 下次请求拿它当 since。 */
+  latest: number
+  total: number
+  /** 环形缓冲覆盖掉的旧条目数。 */
+  dropped: number
+  max: number
+}
+
 /** 检查更新的结果（`GET /api/update`）。查不到时 ok 为假、error 是人话。 */
 export interface UpdateInfo {
   ok: boolean

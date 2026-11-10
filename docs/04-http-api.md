@@ -372,6 +372,44 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 
 索引、记录文件、进程都保留，恢复不需要重新整理（`docs/06` 第二节）。暂停状态进 `/api/status` 的 `paused`。
 
+### `GET /api/logs?since=<seq>&limit=<n>`
+
+访问日志：谁在什么时候来查了什么。**只存在内存里**，进程一退就没了（`docs/07`）。
+
+```jsonc
+{ "ok": true,
+  "items": [
+    { "seq": 128, "at": 1762500000123, "ip": "127.0.0.1", "self": true, "host": "",
+      "client": "cli", "ua": "kb-lite/0.4.2",
+      "method": "GET", "path": "/kb/笔记/search", "status": 200, "ms": 3,
+      "action": "在“笔记”里搜了“部署 回滚”" }
+  ],
+  "latest": 128, "total": 12, "dropped": 0, "max": 20000 }
+```
+
+- `items` 按时间**从旧到新**。`since` 只回 `seq` 更大的那些，供界面增量拉取；不传就回最近 `limit` 条。
+- `limit` 默认 200，上限 1000。
+- `latest` 下次请求直接拿它当 `since`。**清空不重置它**：重置了界面就再也拉不到新条目。
+- `total` 是当前留存的条数；满 `max` 条（20000）开始覆盖最旧的，覆盖了多少写在 `dropped`。
+- `self` 表示来自回环地址；`host` 是反查到的设备名，尽力而为，拿不到就是空串。
+- `client` 由 User-Agent 推断：`cli`（`kb-lite/*`）、`curl`、`browser`、`other`、`unknown`。
+- `action` 是一句给人看的话。**它不是稳定契约**：新接口就加新话术，不改已有的。
+
+记哪些：
+
+| 请求 | 记不记 |
+|---|---|
+| `/kb/*`、`/skill.md`、`/authoring.md` | 记 |
+| 管理面的 POST / PATCH / DELETE | 记（有副作用） |
+| `/api/search`、`/api/preview`、`/api/update`、`/api/logs*` | 不记 |
+| 界面静态资源、`/api/status` 之类的轮询 | 不记 |
+
+**绝不记**：请求头与 cookie、任何密码、请求体。搜索词会出现在 `path` 与 `action` 里，截断到 60 字。
+
+### `POST /api/logs/clear`
+
+清空。`seq` 不回退。返回 `{ "ok": true }`。
+
 ### `POST /api/shutdown`
 
 关监听、关记录文件、进程结束。UI 的“退出”按钮与 `kb-lite quit` 用它。

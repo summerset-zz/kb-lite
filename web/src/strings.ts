@@ -17,6 +17,7 @@ export const s = {
     // 叫“检索测试”而不是“搜索”：这一页是给用户排查“为什么搜不到”的，不是搜索框。
     search: '检索测试',
     agent: '给 AI 看',
+    logs: '访问日志',
     settings: '设置',
     about: '关于',
   },
@@ -234,6 +235,27 @@ export const s = {
     path: '条目路径',
     pathPlaceholder: '比如 docs/zh/postscript-fonts.md',
     sectionNo: '第几节',
+  },
+
+  // 访问日志（#logs）。
+  logs: {
+    title: '访问日志',
+    hint: '谁在什么时候来查了什么。只记在内存里，kb-lite 重开就清空。',
+    // 用户要求显式强调这一句：日志里有搜索词，得先说清它不会飞出去。
+    privacy: '本信息只用于调试，不会提交到网络。',
+    empty: '还没有访问记录。让 AI 查一次，这里就会出现。',
+    clear: '清空',
+    cleared: '日志已清空。',
+    self: '本机',
+    more: '只看最近',
+    dropped: (n: number) => `更早的 ${n} 条已经被覆盖掉了。`,
+    client: {
+      cli: '命令行',
+      curl: 'curl',
+      browser: '浏览器',
+      other: '其它程序',
+      unknown: '未知程序',
+    } as Record<string, string>,
   },
 
   settings: {

@@ -71,6 +71,10 @@ type Handler struct {
 	// paused 只夹住给 AI 用的那一面（docs/04）：界面与 /api/* 照常，
 	// 否则用户看不到“继续使用”按钮，`kb-lite start` 也没地方可调。
 	paused atomic.Bool
+	// access 是访问日志：定长环形缓冲，进程重启就空（docs/04 的 `/api/logs`）。
+	access *accessRing
+	// hosts 缓存 IP 到设备名的反查，只在日志展示时用，不阻塞请求。
+	hosts *hostResolver
 }
 
 // NewHandler 建一个 Handler。
@@ -88,6 +92,8 @@ func NewHandler(mgr *Manager, readToken, apiToken string, opts HandlerOptions) *
 		apiToken:  apiToken,
 		opts:      opts,
 		failures:  newThrottle(authFailureWindow, authFailureMax),
+		access:    newAccessRing(maxAccessEntries),
+		hosts:     newHostResolver(),
 	}
 	h.requireToken.Store(opts.RequireToken)
 	h.port.Store(int32(opts.Port))
@@ -165,6 +171,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/token", h.handleAuthToken)
 	mux.HandleFunc("POST /api/skill/install", h.handleSkillInstall)
 	mux.HandleFunc("GET /api/skill/status", h.handleSkillStatus)
+	// 访问日志：只读内存，重启即空。
+	mux.HandleFunc("GET /api/logs", h.handleLogs)
+	mux.HandleFunc("POST /api/logs/clear", h.handleLogsClear)
 	mux.HandleFunc("POST /api/pause", func(w http.ResponseWriter, r *http.Request) {
 		h.handlePaused(w, r, true)
 	})
@@ -185,7 +194,9 @@ func (h *Handler) Routes() http.Handler {
 	// 只注册「一个子树」再由自己分发：Go 的 `{path...}` 只能出现在模式末尾，
 	// 而我们要同时有 `/entry/{path}` 和 `/entry/{path}/section` 两种形态。
 	mux.HandleFunc("GET /kb/{name}/", h.handleKB)
-	return h.guard(mux)
+	// 访问日志裹在最外层：**被 guard 拒掉的请求也要进日志**。
+	// “AI 连不上”的排查全靠这一条，401 与 503 恰恰是最有价值的两行。
+	return h.logAccess(h.guard(mux))
 }
 
 // ---- 中间件（docs/07）----
