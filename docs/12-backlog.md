@@ -34,7 +34,8 @@
    下载、解压、双击、跑完向导、装上 SKILL、让 AI 查一次。
    顺手验两件新东西：自启指向的路径是不是安装目录（别在下载目录里开，那个目录会被清掉）、
    桌面快捷方式目标对不对，以及从旧版本换过来之后设置页有没有提示“指向另一份程序”。
-2. **宣传页 `website/`**。`08` 末节已经写好内容顺序和 base path 的坑。还要 FAQ、两张截图（主界面 + Agent 视角页）。
+2. **宣传页 `website/`**。骨架已上线，还差两张截图（主界面 + Agent 视角页）、FAQ 细节，
+   以及把页脚的 License 链接对到 `LICENSE`。内容顺序与 base path 的坑在 `08` 末节。
 3. **MCP 薄壳**（ADR-006）。`kb-lite mcp` 把 stdio 的 `initialize` / `tools/list` / `tools/call` 转发到本地 HTTP。
    做完把向导里“说明书地址”那一行换成 `{"command":"kb-lite","args":["mcp"]}`。
 4. **v0.5 git**：`kb-lite sync <name>`（只 `pull --ff-only` 再 reindex），知识库那一行显示 git 状态与“拉取”。
@@ -47,7 +48,7 @@
 | --- | --- | --- |
 | “待更新”标记 | 06 §5.2 显示项 | 文案 `s.kbs.pending` 已经从 `strings.ts` 删掉了。真要做就得比根目录里文件的 mtime 与上次整理时间，属于第四节第 2 条 |
 | 页脚的“检查更新” | 06 §5.2 页脚 | 设置页已经有真的了（`GET /api/update`），页脚那处还是“即将上线”。要么接同一个接口，要么删掉那一项，别留一个假的 |
-| 宣传页、FAQ、截图 | 08 末节 | 目录都还没建 |
+| 宣传页、FAQ、截图 | 08 末节 | 架子已经上了（`website/` + `.github/workflows/pages.yml`）。还差两张截图（主界面 + Agent 视角页）与 FAQ 里的细节；页面骨架与安装表已写好 |
 | `CONTRIBUTING.md`、issue 模板 | 08 社区一节 | 未建。“检索不准”那个模板最重要，它同时是调权重的数据来源 |
 | `kb-lite mcp`、`kb-lite sync` | 05 CLI | 05 里已经标成“尚未实现”。实现时按 05 那段写，别再发明参数 |
 

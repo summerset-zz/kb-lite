@@ -1,0 +1,253 @@
+/*
+ * 宣传页样式。一页静态站，不引任何框架、不引任何构建工具（docs/08 §宣传页）。
+ *
+ * 两条硬规则：
+ *   1. 资源一律用相对路径（./style.css）。站点挂在 /kb-lite/ 下面，
+ *      相对路径天然不受 base path 影响，那个“本地看得见、线上 404”的坑就不存在。
+ *   2. 先写移动端，宽度够再放大。窄屏上最怕代码块把整页撑出横向滚动。
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f2;
+  --border: #e4e4e0;
+  --text: #1c1c1a;
+  --muted: #6b6b66;
+  --accent: #3f6f5f;
+  --accent-text: #ffffff;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14140f;
+    --surface: #1c1c17;
+    --surface-2: #24241e;
+    --border: #33332b;
+    --text: #ecebe4;
+    --muted: #9a9a8f;
+    --accent: #6fb59a;
+    --accent-text: #0f1a16;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.75 system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.top,
+main,
+footer {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* ---- 顶栏 ---- */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 20px;
+  padding-bottom: 8px;
+}
+
+.brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.top nav {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+}
+
+/* ---- 正文 ---- */
+
+h1 {
+  font-size: 30px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  margin: 32px 0 0;
+}
+
+h2 {
+  font-size: 18px;
+  margin: 44px 0 0;
+}
+
+p {
+  margin: 12px 0 0;
+}
+
+.lead {
+  color: var(--muted);
+  margin-top: 14px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--border);
+}
+
+a:hover {
+  border-color: var(--muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 550;
+  font-size: 15px;
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 400;
+}
+
+.note {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.center {
+  text-align: center;
+}
+
+/* ---- 代码块：横向可滚，绝不撑破页面 ---- */
+
+pre {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow-x: auto;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.92em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+pre code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+/* ---- 表格 ---- */
+
+table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  /* 窄屏上表格最容易把整页撑宽：长文件名（kb-lite-macos-arm64.tar.gz）不许撑破列。 */
+  overflow-wrap: anywhere;
+}
+
+th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- 问答 ---- */
+
+dl {
+  margin: 16px 0 0;
+}
+
+dt {
+  font-weight: 600;
+  margin-top: 18px;
+}
+
+dd {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+/* ---- 页脚 ---- */
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 56px;
+  padding-top: 18px;
+  padding-bottom: 40px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+footer .sep {
+  color: var(--border);
+}
+
+@media (max-width: 560px) {
+  h1 {
+    font-size: 24px;
+  }
+
+  h2 {
+    font-size: 17px;
+  }
+
+  th,
+  td {
+    padding: 8px 6px;
+  }
+}

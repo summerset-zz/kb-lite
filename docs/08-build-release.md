@@ -32,17 +32,18 @@ kb-lite/
     tray/                 # Windows 托盘，纯 Go + syscall
     cli/                  # 子命令，每个一个文件
   web/                    # Vite + Vue 3，产物拷进 internal/daemon/static
+  website/                # GitHub Pages 宣传页：纯静态 HTML + CSS，不构建
   docs/                   # 本套文档 = 规格书
-  .github/workflows/      # ci.yml（测试 + 交叉编译 + 界面）、release.yml（打 tag 发版）
+  .github/workflows/      # ci.yml（测试 + 交叉编译 + 界面）、release.yml（打 tag 发版）、pages.yml
   AGENTS.md
   CHANGELOG.md
   LICENSE
   README.md
 ```
 
-**没有 `Makefile`，也没有 `website/`、`desktop/`。** 构建脚本在 `web/package.json`
+**没有 `Makefile`，也没有 `desktop/`。** 构建脚本在 `web/package.json`
 （`pnpm build` 里已经包含 `vue-tsc --noEmit`、`vite build` 与拷进 `static/` 三步）。
-宣传页与 Tauri 桌面壳都还没开始（见 [09](./09-roadmap.md)），先不要在文档里假装它们存在。
+Tauri 桌面壳还没开始（见 [09](./09-roadmap.md)），先不要在文档里假装它存在。
 
 - **服务端没有任何 JS 工具链。** 切片器就是 02 里那套逐行 ATX 扫描（`slice.go`，约 200 行），**不用 `goldmark` 之类的 Markdown 库**。我们要的是“按行切、不解析行内语法”，一个完整解析器在这里是净负担，而且它的行为不完全可控。
 - **Go ≥ 1.22**（`net/http` 的 `ServeMux` 增强路由是 1.22 才有的）。CI 跑 1.22 与最新稳定版。
@@ -163,13 +164,20 @@ Release 正文 = **固定的开头三段** + `CHANGELOG.md` 里这个版本那�
 
 ## GitHub Pages 宣传页
 
-- 仓库 Settings → Pages → Source = **GitHub Actions**，发布 `website/` 的构建产物。
-- 因为仓库名是 `kb-lite`，站点地址是 `https://summerset-zz.github.io/kb-lite/`，所以**构建时 base path 必须设为 `/kb-lite/`**（否则 CSS/JS 404，这是最常见的翻车点，本地 `pnpm preview` 看不出来）。
+- 仓库 Settings → Pages → Source = **GitHub Actions**，由 `.github/workflows/pages.yml` 发布
+  `website/` 目录的**原样内容**。
+- 站点地址是 `https://summerset-zz.github.io/kb-lite/`，仓库名就是 `kb-lite`，所以站点挂在
+  一个子路径下。**页内资源一律用相对路径**（`./style.css`）：相对路径天然不受 base path 影响，
+  那个“本地看得见、线上 404”的坑就不存在了。
 
-技术选择：**Vite + 普通 HTML/CSS**，不要上 Astro/Next。
+技术选择：**纯静态 HTML + CSS，不建构建链**。
 
-- 这个站点只有一页，加一个“文档”页（把 `docs/` 里的几篇精简版转成 HTML 或直接用 GitHub 链接）。
-- 上框架的收益是 0，成本是多一份依赖要升级。
+- 这一页只有 HTML、CSS 与几张图片。上 Vite 的收益是 0（没有 TS、没有组件、没有需要拆包的依赖），
+  成本是 CI 里多一份 Node 安装与一条要长期升级的工具链。
+- 更要紧的是，`web/` 已经有一份 Node 工具链了。宣传页再引一份，等于把“升级依赖”这件事变成两处。
+- 将来真需要打包（比如把 `docs/` 转成一组 HTML）再上 Vite，那时把 `base` 设成 `/kb-lite/`。
+  在那之前**不要**在文档里写 `vite.config.ts`，它不存在。
+- **仍然不要 Astro / Next**：一页静态站的框架负担是纯成本。
 
 内容顺序（照这个顺序写，不要按“功能列表”写）：
 
@@ -182,6 +190,9 @@ Release 正文 = **固定的开头三段** + `CHANGELOG.md` 里这个版本那�
 7. 底部：GitHub、Releases、License。
 
 **宣传页与 README 的定位句必须逐字一致。** 两处说法不同的项目，用户会认为两边都在夸张。
+
+现在只有一页。将来想把 `docs/` 里的几篇做成 HTML，那是另一页的事，到时再定怎么生成；
+在那之前不要把文档站塞进这一页。
 
 ## 社区
 

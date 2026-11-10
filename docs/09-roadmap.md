@@ -58,7 +58,7 @@
 
 - 三平台构建 + Release（`.github/workflows/release.yml`）：**已发版**（`v0.4.0`，`v0.4.1` 只修了 macOS 上的 CI 误报）
 - README：**已重写**（下载、解压、双击，加 SmartScreen / Gatekeeper 的点击路径）
-- 宣传页 / 截图 / FAQ：**未做**，`website/` 目录都还没建
+- 宣传页 / 截图 / FAQ：**骨架已上线**（`website/` + `pages.yml`，纯静态）；截图与 FAQ 待补。`website/` 目录已存在（原先这里写着“还没建”，那是旧状态）
 - `kb-lite doctor` 补齐：**已做**（配置、端口、凭据、缓存、每个库的目录、SQLite 驱动都看）
 - 开机自启命令（`kb-lite autostart enable`）：**已做**（Windows，HKCU Run）
 - 另外补了两件不在原计划里的：桌面快捷方式（`kb-lite shortcut`）、检查更新（`kb-lite update`）

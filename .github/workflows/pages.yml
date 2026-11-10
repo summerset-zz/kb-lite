@@ -1,0 +1,46 @@
+name: pages
+
+# 只发 website/ 这个目录里的静态文件，没有任何构建步骤（docs/08 §宣传页）。
+#
+# 为什么不用 Actions 之外的办法：这一页资源全用相对路径（./style.css），
+# 站点挂在 /kb-lite/ 下面也不受影响；既然不用打包，也就不需要 Node 工具链。
+#
+# ⚠️ 第一次跑之前要在仓库 Settings → Pages 里把 Source 设成 GitHub Actions。
+# 这一步没法用 GITHUB_TOKEN 代替：启用 Pages 需要仓库管理员权限。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/pages.yml'
+  # 手动重发一次（改完 Pages 设置、或者怀疑缓存时用）。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只发一次；新的推送让它把旧的发完再上，不取消正在发布的那次。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

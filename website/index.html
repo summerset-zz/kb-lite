@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>kb-lite · 你的 markdown 目录，一个 curl 就能查的知识库</title>
+    <meta
+      name="description"
+      content="把一个 markdown 目录变成 agent 可以直接 curl 的只读知识库。零 LLM、零依赖、目录即真相。"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!--
+      这是宣传页的骨架（docs/08「GitHub Pages 宣传页」）。
+      内容顺序按那一节写，别改成“功能列表”。
+
+      还没做完的两处，做的时候删掉这条注释：
+        1. 截图：主界面 + Agent 视角页（后者最有说服力），放 ./img/ 下；
+        2. FAQ 里“能多人用吗”可以再补一句 git 的具体做法。
+
+      定位句必须与 README 逐字一致（docs/08 末段）：两处说法不同，用户会认为两边都在夸张。
+    -->
+    <header class="top">
+      <a class="brand" href="./">kb-lite</a>
+      <nav>
+        <a href="https://github.com/summerset-zz/kb-lite">GitHub</a>
+        <a href="https://github.com/summerset-zz/kb-lite/releases/latest">下载</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>你的 markdown 目录，<br />一个 curl 就能查的知识库。</h1>
+      <p class="lead">
+        零 LLM、零依赖、只读、目录即真相。服务端自带写给 agent 的使用说明。
+      </p>
+      <p class="actions">
+        <a class="btn" href="https://github.com/summerset-zz/kb-lite/releases/latest">下载 · 双击即用</a>
+        <a class="btn ghost" href="https://github.com/summerset-zz/kb-lite">看源码</a>
+      </p>
+
+      <h2>它长什么样</h2>
+      <p>
+        把一堆 <code>.md</code> 指给 kb-lite，它切好、索引好，在本地起一个 HTTP 服务。
+        你的 Agent、聊天机器人、harness 用 <code>curl</code> 就能检索和阅读，
+        拿到的不是一段语无伦次的片段，而是一份<strong>结构化的目录</strong>，再按编号精确读某一节。
+      </p>
+
+      <pre><code>$ kb-lite add ~/notes --name 我的笔记
+已索引“我的笔记”：128 篇 / 743 节 / 2.1 MB
+
+$ curl "$BASE/kb/我的笔记/search?q=部署流程&amp;q=deploy"
+[
+  { "title": "运维手册", "path": "ops/runbook.md", "score": 33,
+    "summary": "线上环境的上线、回滚与排障流程。",
+    "toc": "1 上线流程 · 1203 字\n2 回滚 · 380 字\n  3 常见故障 · 空" }
+]
+
+$ curl "$BASE/kb/我的笔记/entry/ops/runbook.md/section?n=2"
+{ "sectionTitle": "回滚", "path": ["上线与回滚", "回滚"], "content": "…" }</code></pre>
+
+      <p>
+        两段式：<strong>搜索只回候选（标题 + 摘要 + 文本目录），正文按编号或标题再读一次。</strong>
+        这样 1000 篇笔记也不会一次把上下文塞满。
+      </p>
+      <p>
+        不接向量库，不调大模型，不要 API key。删掉索引文件也不会丢一个字的资料。你的 markdown 就是数据库。
+      </p>
+      <p class="note">
+        默认不联网。只有你自己点“检查更新”时，它才会去 GET 一次 GitHub 的 releases 接口。
+        没有后台同步、没有自动上传、没有遥测。
+      </p>
+
+      <h2>为什么不用现成的</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>你可能想用的</th>
+            <th>为什么这里还是值得有一个 kb-lite</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>basic-memory</strong></td>
+            <td>
+              强，但 MCP-first（每个客户端 spawn 一份）、要 Python/uv、
+              要求按它的 <code>Observations/Relations</code> 语法写笔记、语义检索要 embedding
+            </td>
+          </tr>
+          <tr>
+            <td><strong>obsidian-local-rest-api</strong></td>
+            <td>
+              最像，但必须常驻 Obsidian、搜索是 Obsidian 自己的模糊搜索，
+              而且<strong>全量可写</strong>（给 agent 用太危险）
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Trilium / SilverBullet / Khoj</strong></td>
+            <td>
+              都是“笔记应用自带 API”，不是“给你的目录加一个只读的 agent 接口”，而且体量重
+            </td>
+          </tr>
+          <tr>
+            <td><strong>llm-wiki / 各类 MCP 小项目</strong></td>
+            <td>
+              理念对了（wiki over RAG），但依赖 LLM 跑后台任务、排序靠 BM25、几乎没有中文优化
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="center">
+        kb-lite 只做一件事：<strong>把一个 markdown 目录，变成 agent 能高效导航的只读接口。</strong>
+      </p>
+
+      <h2>安装</h2>
+      <p>
+        去 <a href="https://github.com/summerset-zz/kb-lite/releases/latest">Releases</a>
+        下载对应平台的一个文件，解压，<strong>双击</strong>。不用安装，不用 Node / Python / Docker。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>你的电脑</th>
+            <th>下载</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Windows 普通电脑</td>
+            <td><code>kb-lite-win-x64.zip</code></td>
+          </tr>
+          <tr>
+            <td>Windows on ARM</td>
+            <td><code>kb-lite-win-arm64.zip</code></td>
+          </tr>
+          <tr>
+            <td>Mac（Apple 芯片）</td>
+            <td><code>kb-lite-macos-arm64.tar.gz</code></td>
+          </tr>
+          <tr>
+            <td>Mac（Intel）</td>
+            <td><code>kb-lite-macos-x64.tar.gz</code></td>
+          </tr>
+          <tr>
+            <td>Linux x64</td>
+            <td><code>kb-lite-linux-x64.tar.gz</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note">
+        这个软件没有买代码签名证书。Windows 会弹出一句“Windows 已保护你的电脑”，
+        点“更多信息”再点“仍要运行”；macOS 右键点图标，选“打开”。
+      </p>
+
+      <h2>常见问题</h2>
+      <dl>
+        <dt>会把我的笔记上传吗？</dt>
+        <dd>不会。它只在你自己的电脑上起一个只绑定 127.0.0.1 的服务，没有云、没有账号。</dd>
+
+        <dt>要 API key 吗？</dt>
+        <dd>不要。没有大模型参与，检索是关键词与字段位置加权，毫秒级。</dd>
+
+        <dt>支持 PDF 吗？</dt>
+        <dd>
+          不。只吃 markdown 与 txt。但我们写了一份整理说明，可以交给另一个 AI，让它把 docx、pdf
+          转成能进知识库的 markdown。
+        </dd>
+
+        <dt>能多人一起用吗？</dt>
+        <dd>
+          没有账号与权限。几个人共用一台机器时，大家读写同一个目录，内容同步交给 git。
+        </dd>
+      </dl>
+    </main>
+
+    <footer>
+      <a href="https://github.com/summerset-zz/kb-lite">GitHub</a>
+      <a href="https://github.com/summerset-zz/kb-lite/releases/latest">Releases</a>
+      <a href="https://github.com/summerset-zz/kb-lite/blob/main/LICENSE">MIT License</a>
+      <span class="sep">·</span>
+      <span>by Summerset-zz</span>
+    </footer>
+  </body>
+</html>

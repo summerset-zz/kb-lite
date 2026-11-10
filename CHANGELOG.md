@@ -5,7 +5,14 @@
 
 ## [Unreleased]
 
-（下一轮开发的东西放这里。发版时把这一段改名成版本号。）
+### Added
+
+- **宣传页**（`website/`，见 `.github/workflows/pages.yml`）：一页静态 HTML + CSS，
+  发到 GitHub Pages 的 `https://summerset-zz.github.io/kb-lite/`。
+  **不建构建链**：这一页没有 TS、没有组件、没有要拆包的依赖，上 Vite 的收益是 0，
+  成本是 CI 里多一份 Node 与一条要长期升级的工具链。页内资源全用相对路径，
+  所以挂在子路径下也不会 404。
+  当前是骨架：定位句、curl 示例、对比表、安装表、四条 FAQ 已在，截图待补。
 
 ## [0.4.1] - 2026-11-10
 
