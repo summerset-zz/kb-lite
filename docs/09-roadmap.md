@@ -2,7 +2,12 @@
 
 每个阶段都有**可验收的产出**，做完才进下一阶段。不要并行铺开。
 
-## v0.1 · 协议跑通（无 UI、无落盘）
+> **现在到哪儿了（2026-11-10）**：v0.1 到 v0.3 已完成，`v0.3.0` 是最后一个 tag。
+v0.4 的代码部分（自启、快捷方式、检查更新、单实例锁、CI 与 release.yml）已经做完，
+还差“打一次 tag”与“在干净机器上过一遍”。
+> 逐项状态、规格里写了但代码没有的、待定的决策，都在 [12-backlog](./12-backlog.md)。
+
+## v0.1 · 协议跑通（无 UI、无落盘）· 已完成
 
 **目标**：自己（summerset）能用它替代现有的知识库调用，跑满一周。
 
@@ -25,7 +30,7 @@
 
 > 这一阶段结束就应该能回答“这套协议是不是真的比 basic-memory 好用”。**如果答案是否，后面全都不用做了。**
 
-## v0.2 · 落盘与增量
+## v0.2 · 落盘与增量 · 已完成
 
 - SQLite（`modernc.org/sqlite`，纯 Go；无驱动时降级纯内存）
 - sha1 跳过未变文件；`--force`
@@ -34,7 +39,7 @@
 
 **验收**：1000 篇的库二次启动 < 500 ms；删掉 `index.db` 后首次启动结果完全一致。
 
-## v0.3 · 管理接口、Web UI 与托盘
+## v0.3 · 管理接口、Web UI 与托盘 · 已完成（`v0.3.0`）
 
 - 管理接口：`/api/kbs` 全套、`/api/fs/list`、`/api/settings`、`/api/auth/token`、`/api/skill/install`、`/api/shutdown`；
   `/api/*` 用 **admin 凭据 + 同源信号**，读取面 token 默认关（ADR-015）
@@ -50,27 +55,29 @@
 3. 删除 KB 之后，目录里的文件 md5 与之前完全一致；
 4. 托盘暂停再启动，不需要重新整理（索引还在）。
 
-## v0.4 · 分发
+## v0.4 · 分发（代码已完成，尚未发版）
 
-- 三平台构建 + Release（`.github/workflows/release.yml`，目前还没有）
-- README / 宣传页 / 截图 / FAQ
-- `kb-lite doctor` 补齐（若 v0.3 只做了骨架）
-- 开机自启命令（`kb-lite autostart enable`）
+- 三平台构建 + Release（`.github/workflows/release.yml`）：**已写，尚未真正发过一次版**
+- README：**已重写**（下载、解压、双击，加 SmartScreen / Gatekeeper 的点击路径）
+- 宣传页 / 截图 / FAQ：**未做**，`website/` 目录都还没建
+- `kb-lite doctor` 补齐：**已做**（配置、端口、凭据、缓存、每个库的目录、SQLite 驱动都看）
+- 开机自启命令（`kb-lite autostart enable`）：**已做**（Windows，HKCU Run）
+- 另外补了两件不在原计划里的：桌面快捷方式（`kb-lite shortcut`）、检查更新（`kb-lite update`）
 
 **验收**：从 Releases 下载 → 双击 → 见到界面，全程不需要安装任何东西（在一台没装过 Node / Go / Python 的 Windows 干净机器上验）。
 
-## v0.5 · git
+## v0.5 · git · 未开始
 
 - `kb-lite sync <name>`（`git pull --ff-only` + reindex）
 - KB 卡片上显示 git 状态
 - **只读 git**：不 add / commit / push
 
-## v1.0
+## v1.0 · 未开始
 
 - 索引格式冻结（`schema_version` 与 `PRAGMA user_version` 定版）
 - 文档补全，issue 模板上线
 
-## v2 · 桌面壳（条件触发，见 [06](./06-desktop-ui.md#触发升级到-tauri-的条件)）
+## v2 · 桌面壳（条件触发，未开始，见 [06](./06-desktop-ui.md#触发升级到-tauri-的条件)）
 
 托盘、单实例、原生目录选择、自动更新。
 

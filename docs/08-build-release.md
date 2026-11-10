@@ -7,33 +7,42 @@
 ```
 kb-lite/
   go.mod                  # module github.com/summerset-zz/kb-lite，go 1.22
-  cmd/kb-lite/main.go     # serve 入口 + 子命令分发
+  cmd/kb-lite/main.go     # 入口 + 子命令分发
   internal/
-    core/                 # 切片 + 打分（纯函数，不 import net/http / os）
+    core/                 # 切片 + 打分（纯函数，不 import net/http / os / path/filepath）
       types.go
-      slice.go
-      search.go
-      *_test.go           # 含排序快照（testdata/rank/*.json）
+      slice.go            # 逐行 ATX 扫描
+      search.go           # 加权计数
+      frontmatter.go
+      build.go            # 目录 → 条目（由 daemon 传进来，自己不读盘）
+      *_test.go           # 含切片与排序快照
     daemon/
-      config.go
+      config.go           # config.json + 配置目录
       scan.go             # 发现 + 解码 + 越界校验
-      index.go            # 内存索引（atomic.Pointer 快照）
-      sqlite.go
+      index.go            # 内存索引（atomic.Pointer 快照）+ 整理调度
+      sqlite.go           # 缓存（目录即真相，ADR-003）
       driver_modernc.go   # 带 build tag，纯 Go SQLite
       driver_none.go      # 无驱动时的纯内存降级
-      http/               # routes + middleware（token / Host / Origin）
-      static/             # //go:embed 的 UI 产物
-    cli/
+      http.go             # 路由 + 中间件（token / Host / Origin）+ /kb/* 分发
+      api_*.go            # 管理面各接口
+      server.go           # 监听、热重开、暂停
+      skill_template.md   # //go:embed，docs/skill-template.md 的镜像
+      authoring_template.md
+      static/             # //go:embed 的 UI 产物（只有 .gitkeep 进版本库）
+    tray/                 # Windows 托盘，纯 Go + syscall
+    cli/                  # 子命令，每个一个文件
   web/                    # Vite + Vue 3，产物拷进 internal/daemon/static
-  desktop/                # Tauri（v2 才有，先建空目录 + README 说明为什么空）
   docs/                   # 本套文档 = 规格书
-  website/                # GitHub Pages
-  .github/workflows/
+  .github/workflows/      # ci.yml（测试 + 交叉编译 + 界面）、release.yml（打 tag 发版）
   AGENTS.md
   CHANGELOG.md
   LICENSE
   README.md
 ```
+
+**没有 `Makefile`，也没有 `website/`、`desktop/`。** 构建脚本在 `web/package.json`
+（`pnpm build` 里已经包含 `vue-tsc --noEmit`、`vite build` 与拷进 `static/` 三步）。
+宣传页与 Tauri 桌面壳都还没开始（见 [09](./09-roadmap.md)），先不要在文档里假装它们存在。
 
 - **服务端没有任何 JS 工具链。** 切片器就是 02 里那套逐行 ATX 扫描（`slice.go`，约 200 行），**不用 `goldmark` 之类的 Markdown 库**。我们要的是“按行切、不解析行内语法”，一个完整解析器在这里是净负担，而且它的行为不完全可控。
 - **Go ≥ 1.22**（`net/http` 的 `ServeMux` 增强路由是 1.22 才有的）。CI 跑 1.22 与最新稳定版。
@@ -42,8 +51,12 @@ kb-lite/
 ## 构建
 
 ```
-make          # = web: pnpm build → cp web/dist → static/ → go build
+cd web && pnpm build   # vue-tsc --noEmit → vite build → 拷进 internal/daemon/static/
+go build -o dist/kb-lite.exe ./cmd/kb-lite
 ```
+
+开发时 `cd web && pnpm serve`：停掉旧进程、构建界面、编译并起服务，一条命令。
+（`pnpm dev` 只起 Vite，5199，代理到 daemon 的 7331，改 UI 时用它。）
 
 产物：
 

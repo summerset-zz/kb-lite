@@ -19,6 +19,7 @@
 7. [`docs/08-build-release.md`](./docs/08-build-release.md) · [`docs/09-roadmap.md`](./docs/09-roadmap.md) · [`docs/10-decisions.md`](./docs/10-decisions.md)
 8. [`docs/11-writing-style.md`](./docs/11-writing-style.md)：行文风格（角括号 0、不用破折号、用“你”）。**你写的每个中文句子都适用**
 9. 给 agent 的两份模板：[`docs/skill-template.md`](./docs/skill-template.md)（教**读**）· [`docs/authoring-template.md`](./docs/authoring-template.md)（教**写**）
+10. [`docs/12-backlog.md`](./docs/12-backlog.md)：现在到哪儿了、下一步做什么、哪些规格还没实现。**开工前先看一遍**，别重做已经做完的
 
 ## 技术约束（硬）
 

@@ -13,13 +13,16 @@ kb-lite <command> [options]
 ```
 kb-lite serve
   --port <n>          默认取 config，其次 7331；被占则自动 +1
-  --db <path>         覆盖数据库路径
   --host <addr>       默认 127.0.0.1。改成 0.0.0.0 时打印醒目警告
   --open              启动后打开浏览器
+  --force             启动时忽略 sha1，把所有知识库全部重切一遍
   --no-tray           不挂 Windows 托盘（服务器、容器、脚本用）
   --no-db             纯内存模式（不落盘）
   --log-level <l>     error|warn|info|debug，默认 info
 ```
+
+**没有 `--db`**：记录文件永远是 `<配置目录>/index.db`（ADR-018）。要换地方就是换配置目录、整包搬家。
+启动前还会看 `<配置目录>/lock`，已经有实例在跑就只把界面打开、自己退出（`docs/06` 第二节）。
 
 前台运行，Ctrl+C 退出。**不做后台守护化**。需要常驻请用系统服务（见 08）或桌面版（见 06）。
 
@@ -28,7 +31,7 @@ kb-lite serve
 ```
 kb-lite add <dir> [--name <n>] [--include <glob>]… [--ignore <glob>]…
    # daemon 在跑：存进配置并**立刻开始整理**
-   # daemon 没跑：退回直接改配置，下次 serve 生效（过渡行为，向导出来后收紧）
+   # daemon 没跑：退回直接改 config.json，下次 serve 生效（退回是有意保留的，见下面那张表）
 kb-lite list [--json]
 kb-lite remove <name> [--yes]
 kb-lite enable <name>
@@ -38,8 +41,9 @@ kb-lite rename <old> <new>
 kb-lite reindex [name] [--force] [--wait]
    # 不传 name = 全部 KB（一个接一个，全局只允许一个任务）；--wait 阻塞到完成并打印统计
 kb-lite status [--json]
-kb-lite settings [--port <n>] [--host <addr>] [--db <path>] [--password on|off]
+kb-lite settings [--port <n>] [--host <addr>] [--password on|off]
    # 改完立即生效（需要时自己重新监听），不需要重启进程
+   # 不带参数时只打印当前设置：端口、绑定地址、访问密码开没开、配置目录、记录文件
 kb-lite doctor
    # 自检：端口、凭据文件权限、DB 可写、每个 KB 的根目录是否还在、
    #      索引里有多少条记录的源文件已消失、SQLite 驱动是否可用、-h 返回的 Host 校验配置
@@ -73,8 +77,9 @@ kb-lite manifest <name> [--budget 2000] [--prefix <p>]
 ## 其它
 
 ```
-kb-lite skill [--url <base>] [--kb <name>] [--out <path>]
+kb-lite skill [--url <base>] [--out <path>]
    # 打印 /skill.md 的内容（“让 AI 能查我的笔记”那份）
+   # 说明书里不写库列表，所以没有 --kb：库由 agent 每次 GET /kb 自己取
    # --out 由进程自己写文件（UTF-8 无 BOM）。不要用 shell 的 `>`：
    #   PowerShell 的 `>` 会写成 UTF-16，`Out-File -Encoding utf8` 会带 BOM，
    #   两者都会让 YAML frontmatter 失效，skill 就读不出来了。
@@ -86,8 +91,10 @@ kb-lite skill --install-authoring [--target dsh|claude|both]
 kb-lite token [--show] [--rotate]
    # 只针对读取面那把“访问密码”。管理凭据（api-token）不提供打印命令（ADR-015）
    # ⚠️ `--show` 在开启读取密码时才有意义；关着时直接告诉你“当前没有启用访问密码”
+kb-lite mcp
+   # v0.4 尚未实现（ADR-006：把 stdio 的 MCP 调用转发到本地 HTTP 的薄壳）
 kb-lite sync <name> [--wait]
-   # git -C <root> pull --ff-only，然后 reindex。
+   # v0.5 尚未实现。git -C <root> pull --ff-only，然后 reindex。
    # 只 pull，不 add/commit/push。冲突或非 fast-forward 时不强行处理，
    # 打印 git 的输出并退出码 2，让用户自己解决。
 kb-lite stop

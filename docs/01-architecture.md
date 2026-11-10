@@ -81,7 +81,7 @@ logs/daemon.log  # 轮转，10 MB × 3
   "port": 7331,
   "host": "127.0.0.1",           // 非回环时 requireToken 强制 true
   "requireToken": false,         // 读取面是否需要密码（默认关）
-  "dbPath": "C:\\Users\\me\\AppData\\Roaming\\kb-lite\\index.db",
+  "dbPath": "...\\kb-lite\\index.db", // 派生值：永远等于 <配置目录>/index.db。别手改，读进来会被覆盖
   "kbs": [
     {
       "id": "k1f3a9c2",             // 稳定短 id，名字可以改，id 不变

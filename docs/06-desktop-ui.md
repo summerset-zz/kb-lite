@@ -249,7 +249,7 @@ D:\notes                     128 篇 · 743 节 · 2.1 MB
   **不再数里面有多少 markdown**：那是递归走整棵子树，在大盘根目录上换一层要等好几秒。
   想快就直接把路径粘进输入框（见下）。
 - **选择器就是个完整的弹窗**（`<dialog>`），不是按钮下方就地展开的一块：屏幕小或者页面长的时候，
-  它出现在视野外，用户看到的只是“点了没反应”。向导、添加知识库、设置里换记录文件位置都用同一个组件。
+  它出现在视野外，用户看到的只是“点了没反应”。向导与添加知识库都用同一个组件。
 - **确认在弹窗底部，紧挨“取消”**。以前“用这个文件夹”摆在右上角，与底部的关闭按钮隔着半个屏幕，
   用户分不清哪个才是“就选这个”。弹窗里**只留一组按钮**：取消 + 确认，不要再加一个重复的“关闭”。
 - **名字也在弹窗里问**。名字属于“我正要创建的这个知识库”，留在页面上会让“选文件夹”与
@@ -258,9 +258,11 @@ D:\notes                     128 篇 · 743 节 · 2.1 MB
 - **右下角只有一个动作**：建好之后列表里就有它了，右下角那个按钮是“开始使用”（结束向导），
   不是“确认创建”。要再加一个就再点“添加一个知识库”，多少次都行。
 - **“新建文件夹”**：选着选着发现目标文件夹还没建，就地建一个（空目录），建完直接进去。
-  不要用户切到资源管理器建完再回来。- **在用户目录里就说一句**：选中的位置落在当前用户的用户目录里时，弹窗里提醒
+  不要用户切到资源管理器建完再回来。
+- **在用户目录里就说一句**：选中的位置落在当前用户的用户目录里时，弹窗里提醒
   “换一个电脑用户登录后，kb-lite 读不到它，索引也就更新不了；想多人共用就把资料放在 `D:\` 这类公共位置”。
-  不说的话，用户换个人登录看到读不到目录，只会以为程序坏了。- **弹窗要自己写 `margin: auto`**：Tailwind 的 preflight 给所有元素（含 `::backdrop`）加了 `margin: 0`，
+  不说的话，用户换个人登录看到读不到目录，只会以为程序坏了。
+- **弹窗要自己写 `margin: auto`**：Tailwind 的 preflight 给所有元素（含 `::backdrop`）加了 `margin: 0`，
   而 `<dialog>` 靠的是 UA 样式里的 `margin: auto` 居中。不写回来，弹框就贴在左上角。
 - **盘符根目录上“返回”要能退回盘符列表**：`D:\` 没有上一层，但还有“选哪个磁盘”那一屏。
   只看 `parent` 的话，用户一进到 `D:\` 就再也退不出来了。
@@ -321,7 +323,9 @@ const skills = skillDirs.flatMap((dir) =>
 > [!NOTE]
 > 两份 SKILL 必须分开装（ADR-017）。把写作规范塞进检索 SKILL 里，agent 会在只想查东西的时候也去改用户的文件。
 
-**运行状态区**：地址（可复制）、哪些设备可访问、当前状态（ready、indexing、error、disabled）、整理进度。
+**运行状态**：不放在知识库页，放在**顶栏**（左侧：运行中 / 局域网可用 / 已停止，带下拉的
+启动、停止、复制地址；右侧：明暗切换）。全站状态藏在设置页深处时，用户根本不知道 AI 现在是连不上还是没在用。
+知识库自己那点状态（ready / indexing / error / disabled 与整理进度）留在它那一行上。
 
 页脚：`KBLite vX.Y.Z`、作者 [Summerset-zz](https://github.com/summerset-zz)、[反馈问题](https://github.com/summerset-zz/kb-lite/issues)、检查更新（v1 先占位）、支持作者。
 
@@ -460,7 +464,9 @@ ops/runbook.md · rev a1b2c3d4 · 3 节
 
 ### 5.7 标题
 
-浏览器里不自绘标题栏。页面顶部一条 `KBLite by Summerset-zz` 的页头即可。浏览器标签页标题写 `KBLite · 我的知识库`，favicon 用 `web/public/favicon.svg`。
+浏览器里不自绘标题栏。页面顶部一条 `KBLite by Summerset-zz` 的页头即可。浏览器标签页标题就是
+`KBLite`（写死在 `web/index.html` 里；它不随知识库名变，静态页面里改标题会带来一次没必要的重渲染）。
+favicon 用 `web/public/favicon.svg`。
 
 ## 六、状态刷新：快照比对
 
@@ -558,7 +564,7 @@ GUI 能做的，CLI 必须也能做。这张表是验收清单，任何一行缺
 |---|---|
 | 添加、删除、改名、启用、禁用知识库 | `kb-lite add` / `remove` / `rename` / `enable` / `disable` |
 | 更新、全部更新 | `kb-lite reindex <name>` / `reindex <name> --force` |
-| 设置页各项 | `kb-lite settings`，可选 `--port`、`--host`、`--db`、`--password on\|off` |
+| 设置页各项 | `kb-lite settings`，可选 `--port`、`--host`、`--password on\|off` |
 | 安装两份 SKILL | `kb-lite skill --install`、`kb-lite skill --install-authoring`（都可加 `--target dsh\|claude\|both`） |
 | 启动、暂停、退出 | `kb-lite serve` / `stop` / `quit` |
 | 打开界面 | `kb-lite serve --open` |

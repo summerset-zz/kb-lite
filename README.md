@@ -55,7 +55,11 @@ $ curl "$BASE/kb/我的笔记/entry/ops/runbook.md/section?n=2"
 | Mac（Intel） | `kb-lite-macos-x64.tar.gz` |
 | Linux x64 | `kb-lite-linux-x64.tar.gz` |
 
-第一次打开会进向导：**选记录文件放哪儿 → 选端口与谁能打开 → 选一个放着资料的文件夹**。三步走完，界面会给你四段可以直接粘给 AI 的东西（说明书、说明书地址、整理说明、命令示例）。
+第一次打开会进向导，四屏：**东西放在哪 → 端口与谁可以访问 → 选一个放着资料的文件夹 → 总结**。
+配置目录不让你选（它就和程序的数据放在一起，ADR-018），你只要看一眼、知道备份时搬哪个目录。
+
+走完向导，最后一屏直接给你两个「安装 SKILL」按钮；下面折叠区里另有三段可以直接粘给 AI 的东西
+（说明书全文、说明书地址、整理说明）。以后要暂停、启动、复制地址，都在顶栏那一行状态上。
 
 **不需要 Node、不需要 Python、不需要 Docker、不需要 API key。** 一个 11 MB 左右的静态二进制（含纯 Go 的 SQLite 缓存），界面的静态资源也打在里面。
 
@@ -94,6 +98,8 @@ kb-lite quit                  # 退出（stop 只是暂停，AI 连不上但进�
 | [08-build-release](./docs/08-build-release.md) | 仓库结构、构建、发布、宣传页 |
 | [09-roadmap](./docs/09-roadmap.md) | 分阶段范围 |
 | [10-decisions](./docs/10-decisions.md) | 已定决策与被否掉的方案及理由 |
+| [11-writing-style](./docs/11-writing-style.md) | 行文风格（文档与界面文案都适用） |
+| [12-backlog](./docs/12-backlog.md) | 现在到哪儿了、下一步做什么 |
 | [skill-template](./docs/skill-template.md) | 服务端吐出、给使用侧 agent 的说明文档 |
 | [authoring-template](./docs/authoring-template.md) | 给“把 docx / pdf 转成知识库”的 AI 的整理说明 |
 
