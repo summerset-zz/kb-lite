@@ -16,6 +16,10 @@
 - **检查更新**（设置页、`kb-lite update [--refresh]`、`GET /api/update`）：读 GitHub 的
   `releases/latest`，结果缓存 10 分钟。**这是唯一会访问外网的地方**，只在用户点按钮时发。
   查不到时回 `ok:false` 加一句人话，不当成接口错误。
+- **说明书里多了一节「连不上怎么办」**：按症状对号入座（没启动 / 端口不对 / 缺访问密码 /
+  服务被暂停），每种都给一句能直接说给用户的话；四条都对不上时，把地址、状态码、`error.code`
+  原样交给用户，并指向 https://github.com/summerset-zz/kb-lite/releases 。
+  用户出问题时的第一反应是问 AI，这段让 AI 能说出“接下来该谁做什么”，而不是自己瞎重试。
 - **底部提示条**（`web/src/toast.ts` + `components/ToastHost.vue`）：保存成功、换了密码、
   开关自启、建了快捷方式、暂停与恢复都给一句反馈，几秒后自己消失。
   自己实现，不引整套组件库（ADR-016），也**不需要 Provider 包住整个应用**：

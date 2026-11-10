@@ -69,7 +69,24 @@ func TestRenderSkillGatesManifest(t *testing.T) {
 	}
 }
 
-// 说明书里不该再出现写死的库列表：那是装到用户目录里的一份文件，不会随配置更新。
+// 说明书要带一节排错：用户连不上时的第一反应是问 AI，而 AI 该能说出“接下来谁做什么”。
+// 这个测试同时锁住两件事：四种典型症状都在，以及 release 链接没被顺手删掉。
+func TestSkillHasTroubleshooting(t *testing.T) {
+	text := RenderSkillText(nil, "http://127.0.0.1:7331", "", nil)
+
+	for _, want := range []string{
+		"连不上怎么办",
+		"Failed to connect", // 没启动
+		"端口对不上",             // 端口错了
+		"unauthorized",      // 缺密码（与 guard 里的 code 一致）
+		"paused",            // 服务被暂停（同上）
+		"https://github.com/summerset-zz/kb-lite/releases",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("说明书里少了 %q", want)
+		}
+	}
+}
 func TestSkillTextHasNoKBList(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.md"), "正文\n")
