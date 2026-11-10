@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **双击启动时那个黑窗口不再留在屏幕上**：Windows 给控制台程序开的窗口，关掉就等于杀掉进程。
+  用户多半会顺手关掉，然后发现服务没了、AI 连不上，也没有任何提示。
+  现在启动时把它收掉（`GetConsoleProcessList` 确认这个控制台只有我们一个进程才动手；
+  从 cmd / PowerShell / Windows Terminal 里跑的不动，Ctrl+C 照旧）。
+  代价：双击这条路没有 Ctrl+C 了，停服务走托盘菜单或界面里的“退出 kb-lite”。
+
 ### Added
 
 - **图标**：托盘与 exe 不再用默认图标与内置圆点。源图只有两份（`internal/tray/assets/normal.png`、

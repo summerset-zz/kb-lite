@@ -98,9 +98,13 @@ func Run(args []string) int {
 	// 重复双击由单实例锁兜住：它会把已经跑着的界面打开，然后自己退出。
 	// 想看用法给 `help` 或 `--help`，它们不受影响。
 	if len(args) == 0 {
+		// 上面那几行只有“在终端里敲 kb-lite”时才看得见；双击出来的窗口马上就没了。
 		fmt.Println("正在启动 KBLite，浏览器会自动打开。")
-		fmt.Println("这个窗口不要关：关了服务就停了。要停下来，按 Ctrl+C 或从托盘菜单退出。")
+		fmt.Println("要停下来，从托盘菜单退出，或者在界面里点“退出 kb-lite”。")
 		fmt.Println()
+		// 在终端里跑（窗口是用户自己的）不动它；双击出来的那个黑窗口收掉，
+		// 否则用户顺手一关，服务就没了（docs/06 第二节）。
+		detachOwnConsole()
 		args = []string{"serve", "--open"}
 	}
 

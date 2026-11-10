@@ -12,6 +12,10 @@ kb-lite <command> [options]
 这么定是因为用户的第一个动作是双击那个文件，而一个打印完用法就闪没的窗口对他等于没反应（`docs/09` v0.4 的验收标准）。
 要看用法给 `--help` 或 `help`。重复双击不会起两个进程（单实例锁，见下面与 `docs/06` 第二节）。
 
+Windows 上，如果这个控制台是系统为双击新开的（`GetConsoleProcessList` 只有我们自己），
+启动时会把那个窗口**收掉**：留着它等于给用户埋一个陷阱，关掉窗口就把服务杀了。
+从 cmd / PowerShell / Windows Terminal 里跑的不动，Ctrl+C 照旧可用。
+
 ## serve
 
 ```
