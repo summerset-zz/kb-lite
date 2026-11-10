@@ -3,8 +3,12 @@
 package tray
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"runtime"
 	"sync"
 	"syscall"
@@ -41,6 +45,9 @@ const (
 	gmemMoveable  = 0x0042
 
 	lrDefaultColor = 0x0000
+
+	// smCxSmIcon 是任务栏托盘图标的边长（SM_CXSMICON），会跟 DPI 变。
+	smCxSmIcon = 49
 )
 
 var (
@@ -64,6 +71,7 @@ var (
 	procGetCursorPos        = user32.NewProc("GetCursorPos")
 	procCreateIconFromResEx = user32.NewProc("CreateIconFromResourceEx")
 	procDestroyIcon         = user32.NewProc("DestroyIcon")
+	procGetSystemMetrics    = user32.NewProc("GetSystemMetrics")
 	procOpenClipboard       = user32.NewProc("OpenClipboard")
 	procEmptyClipboard      = user32.NewProc("EmptyClipboard")
 	procSetClipboardData    = user32.NewProc("SetClipboardData")
@@ -189,8 +197,8 @@ func messageLoop() error {
 		return fmt.Errorf("CreateWindowEx 失败：%v", e)
 	}
 
-	iconRun = makeIcon(colorRun)
-	iconPause = makeIcon(colorPause)
+	iconRun = makePNGIcon(iconNormalPNG, colorRun)
+	iconPause = makePNGIcon(iconWarnPNG, colorPause)
 	if iconRun == 0 || iconPause == 0 {
 		return errors.New("托盘图标创建失败")
 	}
@@ -461,14 +469,112 @@ var (
 
 // makeIcon 在内存里画一个 16x16 的圆形图标，不依赖任何图片文件。
 //
+// 这是 `makePNGIcon` 的退路：源图读不出来时托盘至少还有一个能认的图标，
+// 而不是干脆挂不上（托盘挂不上，用户就只剩浏览器这一条路）。
+func makeIcon(c bgr) uintptr {
+	return makeIconFromPixels(16, func(x, y int) (b, g, r, a byte) {
+		const size = 16
+		center := float64(size-1) / 2
+		radius := center - 0.6
+		dx := float64(x) - center
+		dy := float64(y) - center
+		if dx*dx+dy*dy <= radius*radius {
+			return c.b, c.g, c.r, 0xff
+		}
+		return 0, 0, 0, 0
+	})
+}
+
+// makePNGIcon 把一张 PNG 缩成托盘要的尺寸，做成 HICON。解码或缩放失败就退回圆点。
+//
+// 尺寸取 SM_CXSMICON 而不是写死 16：150%/200% 缩放的屏幕上系统要 24/32，
+// 只给 16 的话图标会糊成一块色斑。
+func makePNGIcon(data []byte, fallback bgr) uintptr {
+	src, err := png.Decode(bytes.NewReader(data))
+	if err != nil || src.Bounds().Dx() == 0 {
+		return makeIcon(fallback)
+	}
+	size := 16
+	if r, _, _ := procGetSystemMetrics.Call(smCxSmIcon); r > 0 && r < 128 {
+		size = int(r)
+	}
+	small := downscale(src, size)
+	return makeIconFromPixels(size, func(x, y int) (byte, byte, byte, byte) {
+		c := small.NRGBAAt(x, y)
+		return c.B, c.G, c.R, c.A
+	})
+}
+
+// downscale 用面积平均把图缩到 size×size。
+//
+// 必须按**预乘 alpha** 平均：直接平均直通（straight）颜色的话，透明像素里的
+// 黑色会渗进边缘，缩到 16 像素时图标外圈会有一道黑边。
+func downscale(src image.Image, size int) *image.NRGBA {
+	b := src.Bounds()
+	sw, sh := b.Dx(), b.Dy()
+	dst := image.NewNRGBA(image.Rect(0, 0, size, size))
+	for y := 0; y < size; y++ {
+		y0 := b.Min.Y + y*sh/size
+		y1 := b.Min.Y + (y+1)*sh/size
+		if y1 <= y0 {
+			y1 = y0 + 1
+		}
+		for x := 0; x < size; x++ {
+			x0 := b.Min.X + x*sw/size
+			x1 := b.Min.X + (x+1)*sw/size
+			if x1 <= x0 {
+				x1 = x0 + 1
+			}
+			var r, g, bl, a, n float64
+			for sy := y0; sy < y1; sy++ {
+				for sx := x0; sx < x1; sx++ {
+					// RGBA() 返回的已经是预乘值（16 位）。
+					cr, cg, cb, ca := src.At(sx, sy).RGBA()
+					r += float64(cr)
+					g += float64(cg)
+					bl += float64(cb)
+					a += float64(ca)
+					n++
+				}
+			}
+			if n == 0 {
+				continue
+			}
+			r, g, bl, a = r/n, g/n, bl/n, a/n
+			if a <= 0 {
+				continue // 全透明，留 0
+			}
+			// 还原成直通 alpha，再落到 8 位。
+			dst.SetNRGBA(x, y, color.NRGBA{
+				R: to8(r * 0xffff / a),
+				G: to8(g * 0xffff / a),
+				B: to8(bl * 0xffff / a),
+				A: to8(a),
+			})
+		}
+	}
+	return dst
+}
+
+func to8(v float64) uint8 {
+	if v <= 0 {
+		return 0
+	}
+	if v >= 0xffff {
+		return 0xff
+	}
+	return uint8(v/257 + 0.5)
+}
+
+// makeIconFromPixels 把逐像素的颜色做成 HICON。
+//
 // ICONIMAGE 的结构是 BITMAPINFOHEADER + 反序的 32 位像素（BGRA）+ 1 位 AND 掩码。
 // 用 CreateIconFromResourceEx 直接吃这块内存，省掉 .ico 资源与 GDI 那一套。
-func makeIcon(c bgr) uintptr {
-	const size = 16
-	const headerSize = 40
-	const maskRowBytes = 4 // 16 位深/行，按 4 字节对齐
-	const maskSize = maskRowBytes * size
-	const pixels = size * size * 4
+func makeIconFromPixels(size int, at func(x, y int) (b, g, r, a byte)) uintptr {
+	headerSize := 40
+	maskRowBytes := ((size + 31) / 32) * 4 // 1 位深/像素，按 4 字节对齐
+	maskSize := maskRowBytes * size
+	pixels := size * size * 4
 
 	buf := make([]byte, headerSize+pixels+maskSize)
 
@@ -478,29 +584,24 @@ func makeIcon(c bgr) uintptr {
 		buf[off+2] = byte(v >> 16)
 		buf[off+3] = byte(v >> 24)
 	}
-	put32(0, headerSize)       // biSize
-	put32(4, size)             // biWidth
-	put32(8, size*2)           // biHeight（颜色位图 + 掩码各占一半）
-	put32(12, 1)               // biPlanes
-	put32(14, 32)              // biBitCount
-	put32(16, 0)               // biCompression = BI_RGB
-	put32(20, pixels+maskSize) // biSizeImage
+	put32(0, uint32(headerSize))       // biSize
+	put32(4, uint32(size))             // biWidth
+	put32(8, uint32(size*2))           // biHeight（颜色位图 + 掩码各占一半）
+	put32(12, 1)                       // biPlanes
+	put32(14, 32)                      // biBitCount
+	put32(16, 0)                       // biCompression = BI_RGB
+	put32(20, uint32(pixels+maskSize)) // biSizeImage
 
-	// 像素：自下而上。圆外的 alpha 留 0，掩码全 0 表示“不透明的地方由 alpha 决定”。
-	center := float64(size-1) / 2
-	radius := center - 0.6
+	// 像素自下而上；掩码全 0，表示“哪里不透明看 alpha”。
 	for y := 0; y < size; y++ {
-		row := size - 1 - y // 反序
+		row := size - 1 - y
 		for x := 0; x < size; x++ {
-			dx := float64(x) - center
-			dy := float64(y) - center
+			b, g, r, a := at(x, y)
 			off := headerSize + (row*size+x)*4
-			if dx*dx+dy*dy <= radius*radius {
-				buf[off] = c.b
-				buf[off+1] = c.g
-				buf[off+2] = c.r
-				buf[off+3] = 0xff
-			}
+			buf[off] = b
+			buf[off+1] = g
+			buf[off+2] = r
+			buf[off+3] = a
 		}
 	}
 
@@ -509,7 +610,7 @@ func makeIcon(c bgr) uintptr {
 		uintptr(len(buf)),
 		1, // fIcon
 		0x00030000,
-		size, size,
+		uintptr(size), uintptr(size),
 		lrDefaultColor,
 	)
 	return h

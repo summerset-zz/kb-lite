@@ -143,6 +143,26 @@ cd web && pnpm typecheck
 
 三项都是只读的，随时可以跑。
 
+### 换图标
+
+源图只有两份，512×512、正方形、透明底：
+
+```
+internal/tray/assets/normal.png    运行中
+internal/tray/assets/warn.png      已暂停
+```
+
+替换之后：
+
+```bash
+cd web
+pnpm icons
+```
+
+它会更新浏览器标签页的 `web/public/favicon.png`，以及 exe 的图标与版本信息
+（`cmd/kb-lite/rsrc_windows_*.syso`，由 `go-winres` 生成一次、随仓库提交，CI 不需要装它）。
+托盘图标不用重新生成：二进制里存的是原图，运行时按系统 DPI 缩。
+
 ## 文档
 
 给实现者读的完整规格在 [`docs/`](./docs/)：

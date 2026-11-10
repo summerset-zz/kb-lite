@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>KBLite</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- 这里引的是产物，源图在 internal/tray/assets/normal.png。
+         换图标之后跑 `pnpm icons`，它会重新拷一份过来。 -->
+    <link rel="icon" href="/favicon.png" type="image/png" />
     <script>
       // 在首帧之前把用户选过的配色写上，避免闪一下白/黑。
       // 必须放在 head 里同步执行；CSS 的 prefers-color-scheme 只管“跟随系统”那种情况。

@@ -30,6 +30,7 @@ kb-lite/
       authoring_template.md
       static/             # //go:embed 的 UI 产物（只有 .gitkeep 进版本库）
     tray/                 # Windows 托盘，纯 Go + syscall
+      assets/             # 图标源图（normal.png / warn.png，512×512，透明底）
     cli/                  # 子命令，每个一个文件
   web/                    # Vite + Vue 3，产物拷进 internal/daemon/static
   website/                # GitHub Pages 宣传页：纯静态 HTML + CSS，不构建
@@ -65,6 +66,30 @@ go build -o dist/kb-lite.exe ./cmd/kb-lite
 |---|---|---|
 | `dist/kb-lite-<os>-<arch>[.exe]` | 发布用 | Go 静态二进制，**~11 MB**（实测见下表） |
 | `internal/daemon/static/` | UI 产物 | `//go:embed` 编进二进制，**不单独分发** |
+
+### 图标
+
+**源图只有两份**，512×512、正方形、透明底：
+
+```
+internal/tray/assets/normal.png    运行中
+internal/tray/assets/warn.png      已暂停（带一个红底感叹号）
+```
+
+换图标就是替换这两个文件，然后 `cd web && pnpm icons`。它做三件事：
+
+1. `web/public/favicon.png`：浏览器标签页。直接给 512 的原图，浏览器自己缩，省掉一个有损的中间步骤。
+2. `cmd/kb-lite/rsrc_windows_amd64.syso` 与 `_arm64.syso`：exe 的图标与版本信息。
+   文件名里的 `_windows_amd64` 后缀是 `go build` 认出「只在编这个平台时带上」的依据。
+   **这两个文件要提交进仓库**，这样 CI 与别的贡献者都不需要装任何工具。
+3. 生成 syso 用的是 `go-winres`（`go run github.com/tc-hib/go-winres@latest simply --icon …`）。
+   它只是个生成器：**不进 `go.mod`、不进二进制、CI 不调用**，只在人手动换图标时跑一次。
+   那一步要下载模块，没网就只跳过 syso，别的产物照旧。
+
+托盘图标**不预先切尺寸**。系统在 150%/200% 缩放时要 24/32 像素，所以保留原图，
+运行时按 `SM_CXSMICON` 缩（`internal/tray/tray_windows.go` 的 `makePNGIcon`）。
+缩的时候按预乘 alpha 平均，否则透明边缘的黑会渗进来，16 像素的图标会带一圈黑边。
+源图解不开时退回旧的内置圆点，托盘不能因为一张图坏了就挂不上。
 
 ### 交叉编译（这是换 Go 换来的最大简化）
 
