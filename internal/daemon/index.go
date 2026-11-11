@@ -269,6 +269,12 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 				data, readErr := os.ReadFile(f.AbsPath)
 				if readErr != nil {
 					addWarn(WarnRead, f.RelPath+": 读取失败（"+readErr.Error()+"）")
+					// 文件在盘上但这个进程读不了（被独占占用、权限变了）。
+					// 内存里它不算收录，缓存里的旧条目也必须一起删：
+					// 路径还在盘上，光靠 present 判断会把这行永远留在库里。
+					mu.Lock()
+					becameSkipped[f.RelPath] = true
+					mu.Unlock()
 				} else {
 					sum := sha1Hex(data)
 					var hit *cachedEntry
@@ -304,6 +310,13 @@ func buildKBIndex(kb KB, opts BuildOptions, progress func(done, total int)) (*KB
 							mu.Lock()
 							skipped = append(skipped, SkippedFile{RelPath: f.RelPath, Reason: skip})
 							skipRows = append(skipRows, skipRow{RelPath: f.RelPath, SHA1: sum, Reason: skip})
+							becameSkipped[f.RelPath] = true
+							mu.Unlock()
+							break
+						}
+						if e == nil {
+							// 解析不出条目，也算“这次没收录它”，旧条目要跟着走。
+							mu.Lock()
 							becameSkipped[f.RelPath] = true
 							mu.Unlock()
 							break

@@ -140,11 +140,12 @@ CREATE TABLE skipped (          -- 整篇跳过的文件 + 当时的 sha1（没�
   kb_id TEXT NOT NULL, rel_path TEXT NOT NULL, sha1 TEXT NOT NULL, reason TEXT NOT NULL,
   PRIMARY KEY (kb_id, rel_path)
 );
-
-CREATE TABLE tombstone (        -- 删掉的 KB / 文件的残留，用于诊断
-  kb_id TEXT NOT NULL, rel_path TEXT, deleted_at INTEGER NOT NULL
-);
 ```
+
+> **没有 tombstone 表**。v0.5.0 之前有一张“记下被删文件”的表，但它**只写不读**：
+> 没有任何代码查它，删 KB 时也不清，改个文件名就多一行，于是一直涨。要诊断
+> “缓存里有、盘上已经没了”的文件，`kb-lite doctor` 扫一遍目录就能算出来，不需要这张表。
+> 旧库里的那张表在 `migrate()` 里被 `DROP TABLE IF EXISTS` 掉。
 
 `PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`
 
@@ -173,6 +174,20 @@ CREATE TABLE tombstone (        -- 删掉的 KB / 文件的残留，用于诊断
 - 索引期间**继续提供旧数据**，`/api/status` 里 `state: "indexing"` + `progress`，UI 显示进度条。
 - `sha1` 相同的文件**不做任何解析**。这是“几千篇也要秒级”的关键。
 - `--force` 忽略 sha1 全部重切。
+
+### 旧条目必须真的被删掉
+
+缓存里的行会跟着消失的只有四张表（`entry` / `section` / `warn` / `skipped`），规则：
+
+| 情况 | 怎么处理 |
+|---|---|
+| 文件被删、改名，或者搬出了知识库目录 | 不在这次扫描结果里 → 删掉它的行 |
+| 文件变得太大、变成草稿、正文空了、编码认不出 | 这次跳过了 → 删掉它的旧条目（否则它还能被搜到） |
+| 文件在盘上，但这个进程读不了 | 同上。**不能**只看“路径还在不在”，那样这一行会永远留在库里 |
+| 整个知识库被移除 | `ClearKB`，四张表按 `kb_id` 一起清 |
+
+`kb-lite doctor` 会数“缓存里有、盘上已经没了”的条数，正常应该是 0。
+如果那里的数字一直不降，说明上面某条规则漏了，而不是“该清缓存了”。
 
 ### 索引版本漂移
 

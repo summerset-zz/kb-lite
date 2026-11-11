@@ -182,12 +182,24 @@ func TestCacheDropsDeletedFiles(t *testing.T) {
 		t.Error("删掉的文件不该还在缓存里")
 	}
 
-	var n int
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM tombstone WHERE kb_id='k1' AND rel_path='b.md'`).Scan(&n); err != nil {
+	// 节也要跟着走。只删 entry 不删 section 的话，正文会一直占着库，
+	// 而且按路径读节还能读出来（`/kb/{name}/entry/b.md/section`）。
+	var sections int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM section WHERE kb_id='k1' AND rel_path='b.md'`).Scan(&sections); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Errorf("tombstone 条数 = %d，想要 1（删掉的文件要留痕，便于诊断）", n)
+	if sections != 0 {
+		t.Errorf("删掉的文件还留着 %d 个节在库里", sections)
+	}
+
+	// tombstone 那张表已经废弃：写进去的行只增不减，没人读，删 KB 时也不清。
+	// 现在不允许它存在（旧库会在 migrate 里被 DROP 掉）。
+	var gone int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tombstone'`).Scan(&gone); err != nil {
+		t.Fatal(err)
+	}
+	if gone != 0 {
+		t.Error("tombstone 表不该再存在")
 	}
 }
 

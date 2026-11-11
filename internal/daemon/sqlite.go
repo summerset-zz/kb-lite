@@ -218,11 +218,11 @@ func (s *Store) migrate() error {
 			reason   TEXT NOT NULL,
 			PRIMARY KEY (kb_id, rel_path)
 		)`,
-		`CREATE TABLE IF NOT EXISTS tombstone (
-			kb_id      TEXT NOT NULL,
-			rel_path   TEXT NOT NULL,
-			deleted_at INTEGER NOT NULL
-		)`,
+		// tombstone 曾经用来记“这个文件被删了”，但它**只写不读**：
+		// 没有任何代码查它，删 KB 时也不清，改个文件名就多一行，于是一直涨。
+		// 诊断这件事已经由 `kb-lite doctor` 干了（它扫磁盘对比缓存里的 rel_path），
+		// 所以这里直接把旧库里的那张表扔掉。
+		`DROP TABLE IF EXISTS tombstone`,
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -420,10 +420,6 @@ func (s *Store) SaveKB(kbID string, w kbWrite, meta map[string]fileMeta, now tim
 			return fail(err)
 		}
 		if _, err := tx.Exec(`DELETE FROM warn WHERE kb_id=? AND rel_path=?`, kbID, rel); err != nil {
-			return fail(err)
-		}
-		if _, err := tx.Exec(`INSERT INTO tombstone (kb_id, rel_path, deleted_at) VALUES (?,?,?)`,
-			kbID, rel, now.UnixMilli()); err != nil {
 			return fail(err)
 		}
 	}
