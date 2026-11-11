@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -88,11 +89,29 @@ func extractFencedBlock(s, fence string) string {
 
 // RenderMaintainText 返回第三份说明书的正文：教 agent 增删改知识库登记。
 //
-// 与另外两份不同，它**没有任何占位符**：维护走 `kb-lite` 命令行，CLI 自己从配置目录
-// 读管理凭据，所以不需要服务地址，也不需要访问密码。
-// 管理凭据永远不进文档（ADR-015），这也是它只能这么写的原因。
-func RenderMaintainText() string {
-	return maintainTemplate
+// 它带**一个**占位符 `{{KB_EXE}}`：正在跑的这一份 kb-lite 的绝对路径。
+// `kb-lite` 默认不在 PATH 里（用户只是解压了一个 exe，没有安装过程），所以命令必须写全路径；
+// 而且填的是 `os.Executable()`，也就是界面背后那一份，版本一定对得上，不会撞上
+// 下载目录里忘了删的旧版本。
+//
+// 管理凭据仍然不进文档（ADR-015），这也是这份说明书只能用命令行、不能写 `curl /api/*` 的原因。
+func RenderMaintainText(exe string) string {
+	if strings.TrimSpace(exe) == "" {
+		exe = "kb-lite"
+	}
+	return renderSkill(maintainTemplate, map[string]string{"KB_EXE": exe}, nil)
+}
+
+// selfExe 是当前进程的绝对路径，用来填 `{{KB_EXE}}`。
+//
+// 拿不到就退回 "kb-lite"：宁可让 agent 看见一个会失败的命令（它会报“找不到命令”并告诉用户），
+// 也不要往文档里写一个空路径。
+func selfExe() string {
+	p, err := os.Executable()
+	if err != nil || strings.TrimSpace(p) == "" {
+		return "kb-lite"
+	}
+	return p
 }
 
 // DefaultFeatures 是「这个版本已经实现了哪些可选接口」。
@@ -156,7 +175,7 @@ func (h *Handler) handleAuthoring(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleMaintain(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(RenderMaintainText()))
+	_, _ = w.Write([]byte(RenderMaintainText(selfExe())))
 }
 
 // RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。//

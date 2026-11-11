@@ -15,7 +15,7 @@ func TestSkillsHaveFrontmatter(t *testing.T) {
 	docs := map[string]string{
 		"read":      RenderSkillText(nil, "http://127.0.0.1:7331", "", DefaultFeatures),
 		"authoring": RenderAuthoringText("http://127.0.0.1:7331", "", DefaultFeatures),
-		"maintain":  RenderMaintainText(),
+		"maintain":  RenderMaintainText(`C:\Tools\kb-lite\kb-lite.exe`),
 	}
 	wantName := map[string]string{
 		"read":      "name: kbl-query",

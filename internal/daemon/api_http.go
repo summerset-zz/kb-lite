@@ -532,7 +532,7 @@ func (h *Handler) skillContent(kind, base string) string {
 	case "authoring":
 		return RenderAuthoringText(base, tok, h.opts.Features)
 	case "maintain":
-		return RenderMaintainText()
+		return RenderMaintainText(selfExe())
 	}
 	return RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
 }

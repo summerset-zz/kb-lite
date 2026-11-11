@@ -7,6 +7,13 @@
 
 ### Changed
 
+- **维护说明书里写死 kb-lite 的绝对路径**：`kbl-maintain` 里所有命令现在都是
+  `"C:\…\kb-lite.exe" add …` 这种形式，正文第一段就写明 **`kb-lite` 不在 PATH 里**。
+
+  原因是实测：agent 直接跑 `kb-lite` 拿到 exit 127，然后开始翻目录找 exe，
+  翻到别的版本也不知道该选哪个。现在填的是 `os.Executable()`，也就是界面背后正在跑的那一份，
+  版本一定对得上。代价是挪程序之后这份说明书会过期，界面上的「有更新」会提示重装。
+
 - **三份 SKILL 统一改名，前缀 `kbl-`**：
   `kb-lite` → `kbl-query`、`kb-markdown` → `kbl-authoring`、`kb-lite-maintain` → `kbl-maintain`。
   目录名与 frontmatter 里的 `name` 现在**逐个对齐**（以前 `kb-markdown` 装在 `kb-lite-authoring/` 里，

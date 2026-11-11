@@ -30,25 +30,31 @@ func TestMaintainTemplateMatchesDocs(t *testing.T) {
 
 // 这份说明书的几个硬要求。少一条就可能让 agent 做出危险动作。
 func TestMaintainTemplateContent(t *testing.T) {
-	text := RenderMaintainText()
+	const exe = `C:\Tools\kb-lite\kb-lite.exe`
+	text := RenderMaintainText(exe)
 	for _, want := range []string{
-		"name: kbl-maintain",    // 装到目录里要能被认出来
-		"shell",                 // 前提写在正文里，不只写在卡片上
-		"kb-lite list --json",   // 先拉清单确认
-		"--yes",                 // remove 会卡在交互确认上
-		"文件一个都不会动",              // 回话必须说这句
-		"改完重新拉一次清单",             // 改名后旧地址失效
-		"不要用 `curl` 调 `/api/*`", // 管理凭据拿不到
+		"name: kbl-maintain",        // 装到目录里要能被认出来
+		"shell",                     // 前提写在正文里，不只写在卡片上
+		"不在 PATH 里",                 // 用户明确要求写清这一条
+		`"` + exe + `" list --json`, // 全文都用完整路径调，而且是带引号的
+		"--yes",                     // remove 会卡在交互确认上
+		"文件一个都不会动",                  // 回话必须说这句
+		"改完重新拉一次清单",                 // 改名后旧地址失效
+		"不要用 `curl` 调 `/api/*`",     // 管理凭据拿不到
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("维护说明书里缺 %q", want)
 		}
 	}
-	// 它不该带任何占位符：维护走 CLI，不需要地址与密码（管理凭据永远不进文档）。
+	// 渲染之后不该再有占位符；凭据那两个词也不该出现（管理凭据永远不进文档）。
 	for _, bad := range []string{"{{", "Bearer", "X-KB-Admin"} {
 		if strings.Contains(text, bad) {
 			t.Errorf("维护说明书里不该出现 %q", bad)
 		}
+	}
+	// 拿不到 exe 路径时也要能渲染出一份能看的东西，不能是空路径。
+	if fallback := RenderMaintainText(""); !strings.Contains(fallback, `"kb-lite"`) {
+		t.Error("没有 exe 路径时应当退回 `kb-lite` 这个名字")
 	}
 }
 
