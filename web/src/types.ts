@@ -18,6 +18,8 @@ export interface KB {
   lastIndexedAt: number
   warnings: number
   /** 这次真的没进知识库的文件篇数（含整篇跳过的与读不了的）。 */
+  /** 目录里跟索引对不上的文件数（新增 / 变了 / 没了）。只是提示，见 docs/04。 */
+  pending: number
   notIndexed: number
   progress?: Progress
 }

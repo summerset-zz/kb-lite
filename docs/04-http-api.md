@@ -64,6 +64,7 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
       "entries": 128, "sections": 743, "bytes": 2201398,
       "lastIndexedAt": 1762473600000, "warnings": 2,
       "notIndexed": 2,                            // 这次真的没进知识库的文件数
+      "pending": 86,                              // 目录里跟索引对不上的文件数（新增/变了/没了）
       "progress": { "done": 120, "total": 530 }   // 仅 state == indexing 时出现
     }
   ]
@@ -71,11 +72,15 @@ CLI 读 `<配置目录>/api-token` 并带 `X-KB-Admin` 头。`X-KB-Admin` 这条
 ```
 
 `notIndexed` 与 `warnings` 不是一回事：
-
 - `notIndexed` 只数**真的没进去**的：整篇跳过的（`draft` / 空正文）、文件过大、编码认不出、读不了。
   界面那一行拿它说“N 篇文档未成功入库”。
 - `warnings` 是所有告警条数，包含 frontmatter 不合法（正文已救回来、**已收录**）与缓存写入失败。
   拿它当“漏了几篇”用会骗人。
+
+`pending` 是“目录里跟缓存对不上”的文件数（新增 + 大小或 mtime 变了 + 目录里没了），
+给界面提示用。**它只是提示**：`git checkout` 会磨掉 mtime，内容没变也会算成待更新；
+真正决定重不重切的是 sha1。纯内存模式（`--no-db`）与禁用的库恒为 0。
+不读文件内容、不算 sha1，只 walk 一遍目录，30 秒缓存。
 
 **要 admin 凭据**（见上面两级认证）。读取面是否要凭据看 `requireToken`：关着时 `/kb/*` 与 `/skill.md` 直接可用。
 

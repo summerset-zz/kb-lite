@@ -52,8 +52,11 @@ type StatusKB struct {
 	// 加上被跳过的（太大 / 编码认不出 / 读不了）。
 	// 界面那一行据此显示“N 篇文档未成功入库”，比一个笼统的告警数字有用：
 	// “frontmatter 写法不规范”不影响收录，混在一起说会让人以为少了文件。
-	NotIndexed int             `json:"notIndexed"`
-	Progress   *StatusProgress `json:"progress,omitempty"`
+	NotIndexed int `json:"notIndexed"`
+	// Pending 是目录里与缓存对不上的文件数（新增 / 变了 / 没了）。
+	// 只是个提示：真正的判据是 sha1，见 pending.go 开头那段。
+	Pending  int             `json:"pending"`
+	Progress *StatusProgress `json:"progress,omitempty"`
 }
 
 // StatusProgress 是 reindex 进度（只有 state == indexing 时才有）。
@@ -122,6 +125,11 @@ func (m *Manager) kbStatusOf(kb KB) StatusKB {
 		if !k.IndexedAt.IsZero() {
 			item.LastIndexedAt = k.IndexedAt.UnixMilli()
 		}
+	}
+	// 目录里跟缓存对不上的文件数。整理中不算（正在变），禁用与纯内存模式返回 0，
+	// 这两种情况由 countPending 自己判掉。
+	if item.State != "indexing" {
+		item.Pending = m.pendingCount(kb, item.LastIndexedAt)
 	}
 	return item
 }

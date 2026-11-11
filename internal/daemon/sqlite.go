@@ -277,6 +277,49 @@ func (s *Store) StoredPaths(kbID string) ([]string, error) {
 	return out, rows.Err()
 }
 
+// StoredMeta 读缓存里每个文件的 (size, mtime)，用来算「有几篇对不上」（见 pending.go）。
+//
+// 顺带把 skipped 的路径也带上（`Size` 记成 -1）：那些文件在索引里「已知不需要收录」，
+// 不带就把它们每次都算成新增，界面会永远显示「有 N 篇待更新」。
+func (s *Store) StoredMeta(kbID string) (map[string]fileMeta, error) {
+	out := make(map[string]fileMeta, 64)
+
+	rows, err := s.db.Query(`SELECT rel_path, size_bytes, mtime_ms FROM entry WHERE kb_id = ?`, kbID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			rel string
+			m   fileMeta
+		)
+		if err := rows.Scan(&rel, &m.Size, &m.ModTime); err != nil {
+			return nil, err
+		}
+		out[rel] = m
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	srows, err := s.db.Query(`SELECT rel_path FROM skipped WHERE kb_id = ?`, kbID)
+	if err != nil {
+		return nil, err
+	}
+	defer srows.Close()
+	for srows.Next() {
+		var rel string
+		if err := srows.Scan(&rel); err != nil {
+			return nil, err
+		}
+		if _, ok := out[rel]; !ok {
+			out[rel] = fileMeta{Size: -1}
+		}
+	}
+	return out, srows.Err()
+}
+
 // LoadKB 读出一个 KB 的全部缓存。
 func (s *Store) LoadKB(kbID string) (*kbCache, error) {
 	c := &kbCache{Entries: map[string]cachedEntry{}, Skipped: map[string]cachedSkip{}}

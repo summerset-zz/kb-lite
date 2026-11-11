@@ -112,6 +112,10 @@ type Manager struct {
 	// jobMu 保护 running：全局同时只允许一个整理任务（docs/01）。
 	jobMu   sync.Mutex
 	running string
+
+	// pending 缓存「待更新」的数量（pending.go）。键是 kb.ID。
+	pendingMu sync.Mutex
+	pending   map[string]pendingEntry
 }
 
 // NewManager 建一个空的 Manager。索引要等 Rebuild() 之后才有内容。

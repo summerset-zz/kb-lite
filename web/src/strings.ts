@@ -157,6 +157,9 @@ export const s = {
     statusReady: (t: string) => (t ? `已就绪 ${t}更新` : '已就绪'),
     // 从没整理过。比“已就绪 + 0 篇文档”诚实：那种写法看着像坏了。
     neverIndexed: '还没整理，点“更新”',
+    // 目录里跟索引对不上。它只是提示：真正决定重不重切的是 sha1。
+    pending: (n: number) => `${n} 篇待更新`,
+    pendingHint: '目录里的文件变了，点“更新”才会收录。',
     // 有文件没进库时，状态就换成这一句。比“已就绪”诚实：AI 确实查不到那些文件。
     statusNotIndexed: (n: number) => `${n} 篇文档未成功入库`,
     docCount: (n: number) => `${n} 篇文档`,
