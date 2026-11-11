@@ -78,6 +78,8 @@ export interface SkillState {
   kind: 'read' | 'authoring' | 'maintain'
   target: 'dsh' | 'claude'
   path: string
+  /** 本机发现了这个 harness。false 不代表不能装，见 docs/04。 */
+  detected: boolean
   installed: boolean
   /** 已装的內容与此刻应该装的是否逐字相同。 */
   upToDate: boolean

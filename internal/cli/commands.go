@@ -633,8 +633,11 @@ func runSkillInstall(kind, target string) int {
 		return fail(err)
 	}
 	targets := []string{target}
-	if target == "both" {
+	switch target {
+	case "both":
 		targets = []string{"dsh", "claude"}
+	case "all":
+		targets = daemon.HarnessIDs()
 	}
 	raw, err := c.admin(http.MethodPost, "/api/skill/install", map[string]any{
 		"kind": kind, "targets": targets,

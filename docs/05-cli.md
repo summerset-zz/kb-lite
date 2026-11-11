@@ -92,8 +92,9 @@ kb-lite skill [--url <base>] [--out <path>]
    # --out 由进程自己写文件（UTF-8 无 BOM）。不要用 shell 的 `>`：
    #   PowerShell 的 `>` 会写成 UTF-16，`Out-File -Encoding utf8` 会带 BOM，
    #   两者都会让 YAML frontmatter 失效，skill 就读不出来了。
-kb-lite skill --install [--target dsh|claude|both]
-   # 装到 ~/.agents/skills/kb-lite/SKILL.md（默认）与 ~/.claude/skills/kb-lite/SKILL.md
+kb-lite skill --install [--target dsh|claude|workbuddy|both|all]
+   # 装到 <harness 根>/kb-lite/SKILL.md；默认只 dsh（~/.agents/skills）
+   # both = dsh + claude，all = 注册表里全部（含 workbuddy）
 kb-lite skill --install-authoring [--target dsh|claude|both]
    # 另一份：教 AI **怎么写**（~/.agents/skills/kb-lite-authoring/）
    # 两份**分开装**（ADR-017）：合成一份后 agent 会在只想查东西的时候也去改笔记

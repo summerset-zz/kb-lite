@@ -332,8 +332,11 @@ export const s = {
     maintainShell:
       '前提：你的 agent 必须能执行 shell 命令。它靠 kb-lite 命令行干活，管理凭据不会写进这份文件。',
 
-    targetAgents: '通用目录',
+    targetAgents: 'Agents 目录',
     targetClaude: 'Claude Code',
+    targetWorkbuddy: 'WorkBuddy',
+    // 探测只看目录，会漏。这一行是“我们不认得它”，不是“它没装”。
+    notDetected: '没检测到，可以强制安装',
 
     stateMissing: 'SKILL 未安装',
     stateFresh: (t: string) => (t ? `${t}更新` : '已是最新'),
@@ -346,6 +349,9 @@ export const s = {
 
     whenStale:
       '服务地址或访问密码变了之后，这里会显示“有更新”。知识库增删改名不用管，说明书里不写库列表。',
+    // 每个 harness 只读自己的目录，没有“装一次到处都能用”这回事。
+    eachHarness:
+      '每个工具只读自己的目录（Agents 目录、~/.claude/skills、~/.workbuddy/skills），装一次不会到处都能用。WorkBuddy 不读 Agents 目录。',
     // 卡片上方那一行。以前它在卡片下方，滚过三张才看得见。
     needInstall: '有 SKILL 需要安装或更新。',
     // Claude Code 会盯着目录（官方文档明确写了 live change detection），

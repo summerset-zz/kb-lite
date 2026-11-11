@@ -543,10 +543,11 @@ func (h *Handler) skillContent(kind, base string) string {
 // 这个接口把四个目标（两种说明书 × 两个目录）的现状一次性给它。
 func (h *Handler) handleSkillStatus(w http.ResponseWriter, r *http.Request) {
 	base := h.skillBase(r)
-	items := make([]SkillState, 0, 6)
+	ids := HarnessIDs()
+	items := make([]SkillState, 0, len(ids)*3)
 	for _, kind := range []string{"read", "authoring", "maintain"} {
 		content := h.skillContent(kind, base)
-		for _, target := range []string{"dsh", "claude"} {
+		for _, target := range ids {
 			st, err := SkillStateFor(kind, target, content)
 			if err != nil {
 				continue // 读不了就当没装，不把整个列表拖垮

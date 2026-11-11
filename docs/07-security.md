@@ -62,7 +62,8 @@ kb-lite 把一个**只读**的知识库暴露在 `127.0.0.1` 上。听起来无�
 - 知识库**没有写接口**：没有 PUT/POST 内容接口，没有删除文件的能力。
 - 唯一的写操作是**管理接口**（`/api/*`），而它只改 `config.json`、自己目录下的索引与 skill 文件，**不碰知识库目录**。
 - `DELETE /api/kbs/{name}` 必须只删关联与索引条目。这条要在代码里用测试锁住，而不只是写在文档里。
-- `POST /api/skill/install` 会写 `~/.agents/skills/…` 与 `~/.claude/skills/…`（用户显式点按钮才写），
+- `POST /api/skill/install` 会写 `~/.agents/skills/…`、`~/.claude/skills/…` 与
+  `$WORKBUDDY_CONFIG_DIR/skills/…`（用户显式点按钮才写），
   路径必须做白名单校验：只能写这两棵子树，不跟随符号链接跳到别处。
 
 ## 其它

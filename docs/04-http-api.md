@@ -302,19 +302,30 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 
 ### `GET /api/skill/status`
 
-四个安装目标（两份说明书 × 两个目录）的**磁盘现状**。界面用它在每一行显示“未安装 / 已是最新 / 有更新”。
+三份说明书 × 每个已知 harness，各自的**磁盘现状**。界面用它在每一行显示“未安装 / 已是最新 / 有更新”。
 
 ```jsonc
 { "ok": true, "items": [
   { "kind": "read", "target": "dsh", "path": "C:\\Users\\me\\.agents\\skills\\kb-lite\\SKILL.md",
-    "installed": true, "upToDate": false, "modifiedAt": 1762690000000 }
+    "detected": true, "installed": true, "upToDate": false, "modifiedAt": 1762690000000 }
 ] }
 ```
 
 - `upToDate` 比的是**文件内容与此刻应该装的那份是否逐字相同**：地址、密码、说明书本身变一样就算过时。
+- `detected` 表示本机发现了这个 harness（只看目录）。**false 不代表不能装**：
+  它在界面上只是把那一行写成“没检测到，可以强制安装”。探测会漏（环境变量改到别处、便携版、刚装还没跑过）。
 - 读不了的目标直接跳过（不把整个列表拖垮）。
-- 两个目录互不兼容：Claude Code 只读 `~/.claude/skills`，不读 `~/.agents/skills`；
-  格式相同，所以要各装一份。
+
+**每个 harness 只读自己的目录，没有任何一个是“通用目录”**：
+
+| target | skills 根 | 探测 |
+|---|---|---|
+| `dsh` | `~/.agents/skills` | `~/.agents` 存在 |
+| `claude` | `~/.claude/skills` | `~/.claude` 存在 |
+| `workbuddy` | `$WORKBUDDY_CONFIG_DIR/skills`，未设置时 `~/.workbuddy/skills` | 那个配置目录存在 |
+
+WorkBuddy **不扫** `~/.agents/skills`（它自己的说明里写清了扫描源），所以以前把它当“通用目录”是错的。
+格式相同，但目录不通用，只能各装一份。
 
 ### `POST /api/settings`
 改端口 / 绑定地址 / 读 token 开关 / 向导是否完成。**只有这里能改配置**，UI 与 CLI 都是它的客户端。
@@ -352,16 +363,18 @@ Agent 视角页用（`docs/06` §5.4）：**以 agent 的身份取一次**，把
 
 ### `POST /api/skill/install`
 
-把两份 skill 之一写到 agent 的目录（`docs/06` 的 SKILL 区块）。
+把三份 skill 之一写到 agent 的目录（`docs/06` 的 SKILL 区块）。
 
 ```jsonc
-{ "kind": "read" }     // read | authoring，两份**分开装**（ADR-017）
-{ "targets": ["dsh", "claude"] }   // 可选；默认只 dsh（~/.agents/skills）
+{ "kind": "read" }     // read | authoring | maintain，三份**分开装**（ADR-017）
+{ "targets": ["dsh"] }  // 可选；默认只 dsh。另有 claude、workbuddy
 ```
 
-- `read` → `~/.agents/skills/kb-lite/SKILL.md`（及 `~/.claude/skills/kb-lite/SKILL.md`）；
-- `authoring` → `~/.agents/skills/kb-lite-authoring/SKILL.md`（及 claude 对应目录）；
-- 只允许写这两棵子树，不跟随符号链接；写入前把旧文件备份成 `.bak`，失败就还原。
+- `read` → `<harness 根>/kb-lite/SKILL.md`；
+- `authoring` → `<harness 根>/kb-lite-authoring/SKILL.md`；
+- `maintain` → `<harness 根>/kb-lite-maintain/SKILL.md`；
+- harness 根见上一节的表。只允许写这几棵子树，不跟随符号链接；写入前把旧文件备份成 `.bak`，失败就还原。
+- **安装不检查 `detected`**：用户明确知道自己用什么工具时，不能因为界面没认出来就把他挡在门外。
 - 返回 `{ "installed": [ { "path": "…", "bytes": 3402 } ] }`。
 
 ### `POST /api/pause` · `POST /api/resume`

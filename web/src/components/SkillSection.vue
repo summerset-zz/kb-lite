@@ -71,6 +71,7 @@ const groups = [
 const targets = [
   { id: 'dsh' as const, label: s.skill.targetAgents },
   { id: 'claude' as const, label: s.skill.targetClaude },
+  { id: 'workbuddy' as const, label: s.skill.targetWorkbuddy },
 ]
 
 async function load() {
@@ -101,7 +102,10 @@ function stateOf(kind: string, target: string): SkillState | undefined {
 }
 
 function stateText(st?: SkillState): string {
-  if (!st?.installed) return s.skill.stateMissing
+  if (!st?.installed) {
+    // 没装 + 没检测到：说清“是我们没认出来，不是它不在”，否则用户会以为不用装了。
+    return st && !st.detected ? s.skill.notDetected : s.skill.stateMissing
+  }
   if (!st.upToDate) return s.skill.stateStale
   // “3 分钟前更新”比“已是最新 · 3 分钟前”短，而且一眼看得出这次的状态。
   return s.skill.stateFresh(st.modifiedAt ? humanTime(st.modifiedAt).replace(/\s/g, '') : '')
@@ -124,7 +128,8 @@ function buttonText(st?: SkillState): string {
   return s.skill.reinstall
 }
 
-async function install(kind: 'read' | 'authoring' | 'maintain', target: 'dsh' | 'claude') {
+// harness 的清单由后端给（`/api/skill/status` 里的 target），前端不硬编码它的全集。
+async function install(kind: 'read' | 'authoring' | 'maintain', target: string) {
   busy.value = `${kind}/${target}`
   error.value = ''
   try {
@@ -219,6 +224,7 @@ const stale = computed(() => items.value.some((i) => !i.upToDate))
     </section>
 
     <p class="muted text-xs">{{ s.skill.whenStale }}</p>
+    <p class="muted text-xs">{{ s.skill.eachHarness }}</p>
     <p class="muted text-xs">{{ s.skill.reloadHint }}</p>
     <p v-if="error" class="note text-sm">{{ error }}</p>
   </div>

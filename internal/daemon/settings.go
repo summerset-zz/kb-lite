@@ -120,39 +120,129 @@ type SkillInstallResult struct {
 	Installed []SkillTarget `json:"installed"`
 }
 
-// skillRoots 返回两个目标目录的根（`~/.agents/skills` 与 `~/.claude/skills`）。
+// Harness 是一个会读 skill 的 AI 工具，以及它从哪个目录读。
 //
-// 只认这两个位置：写别的地方要么用户找不到，要么我们不该碰。
-func skillRoots() (dsh, claude string, err error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", "", err
-	}
-	return filepath.Join(home, agentsHomeDirName, "skills"),
-		filepath.Join(home, ".claude", "skills"), nil
+// 每个 harness 的目录约定都不一样，**没有任何一个目录是通用的**：
+// WorkBuddy 只读 `$WORKBUDDY_CONFIG_DIR/skills`（默认 `~/.workbuddy/skills`），
+// 明确不扫 `~/.agents/skills`；Claude Code 只读 `~/.claude/skills`。
+// 所以这里是一个注册表，不是一个“通用目录”。
+type Harness struct {
+	// ID 是内部标识，CLI 的 --target 与接口的 targets 都用它。
+	ID string
+	// SkillsRoot 返回这个 harness 的 skills 根目录。
+	SkillsRoot func() (string, error)
+	// Detected 判断本机有没有发现这个 harness。只看目录，尽力而为：
+	// 环境变量被改到别处、便携版、刚装还没跑过，都会漏判，所以它只影响默认显示，
+	// 不影响允不允许装。
+	Detected func() (bool, error)
 }
 
 const agentsHomeDirName = ".agents"
 
+// workbuddyConfigEnv 是 WorkBuddy 自己用的环境变量。它的用户级 skill 目录就从这里来，
+// 不认这个变量就会在改过配置目录的机器上永远探测不到。
+const workbuddyConfigEnv = "WORKBUDDY_CONFIG_DIR"
+
+// Harnesses 是认识的 AI 工具，顺序就是界面上的顺序。
+var Harnesses = []Harness{
+	{ID: "dsh", SkillsRoot: func() (string, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(home, agentsHomeDirName, "skills"), nil
+	}, Detected: func() (bool, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false, err
+		}
+		return dirExists(filepath.Join(home, agentsHomeDirName))
+	}},
+	{ID: "claude", SkillsRoot: func() (string, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(home, ".claude", "skills"), nil
+	}, Detected: func() (bool, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return false, err
+		}
+		return dirExists(filepath.Join(home, ".claude"))
+	}},
+	{ID: "workbuddy", SkillsRoot: func() (string, error) {
+		dir, err := workbuddyConfigDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(dir, "skills"), nil
+	}, Detected: func() (bool, error) {
+		dir, err := workbuddyConfigDir()
+		if err != nil {
+			return false, err
+		}
+		return dirExists(dir)
+	}},
+}
+
+// workbuddyConfigDir 先看它自己的环境变量，再退回默认目录。
+func workbuddyConfigDir() (string, error) {
+	if v := strings.TrimSpace(os.Getenv(workbuddyConfigEnv)); v != "" {
+		return v, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".workbuddy"), nil
+}
+
+func dirExists(p string) (bool, error) {
+	info, err := os.Stat(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return info.IsDir(), nil
+}
+
+// HarnessIDs 返回全部 harness 的 ID（接口与 CLI 用它遍历）。
+func HarnessIDs() []string {
+	out := make([]string, 0, len(Harnesses))
+	for _, h := range Harnesses {
+		out = append(out, h.ID)
+	}
+	return out
+}
+
+// harnessByID 按 ID 找一个 harness。
+func harnessByID(id string) (Harness, bool) {
+	for _, h := range Harnesses {
+		if h.ID == id {
+			return h, true
+		}
+	}
+	return Harness{}, false
+}
+
 // skillDir 返回某个 (kind, target) 要写到哪个目录。
 //
-// 两个目标目录互不兼容：Claude Code 只认 `~/.claude/skills`，不读 `~/.agents/skills`。
-// 两者用的是**同一套文件格式**（SKILL.md + frontmatter），所以要各装一份，不是共享一份。
+// **安装不检查 harness 装没装**：探测必然有假阴性，用户明确知道自己用什么工具时，
+// 不能因为界面没认出来就把他挡在门外。
 func skillDir(kind, target string) (root, dirName string, err error) {
 	if kind != "read" && kind != "authoring" && kind != "maintain" {
 		return "", "", errors.New("不认识的 skill 种类：" + kind)
 	}
-	dshRoot, claudeRoot, err := skillRoots()
+	h, ok := harnessByID(target)
+	if !ok {
+		return "", "", errors.New("不认识的安装目标：" + target)
+	}
+	root, err = h.SkillsRoot()
 	if err != nil {
 		return "", "", err
-	}
-	switch target {
-	case "dsh":
-		root = dshRoot
-	case "claude":
-		root = claudeRoot
-	default:
-		return "", "", errors.New("不认识的安装目标：" + target)
 	}
 	dirName = "kb-lite"
 	switch kind {
@@ -178,11 +268,14 @@ func SkillFilePath(kind, target string) (string, error) {
 // `UpToDate` 比的是**文件内容与现在应该装的那份是否逐字相同**：
 // 地址、密码、说明书本身只要变了一样，装过的那份就过时了。
 type SkillState struct {
-	Kind      string `json:"kind"`
-	Target    string `json:"target"`
-	Path      string `json:"path"`
-	Installed bool   `json:"installed"`
-	UpToDate  bool   `json:"upToDate"`
+	Kind   string `json:"kind"`
+	Target string `json:"target"`
+	Path   string `json:"path"`
+	// Detected 表示本机发现了这个 harness（只看目录，尽力而为）。
+	// 为 false **不代表不能装**：探测会漏（环境变量指到别处、便携版、刚装还没跑过）。
+	Detected  bool `json:"detected"`
+	Installed bool `json:"installed"`
+	UpToDate  bool `json:"upToDate"`
 	// ModifiedAt 是文件的修改时间（毫秒），没装就是 0。
 	ModifiedAt int64 `json:"modifiedAt"`
 }
@@ -194,6 +287,12 @@ func SkillStateFor(kind, target, expected string) (SkillState, error) {
 		return SkillState{}, err
 	}
 	st := SkillState{Kind: kind, Target: target, Path: p}
+	// 探测失败当成“没发现”：它只影响界面怎么显示，不影响能不能装。
+	if h, ok := harnessByID(target); ok {
+		if found, err := h.Detected(); err == nil {
+			st.Detected = found
+		}
+	}
 	b, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
