@@ -25,14 +25,18 @@ const statusLabel = computed(() => {
   if (props.kb.state === 'indexing') return s.kbs.indexing
   if (props.kb.state === 'error') return s.kbs.failed
   if (!props.kb.enabled) return s.kbs.disabled
+  // 从没整理过：既不是“已就绪”也不是“0 篇文档没事”，而是“还没动手”。
+  // 用户刚往目录里放了一堆文件、或者让 AI 写完，界面却说“已就绪 0 篇”，只会让人以为坏了。
+  if (!props.kb.lastIndexedAt) return s.kbs.neverIndexed
   // 有文件没进库时，就不说“已就绪”了：AI 确实查不到那几篇。
   if (props.kb.notIndexed > 0) return s.kbs.statusNotIndexed(props.kb.notIndexed)
-  return s.kbs.statusReady(props.kb.lastIndexedAt ? humanTime(props.kb.lastIndexedAt) : '')
+  return s.kbs.statusReady(humanTime(props.kb.lastIndexedAt))
 })
 
 // 行首那个符号：对号 = 没问题，感叹号 = 要看看，时钟 = 正在整理。
 const stateIcon = computed<'clock' | 'alert-circle' | 'check'>(() => {
   if (props.kb.state === 'indexing') return 'clock'
+  if (!props.kb.lastIndexedAt) return 'alert-circle'
   if (props.kb.state === 'error' || props.kb.notIndexed > 0) return 'alert-circle'
   if (!props.kb.enabled) return 'alert-circle'
   return 'check'
