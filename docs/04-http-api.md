@@ -713,6 +713,10 @@ UI 的完成页与设置页各给一个“复制”按钮，取的就是这两�
 它同样带 `{{BASE_URL}}` 与 `{{AUTH}}`：整理完得知道**写到哪个目录**（`GET /kb` 的 `rootPath`），
 而那是要请求服务的。
 
+**渲染时只取模板里 ```markdown 围栏那一段**：`docs/authoring-template.md` 前面有一段写给维护者的
+说明，那段不属于 SKILL.md。装到用户目录的文件必须第一行就是 `---`，否则 harness 认不出 frontmatter，
+整个技能加载不上（v0.5.0 的 `authoring.md` 就是错的）。
+
 **能力门控与 `/skill.md` 是同一套**：`{{#if CHECK}}` 包着「写之前先问一句」那一段，
 路由不在 `HandlerOptions.Features` 里时整段消失，连编号都不留空。
 现在的默认功能表是 `{"manifest": true, "check": true}`。

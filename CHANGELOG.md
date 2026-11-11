@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **装出来的 `authoring.md` 缺 frontmatter**：`RenderAuthoringText` 直接渲染了整份
+  `authoring_template.md`，而那份文件前面有一段写给维护者的说明与一个 markdown 围栏，
+  真正的 `name: kb-markdown` 被埋在第十几行。WorkBuddy 直接报“缺失 frontmatter”，
+  整个技能加载不上。现在渲染时只取围栏里那一段，装出去的文件第一行就是 `---`。
+
+  旧测试只比“模板与文档逐字一致”，两边一起错就一起绿。新增的 `TestSkillsHaveFrontmatter`
+  直接盯渲染结果：三份说明书的第一行必须是 `---`，开头附近要闭合、要有 `name` 与 `description`。
+
 ### Added
 
 - **第三份说明书：维护 SKILL（`/maintain.md`）**。教能执行 shell 的 agent 加、删、改知识库登记，

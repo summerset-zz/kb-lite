@@ -122,47 +122,6 @@ func TestHumanBytes(t *testing.T) {
 
 // ---- 小工具 ----
 
-func normalizeNewlines(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	return strings.ReplaceAll(s, "\r", "\n")
-}
-
-// extractFencedBlock 取 `fence`（如 "```markdown"）那一段围栏的内容，不含围栏行。
-//
-// 注意块**内部**还有 ```bash / ```json 这些内层围栏：只有「开带有语言标识、关是光秃秃的」
-// 那一对才算内层，其余的光秃 ``` 就是外层结束。不区分的话会在第一个 ```bash 结束时被截断。
-func extractFencedBlock(s, fence string) string {
-	lines := strings.Split(s, "\n")
-
-	start := -1
-	for i, line := range lines {
-		if line == fence {
-			start = i + 1
-			break
-		}
-	}
-	if start < 0 {
-		return ""
-	}
-
-	inInner := false
-	for i := start; i < len(lines); i++ {
-		line := lines[i]
-		if strings.HasPrefix(line, "```") {
-			if inInner {
-				inInner = false
-				continue
-			}
-			if line != "```" {
-				inInner = true
-				continue
-			}
-			return strings.Join(lines[start:i], "\n")
-		}
-	}
-	return ""
-}
-
 // stripGates 去掉 `{{#if X}}` 与 `{{/if}}` 所在的行。
 func stripGates(s string) string {
 	lines := strings.Split(s, "\n")

@@ -29,11 +29,61 @@ var maintainTemplate string
 // 也会照写作规范去动用户的文件。
 func RenderAuthoringText(base, token string, features map[string]bool) string {
 	auth, authNote := authValues(token)
-	return renderSkill(authoringTemplate, map[string]string{
+	// 模板文件里前面有一段写给维护者的说明，真正的 SKILL.md 在 ```markdown 围栏里。
+	// 这里把围栏里的那份取出来当正文 —— 装到用户目录的文件必须**第一行就是 `---`**，
+	// 否则 harness 认不出这是 skill（WorkBuddy 就是这么报的：缺 frontmatter）。
+	body := extractFencedBlock(normalizeNewlines(authoringTemplate), "```markdown")
+	if body == "" {
+		// 围栏被改坏了也不能把一份空文件写到用户目录里。
+		body = authoringTemplate
+	}
+	return renderSkill(body, map[string]string{
 		"BASE_URL":  base,
 		"AUTH":      auth,
 		"AUTH_NOTE": authNote,
 	}, features)
+}
+
+// normalizeNewlines 把 CRLF 折成 LF。模板在仓库里是 CRLF，比较与提取前先统一。
+func normalizeNewlines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
+}
+
+// extractFencedBlock 取 `fence`（如 "```markdown"）那一段围栏的内容，不含围栏行。
+//
+// 注意块**内部**还有 ```bash / ```json 这些内层围栏：只有「开带有语言标识、关是光秃兀的」
+// 那一对才算内层，其余的光秃 ``` 就是外层结束。不区分的话会在第一个 ```bash 结束时被截断。
+func extractFencedBlock(s, fence string) string {
+	lines := strings.Split(s, "\n")
+
+	start := -1
+	for i, line := range lines {
+		if line == fence {
+			start = i + 1
+			break
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+
+	inInner := false
+	for i := start; i < len(lines); i++ {
+		line := lines[i]
+		if strings.HasPrefix(line, "```") {
+			if inInner {
+				inInner = false
+				continue
+			}
+			if line != "```" {
+				inInner = true
+				continue
+			}
+			return strings.Join(lines[start:i], "\n")
+		}
+	}
+	return ""
 }
 
 // RenderMaintainText 返回第三份说明书的正文：教 agent 增删改知识库登记。
