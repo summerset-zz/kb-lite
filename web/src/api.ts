@@ -159,7 +159,7 @@ export const api = {
       effective: { port: number; host: string; requireToken: boolean; dbPath: string }
     }>('POST', '/api/settings', patch),
 
-  installSkill: (kind: 'read' | 'authoring', targets: string[]) =>
+  installSkill: (kind: 'read' | 'authoring' | 'maintain', targets: string[]) =>
     request<{ installed: SkillTarget[] }>('POST', '/api/skill/install', { kind, targets }),
 
   /** 装没装、是不是最新（从磁盘读，不是记在内存里）。 */

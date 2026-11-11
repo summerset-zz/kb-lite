@@ -584,16 +584,20 @@ func runSkill(args []string) int {
 	outPath := fs.String("out", "", "写到文件（UTF-8、无 BOM），而不是打到 stdout")
 	install := fs.Bool("install", false, "装到 agent 的 skill 目录（教 AI 怎么查）")
 	installAuthoring := fs.Bool("install-authoring", false, "装另一份：教 AI 怎么写")
+	installMaintain := fs.Bool("install-maintain", false, "装第三份：教 agent 增删改登记（需要 shell）")
 	targetFlag := fs.String("target", "dsh", "dsh | claude | both")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError
 	}
 
-	if *install || *installAuthoring {
+	if *install || *installAuthoring || *installMaintain {
 		kind := "read"
-		if *installAuthoring {
+		switch {
+		case *installAuthoring:
 			kind = "authoring"
+		case *installMaintain:
+			kind = "maintain"
 		}
 		return runSkillInstall(kind, *targetFlag)
 	}
@@ -651,8 +655,11 @@ func runSkillInstall(kind, target string) int {
 		return exitError
 	}
 	what := "「让 AI 能查知识库」的 SKILL"
-	if kind == "authoring" {
+	switch kind {
+	case "authoring":
 		what = "「让 AI 把文件整理成知识库格式」的 SKILL"
+	case "maintain":
+		what = "「让 agent 增删改知识库登记」的 SKILL"
 	}
 	for _, it := range res.Installed {
 		fmt.Printf("已安装%s → %s（%d 字节）\n", what, it.Path, it.Bytes)
@@ -1243,6 +1250,7 @@ func confirmStdin() bool {
 
 func runList(args []string) int {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "输出 JSON（给 agent 与脚本用）")
 	flagArgs, _ := splitFlags(args, boolFlagNames)
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitError
@@ -1257,6 +1265,28 @@ func runList(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
+
+	// --json 先处理：一个库都没有时也要回 `[]`，否则调用方得同时处理“空”和“空数组”两种形状。
+	if *asJSON {
+		type kbDTO struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			RootPath string `json:"rootPath"`
+			Enabled  bool   `json:"enabled"`
+		}
+		out := make([]kbDTO, 0, len(cfg.KBs))
+		for _, kb := range cfg.KBs {
+			out = append(out, kbDTO{ID: kb.ID, Name: kb.Name, RootPath: kb.RootPath, Enabled: kb.Enabled})
+		}
+		b, err := json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return exitError
+		}
+		fmt.Println(string(b))
+		return exitOK
+	}
+
 	if len(cfg.KBs) == 0 {
 		fmt.Println("还没有知识库。用 kb-lite add <目录> 添加一个。")
 		return exitOK

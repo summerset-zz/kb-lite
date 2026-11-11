@@ -105,7 +105,7 @@ func portFree(host string, port int) bool {
 
 // SkillTarget 是一份 SKILL 要装到哪。
 type SkillTarget struct {
-	// Kind 是 read（教 agent 怎么用）或 authoring（教 AI 怎么写）。
+	// Kind 是 read（教 agent 怎么用）、authoring（教 AI 怎么写）或 maintain（增删改登记）。
 	Kind string `json:"kind"`
 	// Target 是 dsh 或 claude。
 	Target string `json:"target"`
@@ -139,7 +139,7 @@ const agentsHomeDirName = ".agents"
 // 两个目标目录互不兼容：Claude Code 只认 `~/.claude/skills`，不读 `~/.agents/skills`。
 // 两者用的是**同一套文件格式**（SKILL.md + frontmatter），所以要各装一份，不是共享一份。
 func skillDir(kind, target string) (root, dirName string, err error) {
-	if kind != "read" && kind != "authoring" {
+	if kind != "read" && kind != "authoring" && kind != "maintain" {
 		return "", "", errors.New("不认识的 skill 种类：" + kind)
 	}
 	dshRoot, claudeRoot, err := skillRoots()
@@ -155,8 +155,11 @@ func skillDir(kind, target string) (root, dirName string, err error) {
 		return "", "", errors.New("不认识的安装目标：" + target)
 	}
 	dirName = "kb-lite"
-	if kind == "authoring" {
+	switch kind {
+	case "authoring":
 		dirName = "kb-lite-authoring"
+	case "maintain":
+		dirName = "kb-lite-maintain"
 	}
 	return root, dirName, nil
 }

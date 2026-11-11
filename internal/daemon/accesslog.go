@@ -297,7 +297,7 @@ func (h *Handler) logAccess(next http.Handler) http.Handler {
 func shouldRecord(r *http.Request) bool {
 	p := r.URL.Path
 	switch p {
-	case "/skill.md", "/authoring.md", "/kb":
+	case "/skill.md", "/authoring.md", "/maintain.md", "/kb":
 		return true
 	}
 	if strings.HasPrefix(p, "/kb/") {
@@ -369,6 +369,8 @@ func (h *Handler) humanAction(r *http.Request, status int) string {
 		return "取了说明书"
 	case segs[0] == "authoring.md":
 		return "取了整理说明"
+	case segs[0] == "maintain.md":
+		return "取了维护说明"
 	case segs[0] == "kb":
 		return humanKBAction(segs[1:], r.URL.Query())
 	case segs[0] == "api":

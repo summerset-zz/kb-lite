@@ -28,6 +28,7 @@ kb-lite/
       server.go           # 监听、热重开、暂停
       skill_template.md   # //go:embed，docs/skill-template.md 的镜像
       authoring_template.md
+      maintain_template.md
       static/             # //go:embed 的 UI 产物（只有 .gitkeep 进版本库）
     tray/                 # Windows 托盘，纯 Go + syscall
       assets/             # 图标源图（normal.png / warn.png，512×512，透明底）

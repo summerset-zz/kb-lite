@@ -35,10 +35,11 @@ const token = ref('')
 const base = computed(() => `http://${location.hostname}:${props.status.port}`)
 
 /** “不想安装”时贴给 AI 的那段话：带地址，开着密码就一起带上。 */
-function pasteFor(kind: 'read' | 'authoring'): string {
-  return kind === 'read'
-    ? s.skill.pasteRead(base.value, token.value)
-    : s.skill.pasteAuthoring(base.value, token.value)
+function pasteFor(kind: 'read' | 'authoring' | 'maintain'): string {
+  if (kind === 'authoring') return s.skill.pasteAuthoring(base.value, token.value)
+  // 维护那一组没有这一行（模板里按 g.shell 判断），这个分支只是为了类型完整。
+  if (kind === 'maintain') return ''
+  return s.skill.pasteRead(base.value, token.value)
 }
 
 const groups = [
@@ -48,6 +49,7 @@ const groups = [
     desc: s.skill.readDesc,
     prompt: s.skill.promptRead,
     promptHint: s.skill.promptReadHint,
+    shell: '',
   },
   {
     kind: 'authoring' as const,
@@ -55,6 +57,16 @@ const groups = [
     desc: s.skill.writeDesc,
     prompt: s.skill.promptAuthoring,
     promptHint: s.skill.promptAuthoringHint,
+    shell: '',
+  },
+  {
+    kind: 'maintain' as const,
+    title: s.skill.maintainTitle,
+    desc: s.skill.maintainDesc,
+    prompt: s.skill.promptMaintain,
+    promptHint: s.skill.promptMaintainHint,
+    // 这一组靠命令行干活，所以没有“贴给 AI 也行”那条退路：没有 shell 就是做不到。
+    shell: s.skill.maintainShell,
   },
 ]
 
@@ -114,7 +126,7 @@ function buttonText(st?: SkillState): string {
   return s.skill.reinstall
 }
 
-async function install(kind: 'read' | 'authoring', target: 'dsh' | 'claude') {
+async function install(kind: 'read' | 'authoring' | 'maintain', target: 'dsh' | 'claude') {
   busy.value = `${kind}/${target}`
   error.value = ''
   try {
@@ -145,12 +157,14 @@ const stale = computed(() => items.value.some((i) => !i.upToDate))
         <CopyInline :text="g.prompt" />
       </div>
 
-      <!-- 不装 SKILL 的用法：这一段本身就是“说明书 + 地址”，贴给任何 AI 都能用。 -->
-      <div class="flex items-start gap-2 mt-2">
+      <!-- 不装 SKILL 的用法：这一段本身就是“说明书 + 地址”，贴给任何 AI 都能用。
+           维护那一组没有这一行：它必须有 shell 才能干活。 -->
+      <div v-if="!g.shell" class="flex items-start gap-2 mt-2">
         <span class="text-xs muted shrink-0">{{ s.skill.pasteHint }}</span>
         <span class="mono text-xs flex-1 min-w-0 break-all">{{ pasteFor(g.kind) }}</span>
         <CopyInline :text="pasteFor(g.kind)" />
       </div>
+      <p v-else class="note text-xs mt-2">{{ g.shell }}</p>
 
       <div class="mt-3 space-y-2">
         <div v-for="t in targets" :key="t.id" class="flex items-center gap-2 min-w-0">

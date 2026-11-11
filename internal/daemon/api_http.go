@@ -528,8 +528,11 @@ func (h *Handler) skillContent(kind, base string) string {
 	if h.requireToken.Load() {
 		tok = h.ReadToken()
 	}
-	if kind == "authoring" {
+	switch kind {
+	case "authoring":
 		return RenderAuthoringText(base, tok, h.opts.Features)
+	case "maintain":
+		return RenderMaintainText()
 	}
 	return RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
 }
@@ -540,8 +543,8 @@ func (h *Handler) skillContent(kind, base string) string {
 // 这个接口把四个目标（两种说明书 × 两个目录）的现状一次性给它。
 func (h *Handler) handleSkillStatus(w http.ResponseWriter, r *http.Request) {
 	base := h.skillBase(r)
-	items := make([]SkillState, 0, 4)
-	for _, kind := range []string{"read", "authoring"} {
+	items := make([]SkillState, 0, 6)
+	for _, kind := range []string{"read", "authoring", "maintain"} {
 		content := h.skillContent(kind, base)
 		for _, target := range []string{"dsh", "claude"} {
 			st, err := SkillStateFor(kind, target, content)
@@ -562,8 +565,8 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 	if req.Kind == "" {
 		req.Kind = "read"
 	}
-	if req.Kind != "read" && req.Kind != "authoring" {
-		writeError(w, http.StatusBadRequest, "bad_kind", "kind 只能是 read 或 authoring。")
+	if req.Kind != "read" && req.Kind != "authoring" && req.Kind != "maintain" {
+		writeError(w, http.StatusBadRequest, "bad_kind", "kind 只能是 read、authoring 或 maintain。")
 		return
 	}
 	if len(req.Targets) == 0 {
@@ -571,20 +574,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	base := h.skillBase(r)
-	var content string
-	if req.Kind == "authoring" {
-		tok := ""
-		if h.requireToken.Load() {
-			tok = h.ReadToken()
-		}
-		content = RenderAuthoringText(base, tok, h.opts.Features)
-	} else {
-		tok := ""
-		if h.requireToken.Load() {
-			tok = h.ReadToken()
-		}
-		content = RenderSkillText(h.mgr.Index(), base, tok, h.opts.Features)
-	}
+	content := h.skillContent(req.Kind, base)
 
 	res := SkillInstallResult{Installed: make([]SkillTarget, 0, len(req.Targets))}
 	for _, target := range req.Targets {

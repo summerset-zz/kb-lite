@@ -165,6 +165,7 @@ func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /skill.md", h.handleSkill)
 	mux.HandleFunc("GET /authoring.md", h.handleAuthoring)
+	mux.HandleFunc("GET /maintain.md", h.handleMaintain)
 	mux.HandleFunc("GET /api/status", h.handleStatus)
 	mux.HandleFunc("GET /api/kbs", h.handleKBList)
 	mux.HandleFunc("POST /api/kbs", h.handleKBCreate)
@@ -289,7 +290,8 @@ func isAdminPath(p string) bool {
 // 只有这两类才受访问密码约束：UI 自己（`/` 与静态资源）必须能打开，
 // 否则用户连“去设置里关掉密码”都做不到。
 func isReadPath(p string) bool {
-	return p == "/skill.md" || p == "/authoring.md" || p == "/kb" || strings.HasPrefix(p, "/kb/")
+	return p == "/skill.md" || p == "/authoring.md" || p == "/maintain.md" ||
+		p == "/kb" || strings.HasPrefix(p, "/kb/")
 }
 
 // hostAllowed 只认本机的三种写法。

@@ -75,7 +75,7 @@ export interface FsList {
 
 /** 安装目标的现状（`GET /api/skill/status`）。 */
 export interface SkillState {
-  kind: 'read' | 'authoring'
+  kind: 'read' | 'authoring' | 'maintain'
   target: 'dsh' | 'claude'
   path: string
   installed: boolean

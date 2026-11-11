@@ -184,6 +184,7 @@ pnpm icons
 | [12-backlog](./docs/12-backlog.md) | 现在到哪儿了、下一步做什么 |
 | [skill-template](./docs/skill-template.md) | 服务端吐出、给使用侧 agent 的说明文档 |
 | [authoring-template](./docs/authoring-template.md) | 给“把 docx / pdf 转成知识库”的 AI 的整理说明 |
+| [maintain-template](./docs/maintain-template.md) | 给能跑 shell 的 agent 的维护说明（增删改知识库登记） |
 
 ## 许可
 

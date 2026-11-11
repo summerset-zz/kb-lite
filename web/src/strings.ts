@@ -325,6 +325,12 @@ export const s = {
     writeTitle: '整理 SKILL',
     writeDesc:
       '让 AI 把 docx、pdf、网页整理成能被检索的 markdown，并写进你指定的知识库目录。',
+    maintainTitle: '维护 SKILL',
+    maintainDesc:
+      '让 agent 帮你加一个知识库、删掉一个、或者改个名。它改的是登记，不是笔记内容。',
+    // 用户要求把这条写在卡片上，不藏在说明书里：做不到就没有“维护”这回事。
+    maintainShell:
+      '前提：你的 agent 必须能执行 shell 命令。它靠 kb-lite 命令行干活，管理凭据不会写进这份文件。',
 
     howToAsk: '怎么跟 AI 说',
     targetAgents: '通用目录',
@@ -351,6 +357,8 @@ export const s = {
     promptRead: '用 kb-lite 去我的知识库里查一下……',
     promptAuthoringHint: '把这句话发给另一个 AI，让它把文件整理成能进知识库的样子',
     promptAuthoring: '用 kb-lite-authoring 把这些文件整理进知识库“<知识库名称>”',
+    promptMaintainHint: '把这句话发给能跑命令的 agent，它会先拉清单再动手',
+    promptMaintain: '用 kb-lite-maintain 把 D:\\notes 加进知识库，名字你先建议，再问我要不要用它',
 
     // 不装 SKILL 的人：给 AI 一段能直接看懂的话，里面带着说明书地址。
     // 访问密码开着时必须写进去，否则 AI 拿到 401 只会反复重试。

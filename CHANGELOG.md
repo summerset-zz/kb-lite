@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **第三份说明书：维护 SKILL（`/maintain.md`）**。教能执行 shell 的 agent 加、删、改知识库登记，
+  落到 `~/.agents/skills/kb-lite-maintain/`（`kb-lite skill --install-maintain`）。
+
+  它**必须分开装**（ADR-017 已从两份改成三份）：并进整理那份就等于让“整理文档的 AI”
+  顺手拿到删库能力，而整理文档恰好最容易被陌生文件内容牵着走。
+
+  正文里没有地址也没有密码：维护走 `kb-lite` 命令行，CLI 自己从配置目录读管理凭据。
+  管理凭据永远不进文档（ADR-015），所以这份说明书只能这么写。
+  **代价**：那份 agent 必须能执行 shell。界面上这一组的卡片直接写明这条，不藏进正文。
+- **`kb-lite list --json`**：输出 `id` / `name` / `rootPath` / `enabled`，空列表也是 `[]`。
+  `docs/05` 早就写着这个参数，代码里一直没有；维护说明书要靠它先拉清单再动手。
+
 ### Fixed
 
 - **缓存里删不掉的旧条目**：

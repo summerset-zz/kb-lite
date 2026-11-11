@@ -74,6 +74,7 @@ const usage = `kb-lite — 把本地 markdown 目录变成只读 HTTP 知识库
     --out <path>            写到文件（UTF-8、无 BOM），已存在的目录会自动创建
     --install               装到 agent 的 skill 目录（教 AI 怎么查）
     --install-authoring     装另一份：教 AI 怎么写
+    --install-maintain      装第三份：教 agent 增删改登记（需要 shell 能力）
     --target dsh|claude|both  装到哪，默认 dsh
     --url <base>            覆盖服务地址
   token [--show] [--rotate] 看/换读取面的访问密码（管理凭据不提供打印）
@@ -185,7 +186,7 @@ func (s *stringsFlag) Set(v string) error {
 var boolFlagNames = map[string]bool{
 	"explain": true, "json": true, "open": true, "no-db": true, "no-tray": true,
 	"show": true, "help": true, "force": true, "rotate": true, "yes": true, "wait": true,
-	"install": true, "install-authoring": true, "refresh": true, "clear": true,
+	"install": true, "install-authoring": true, "install-maintain": true, "refresh": true, "clear": true,
 }
 
 // splitFlags 把参数拆成「flag」与「位置参数」两半边。

@@ -14,6 +14,9 @@ var skillTemplate string
 //go:embed authoring_template.md
 var authoringTemplate string
 
+//go:embed maintain_template.md
+var maintainTemplate string
+
 // RenderAuthoringText 返回“教 AI 怎么写”的那份说明。
 //
 // 它也要带服务地址与鉴权：整理完得知道**写到哪个目录**（`GET /kb` 的 rootPath），
@@ -31,6 +34,15 @@ func RenderAuthoringText(base, token string, features map[string]bool) string {
 		"AUTH":      auth,
 		"AUTH_NOTE": authNote,
 	}, features)
+}
+
+// RenderMaintainText 返回第三份说明书的正文：教 agent 增删改知识库登记。
+//
+// 与另外两份不同，它**没有任何占位符**：维护走 `kb-lite` 命令行，CLI 自己从配置目录
+// 读管理凭据，所以不需要服务地址，也不需要访问密码。
+// 管理凭据永远不进文档（ADR-015），这也是它只能这么写的原因。
+func RenderMaintainText() string {
+	return maintainTemplate
 }
 
 // DefaultFeatures 是「这个版本已经实现了哪些可选接口」。
@@ -86,8 +98,18 @@ func (h *Handler) handleAuthoring(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(RenderAuthoringText(base, tok, h.opts.Features)))
 }
 
-// RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。
+// handleMaintain 输出 `GET /maintain.md`（教 agent 增删改知识库登记的那份）。
 //
+// 与另外两份平级、分开取（ADR-017）。正文里没有占位符：维护走 CLI，
+// CLI 自己带管理凭据，所以这份文档本身不需要地址与密码。
+// 它仍然属于读取面，开了访问密码就要带密码。
+func (h *Handler) handleMaintain(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write([]byte(RenderMaintainText()))
+}
+
+// RenderSkillText 渲染 `/skill.md` 的正文。HTTP 与离线 CLI 共用这一份。//
 // `idx` 已经用不上了（库列表改成让 agent 自己 `GET /kb` 取），但保留参数：
 // 调用方本来就拿着 Index，保留它免得以后要加回一点点动态信息时再改一圈。
 //

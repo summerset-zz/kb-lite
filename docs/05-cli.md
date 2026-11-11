@@ -41,6 +41,7 @@ kb-lite add <dir> [--name <n>] [--include <glob>]… [--ignore <glob>]…
    # daemon 在跑：存进配置并**立刻开始整理**
    # daemon 没跑：退回直接改 config.json，下次 serve 生效（退回是有意保留的，见下面那张表）
 kb-lite list [--json]
+   # --json 输出 id / name / rootPath / enabled，给 agent 与脚本用（空列表也是 []）
 kb-lite remove <name> [--yes]
 kb-lite enable <name>
 kb-lite disable <name>
@@ -96,6 +97,9 @@ kb-lite skill --install [--target dsh|claude|both]
 kb-lite skill --install-authoring [--target dsh|claude|both]
    # 另一份：教 AI **怎么写**（~/.agents/skills/kb-lite-authoring/）
    # 两份**分开装**（ADR-017）：合成一份后 agent 会在只想查东西的时候也去改笔记
+kb-lite skill --install-maintain [--target dsh|claude|both]
+   # 第三份：教 agent 增、删、改知识库登记（~/.agents/skills/kb-lite-maintain/）
+   # 它靠 `kb-lite` 命令行干活，所以那份 agent 必须能执行 shell（管理凭据不进文档）
 kb-lite token [--show] [--rotate]
    # 只针对读取面那把“访问密码”。管理凭据（api-token）不提供打印命令（ADR-015）
    # ⚠️ `--show` 在开启读取密码时才有意义；关着时直接告诉你“当前没有启用访问密码”

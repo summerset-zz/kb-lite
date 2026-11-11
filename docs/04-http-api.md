@@ -720,11 +720,29 @@ UI 的完成页与设置页各给一个“复制”按钮，取的就是这两�
 安装与「有没有更新」的判断共用同一个渲染函数（`skillContent`）：只要一边漏了 features，
 用户装完就会立刻看到「有更新」。所以两份模板里加接口时，**两处都要传递 features**。
 
+## `GET /maintain.md`
+
+第三份说明（`text/markdown`）：教**能执行 shell 的 agent** 增、删、改知识库登记。
+模板见 [maintain-template](./maintain-template.md)，三份分开装（ADR-017）。
+
+**它的正文里没有任何占位符**，不带 `{{BASE_URL}}` 也不带 `{{AUTH}}`：
+维护走 `kb-lite` 命令行，CLI 自己从配置目录读管理凭据。
+管理凭据永远不进文档（ADR-015），这也是它只能这么写的原因。
+它仍然属于读取面：开了访问密码就要带密码。
+
+为什么单独一份，不并进另外两份：
+
+- 它**能删库**。并进 `authoring` 就等于让“整理文档的 AI”顺手拿到删库能力，
+  而整理文档恰好最容易被陌生文件内容牵着走。
+- 受众不同：`authoring` 可能要给别人用，这份只应该在用户自己的机器上。
+
+界面上的卡片必须明写「你的 agent 必须具备执行 shell 的能力」（`docs/06` §5.1）。
+
 ## 其它
 
 - `GET /` → UI 静态页。页面用 `//go:embed` 打进去，**不需要任何凭据**（否则用户连「去设置里关掉密码」都做不到）。
   打开页面时顺手下发 `kb-admin` cookie（`HttpOnly; SameSite=Strict`），UI 之后靠它调 `/api/*`。
   没构建过 UI 时返回一个占位页，说明怎么构建，服务照常可用。
-- 访问密码只约束 `/kb/*`、`/skill.md`、`/authoring.md` 这几类**给 agent 的**路径（`isReadPath`）。
+- 访问密码只约束 `/kb/*`、`/skill.md`、`/authoring.md`、`/maintain.md` 这几类**给 agent 的**路径（`isReadPath`）。
 - `GET /openapi.json`（可选）：便于用户把接口喂给自己的工具链。
 - **不要**提供 `/kb/{name}/raw?path=` 之类无 ACL 的万能文件读接口。
