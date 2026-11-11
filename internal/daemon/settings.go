@@ -244,12 +244,16 @@ func skillDir(kind, target string) (root, dirName string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	dirName = "kb-lite"
+	// 目录名与 SKILL.md 里的 `name` 必须一致：harness 靠目录名与 frontmatter 认技能，
+	// 两边不一样的时候，有的工具会报重名、有的会同时列出两个。
+	// 三个都带 kbl- 前缀，一眼看得出是同一套东西。
 	switch kind {
 	case "authoring":
-		dirName = "kb-lite-authoring"
+		dirName = "kbl-authoring"
 	case "maintain":
-		dirName = "kb-lite-maintain"
+		dirName = "kbl-maintain"
+	default:
+		dirName = "kbl-query"
 	}
 	return root, dirName, nil
 }

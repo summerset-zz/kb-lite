@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **三份 SKILL 统一改名，前缀 `kbl-`**：
+  `kb-lite` → `kbl-query`、`kb-markdown` → `kbl-authoring`、`kb-lite-maintain` → `kbl-maintain`。
+  目录名与 frontmatter 里的 `name` 现在**逐个对齐**（以前 `kb-markdown` 装在 `kb-lite-authoring/` 里，
+  两边不一样，有的 harness 会报重名、有的会同时列出两个）。
+
+  **升级方式**：旧目录不会自动清。装完新版之后，把每个 harness 目录下的 `kb-lite`、
+  `kb-lite-authoring`、`kb-lite-maintain` 这三个删掉即可。界面上三行会显示「SKILL 未安装」，
+  点一次就装到新目录。
+
 ### Fixed
 
 - **装出来的 `authoring.md` 缺 frontmatter**：`RenderAuthoringText` 直接渲染了整份

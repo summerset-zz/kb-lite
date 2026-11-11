@@ -36,7 +36,7 @@ func TestSkillStatus(t *testing.T) {
 	if got["installed"] != true || got["upToDate"] != true {
 		t.Fatalf("装完应当是最新的：%v", got)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "kb-lite", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "kbl-query", "SKILL.md")); err != nil {
 		t.Fatalf("文件不在预期位置：%v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestSkillStatus(t *testing.T) {
 	}
 
 	// 手改一个字：还在，但过时了。
-	p := filepath.Join(home, ".agents", "skills", "kb-lite", "SKILL.md")
+	p := filepath.Join(home, ".agents", "skills", "kbl-query", "SKILL.md")
 	if err := os.WriteFile(p, []byte("改过的内容\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

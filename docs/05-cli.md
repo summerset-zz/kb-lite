@@ -93,13 +93,12 @@ kb-lite skill [--url <base>] [--out <path>]
    #   PowerShell 的 `>` 会写成 UTF-16，`Out-File -Encoding utf8` 会带 BOM，
    #   两者都会让 YAML frontmatter 失效，skill 就读不出来了。
 kb-lite skill --install [--target dsh|claude|workbuddy|both|all]
-   # 装到 <harness 根>/kb-lite/SKILL.md；默认只 dsh（~/.agents/skills）
-   # both = dsh + claude，all = 注册表里全部（含 workbuddy）
-kb-lite skill --install-authoring [--target dsh|claude|both]
-   # 另一份：教 AI **怎么写**（~/.agents/skills/kb-lite-authoring/）
-   # 两份**分开装**（ADR-017）：合成一份后 agent 会在只想查东西的时候也去改笔记
-kb-lite skill --install-maintain [--target dsh|claude|both]
-   # 第三份：教 agent 增、删、改知识库登记（~/.agents/skills/kb-lite-maintain/）
+   # 装到 ~/.agents/skills/kbl-query/SKILL.md（默认）
+kb-lite skill --install-authoring [--target dsh|claude|workbuddy|both|all]
+   # 另一份：教 AI **怎么写**（<harness 根>/kbl-authoring/）
+   # 多份**分开装**（ADR-017）：合成一份后 agent 会在只想查东西的时候也去改笔记
+kb-lite skill --install-maintain [--target dsh|claude|workbuddy|both|all]
+   # 第三份：教 agent 增、删、改知识库登记（<harness 根>/kbl-maintain/）
    # 它靠 `kb-lite` 命令行干活，所以那份 agent 必须能执行 shell（管理凭据不进文档）
 kb-lite token [--show] [--rotate]
    # 只针对读取面那把“访问密码”。管理凭据（api-token）不提供打印命令（ADR-015）

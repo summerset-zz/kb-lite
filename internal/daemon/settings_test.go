@@ -191,17 +191,17 @@ func TestSkillInstallSeparateDirs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth, err := InstallSkill("authoring", "dsh", "---\nname: kb-lite-authoring\n---\n正文")
+	auth, err := InstallSkill("authoring", "dsh", "---\nname: kbl-authoring\n---\n正文")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if read.Path == auth.Path {
 		t.Fatalf("两份 SKILL 装到同一个文件了：%s", read.Path)
 	}
-	if !strings.Contains(read.Path, filepath.Join(".agents", "skills", "kb-lite")) {
+	if !strings.Contains(read.Path, filepath.Join(".agents", "skills", "kbl-query")) {
 		t.Errorf("读取 SKILL 路径不对：%s", read.Path)
 	}
-	if !strings.Contains(auth.Path, filepath.Join(".agents", "skills", "kb-lite-authoring")) {
+	if !strings.Contains(auth.Path, filepath.Join(".agents", "skills", "kbl-authoring")) {
 		t.Errorf("写作 SKILL 路径不对：%s", auth.Path)
 	}
 	if _, err := os.Stat(read.Path); err != nil {

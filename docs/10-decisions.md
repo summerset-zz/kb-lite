@@ -226,7 +226,8 @@
 
 **决定**：`/skill.md`（教 agent **怎么读**）、`/authoring.md`（教 AI **怎么写内容**）、
 `/maintain.md`（教 agent **增删改登记**）是三份独立文件、独立版本、在 UI 里三个独立安装按钮，
-落到不同的 skill 目录（`kb-lite` / `kb-lite-authoring` / `kb-lite-maintain`）。
+落到不同的 skill 目录（`kbl-query` / `kbl-authoring` / `kbl-maintain`）。三个都带 `kbl-` 前缀，
+目录名与 frontmatter 里的 `name` 逐个对齐 —— 两边不一样时，有的 harness 会报重名、有的会同时列出两个。
 
 **理由**：合成一份会让 agent 在“我只是想查点东西”的时候也照写作规范去动用户的文件。
 而我们**没有写接口**，它只会去改文件系统。读与写是两种意图，就该是两把钥匙。

@@ -18,9 +18,9 @@ func TestSkillsHaveFrontmatter(t *testing.T) {
 		"maintain":  RenderMaintainText(),
 	}
 	wantName := map[string]string{
-		"read":      "name: kb-lite",
-		"authoring": "name: kb-markdown",
-		"maintain":  "name: kb-lite-maintain",
+		"read":      "name: kbl-query",
+		"authoring": "name: kbl-authoring",
+		"maintain":  "name: kbl-maintain",
 	}
 
 	for kind, text := range docs {

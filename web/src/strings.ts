@@ -360,8 +360,8 @@ export const s = {
       'Claude Code 会自己发现目录里的改动；如果那个目录是这次才建的，它可能要先运行 /reload-skills。其他 AI 工具不一定，保险起见重开一次会话。',
 
     promptRead: '用 kb-lite 去我的知识库里查一下……',
-    promptAuthoring: '用 kb-lite-authoring 把这些文件整理进知识库“<知识库名称>”',
-    promptMaintain: '用 kb-lite-maintain 把 D:\\notes 加进知识库，名字你先建议，再问我要不要用它',
+    promptAuthoring: '用 kbl-authoring 把这些文件整理进知识库“<知识库名称>”',
+    promptMaintain: '用 kbl-maintain 把 D:\\notes 加进知识库，名字你先建议，再问我要不要用它',
 
     // 不装 SKILL 的人：给 AI 一段能直接看懂的话，里面带着说明书地址。
     // 访问密码开着时必须写进去，否则 AI 拿到 401 只会反复重试。

@@ -13,7 +13,7 @@
 
 ```markdown
 ---
-name: kb-markdown
+name: kbl-authoring
 description: 把 docx / pdf / 网页 / 纯文本整理成 kb-lite 能高效索引的 markdown。当用户给了一份文档、并表示想「放进我的知识库 / 让 AI 能查」时，用这个。
 ---
 

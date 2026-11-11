@@ -285,7 +285,7 @@ func TestSkillOutWritesUTF8WithoutBOM(t *testing.T) {
 	mustWrite(t, filepath.Join(kbRoot, "a.md"), "---\ntitle: 甲\n---\n\n正文\n")
 	offlineConfig(t, dir, kbRoot)
 
-	outPath := filepath.Join(dir, "skills", "kb-lite", "SKILL.md")
+	outPath := filepath.Join(dir, "skills", "kbl-query", "SKILL.md")
 	if code := Run([]string{"skill", "--out", outPath}); code != exitOK {
 		t.Fatalf("退出码 = %d", code)
 	}
@@ -297,7 +297,7 @@ func TestSkillOutWritesUTF8WithoutBOM(t *testing.T) {
 	if bytes.HasPrefix(b, []byte{0xEF, 0xBB, 0xBF}) {
 		t.Fatal("不能带 UTF-8 BOM，会让 frontmatter 失效")
 	}
-	if !bytes.HasPrefix(b, []byte("---\r\nname: kb-lite")) && !bytes.HasPrefix(b, []byte("---\nname: kb-lite")) {
+	if !bytes.HasPrefix(b, []byte("---\r\nname: kbl-query")) && !bytes.HasPrefix(b, []byte("---\nname: kbl-query")) {
 		t.Fatalf("开头不是 frontmatter：%q", string(b[:40]))
 	}
 

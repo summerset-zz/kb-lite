@@ -20,7 +20,7 @@
 
 ```markdown
 ---
-name: kb-lite-maintain
+name: kbl-maintain
 description: 在用户自己的电脑上增、删、改 kb-lite 的知识库登记。当用户说「把这个目录加到 kblite」「删掉那个库」「给它改个名」时用。要求你能执行 shell 命令。
 ---
 
@@ -28,7 +28,7 @@ description: 在用户自己的电脑上增、删、改 kb-lite 的知识库登�
 
 你只做三件事：**加一个知识库**、**删一个知识库**、**给知识库改名**。
 
-不查资料（那是 `kb-lite` 那一份），不写内容文件（那是 `kb-lite-authoring` 那一份），也不改知识库目录里的任何文件。
+不查资料（那是 `kbl-query` 那一份），不写内容文件（那是 `kbl-authoring` 那一份），也不改知识库目录里的任何文件。
 
 ## 先确认你有手
 

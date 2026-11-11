@@ -32,13 +32,13 @@ func TestMaintainTemplateMatchesDocs(t *testing.T) {
 func TestMaintainTemplateContent(t *testing.T) {
 	text := RenderMaintainText()
 	for _, want := range []string{
-		"name: kb-lite-maintain", // 装到目录里要能被认出来
-		"shell",                  // 前提写在正文里，不只写在卡片上
-		"kb-lite list --json",    // 先拉清单确认
-		"--yes",                  // remove 会卡在交互确认上
-		"文件一个都不会动",               // 回话必须说这句
-		"改完重新拉一次清单",              // 改名后旧地址失效
-		"不要用 `curl` 调 `/api/*`",  // 管理凭据拿不到
+		"name: kbl-maintain",    // 装到目录里要能被认出来
+		"shell",                 // 前提写在正文里，不只写在卡片上
+		"kb-lite list --json",   // 先拉清单确认
+		"--yes",                 // remove 会卡在交互确认上
+		"文件一个都不会动",              // 回话必须说这句
+		"改完重新拉一次清单",             // 改名后旧地址失效
+		"不要用 `curl` 调 `/api/*`", // 管理凭据拿不到
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("维护说明书里缺 %q", want)
@@ -85,7 +85,7 @@ func TestMaintainDocRequiresToken(t *testing.T) {
 	if code != http.StatusUnauthorized {
 		t.Errorf("不带密码时 status = %d，想要 401", code)
 	}
-	if strings.Contains(raw, "kb-lite-maintain") {
+	if strings.Contains(raw, "kbl-maintain") {
 		t.Error("认证没通过还把内容给出去了")
 	}
 }

@@ -8,7 +8,7 @@
 
 ```markdown
 ---
-name: kb-lite
+name: kbl-query
 description: 检索用户本地的 markdown 知识库（只读）。当问题涉及用户的笔记、内部文档、项目资料、历史记录时，先在这里找，不要靠猜。
 ---
 

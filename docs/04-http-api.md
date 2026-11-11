@@ -370,9 +370,9 @@ WorkBuddy **不扫** `~/.agents/skills`（它自己的说明里写清了扫描�
 { "targets": ["dsh"] }  // 可选；默认只 dsh。另有 claude、workbuddy
 ```
 
-- `read` → `<harness 根>/kb-lite/SKILL.md`；
-- `authoring` → `<harness 根>/kb-lite-authoring/SKILL.md`；
-- `maintain` → `<harness 根>/kb-lite-maintain/SKILL.md`；
+- `read` → `<harness 根>/kbl-query/SKILL.md`；
+- `authoring` → `<harness 根>/kbl-authoring/SKILL.md`；
+- `maintain` → `<harness 根>/kbl-maintain/SKILL.md`；
 - harness 根见上一节的表。只允许写这几棵子树，不跟随符号链接；写入前把旧文件备份成 `.bak`，失败就还原。
 - **安装不检查 `detected`**：用户明确知道自己用什么工具时，不能因为界面没认出来就把他挡在门外。
 - 返回 `{ "installed": [ { "path": "…", "bytes": 3402 } ] }`。

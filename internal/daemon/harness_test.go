@@ -89,7 +89,7 @@ func TestInstallWorksWithoutDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("没探测到也应当算得出安装路径：%v", err)
 	}
-	if root == "" || dir != "kb-lite-maintain" {
+	if root == "" || dir != "kbl-maintain" {
 		t.Errorf("root=%q dir=%q", root, dir)
 	}
 
@@ -110,7 +110,7 @@ func TestInstallWorksWithoutDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("没探测到时安装失败：%v", err)
 	}
-	wantSuffix := filepath.Join(".workbuddy", "skills", "kb-lite-maintain", "SKILL.md")
+	wantSuffix := filepath.Join(".workbuddy", "skills", "kbl-maintain", "SKILL.md")
 	if !strings.HasSuffix(got.Path, wantSuffix) {
 		t.Errorf("装到了 %q，想要以 %q 结尾", got.Path, wantSuffix)
 	}
