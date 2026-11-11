@@ -48,7 +48,6 @@ const groups = [
     title: s.skill.readTitle,
     desc: s.skill.readDesc,
     prompt: s.skill.promptRead,
-    promptHint: s.skill.promptReadHint,
     shell: '',
   },
   {
@@ -56,7 +55,6 @@ const groups = [
     title: s.skill.writeTitle,
     desc: s.skill.writeDesc,
     prompt: s.skill.promptAuthoring,
-    promptHint: s.skill.promptAuthoringHint,
     shell: '',
   },
   {
@@ -64,8 +62,8 @@ const groups = [
     title: s.skill.maintainTitle,
     desc: s.skill.maintainDesc,
     prompt: s.skill.promptMaintain,
-    promptHint: s.skill.promptMaintainHint,
     // 这一组靠命令行干活，所以没有“贴给 AI 也行”那条退路：没有 shell 就是做不到。
+    // 这条要求写在这一组卡片的靠上位置，不在正文里藏。
     shell: s.skill.maintainShell,
   },
 ]
@@ -141,31 +139,25 @@ async function install(kind: 'read' | 'authoring' | 'maintain', target: 'dsh' | 
   }
 }
 
-// 有任何一个目标落后，就在组标题旁边点一下，省得用户逐个看。
+// 有任何一个目标落后，就在三张卡片上面说一句，省得用户逐个看。
 const stale = computed(() => items.value.some((i) => !i.upToDate))
 </script>
 
 <template>
   <div class="space-y-3">
+    <!-- 落后提示放在卡片上方：用户看到的第一眼就知道“这一块要动手了”。
+         以前它挂在最底下，滚过三张卡片才看得见。 -->
+    <p v-if="stale" class="note text-sm">{{ s.skill.needInstall }}</p>
+
     <section v-for="g in groups" :key="g.kind" class="card p-4">
+      <!-- 1. 名称 + 2. 简介 -->
       <p class="font-medium">{{ g.title }}</p>
       <p class="muted text-xs mt-1">{{ g.desc }}</p>
 
-      <div class="flex items-start gap-2 mt-3">
-        <span class="text-xs muted shrink-0">{{ s.skill.howToAsk }}</span>
-        <span class="mono text-xs flex-1 min-w-0 break-all">{{ g.prompt }}</span>
-        <CopyInline :text="g.prompt" />
-      </div>
+      <!-- 3. 对 agent / harness 的要求（只有维护那一组有） -->
+      <p v-if="g.shell" class="note text-xs mt-2">{{ g.shell }}</p>
 
-      <!-- 不装 SKILL 的用法：这一段本身就是“说明书 + 地址”，贴给任何 AI 都能用。
-           维护那一组没有这一行：它必须有 shell 才能干活。 -->
-      <div v-if="!g.shell" class="flex items-start gap-2 mt-2">
-        <span class="text-xs muted shrink-0">{{ s.skill.pasteHint }}</span>
-        <span class="mono text-xs flex-1 min-w-0 break-all">{{ pasteFor(g.kind) }}</span>
-        <CopyInline :text="pasteFor(g.kind)" />
-      </div>
-      <p v-else class="note text-xs mt-2">{{ g.shell }}</p>
-
+      <!-- 4. 安装行：左边是哪，右边是现状与按钮 -->
       <div class="mt-3 space-y-2">
         <div v-for="t in targets" :key="t.id" class="flex items-center gap-2 min-w-0">
           <AppIcon
@@ -173,10 +165,13 @@ const stale = computed(() => items.value.some((i) => !i.upToDate))
             :style="{ color: stateColor(stateOf(g.kind, t.id)) }"
           />
           <span class="text-sm shrink-0">{{ t.label }}</span>
-          <span class="text-xs truncate" :style="{ color: stateColor(stateOf(g.kind, t.id)) }">
+          <span class="flex-1" />
+          <span
+            class="text-xs shrink-0 truncate"
+            :style="{ color: stateColor(stateOf(g.kind, t.id)) }"
+          >
             {{ stateText(stateOf(g.kind, t.id)) }}
           </span>
-          <span class="flex-1" />
           <SplitButton
             :id="`skill-${g.kind}-${t.id}`"
             :label="
@@ -207,10 +202,23 @@ const stale = computed(() => items.value.some((i) => !i.upToDate))
           </SplitButton>
         </div>
       </div>
+
+      <!-- 5. 示例：一句能直接粘走的话，不加前缀 -->
+      <div class="flex items-start gap-2 mt-4">
+        <span class="mono text-xs flex-1 min-w-0 break-all">{{ g.prompt }}</span>
+        <CopyInline :text="g.prompt" />
+      </div>
+
+      <!-- 6. 不装 SKILL 的用法：这一段本身就是“说明书 + 地址”，贴给任何 AI 都能用。
+           维护那一组没有这一行：没有 shell 就是做不到。 -->
+      <div v-if="!g.shell" class="flex items-start gap-2 mt-2">
+        <span class="text-xs muted shrink-0">{{ s.skill.pasteHint }}</span>
+        <span class="mono text-xs flex-1 min-w-0 break-all">{{ pasteFor(g.kind) }}</span>
+        <CopyInline :text="pasteFor(g.kind)" />
+      </div>
     </section>
 
-    <p v-if="stale" class="note text-sm">{{ s.skill.staleHint }}</p>
-    <p v-else class="muted text-xs">{{ s.skill.whenStale }}</p>
+    <p class="muted text-xs">{{ s.skill.whenStale }}</p>
     <p class="muted text-xs">{{ s.skill.reloadHint }}</p>
     <p v-if="error" class="note text-sm">{{ error }}</p>
   </div>

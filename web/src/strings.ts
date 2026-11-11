@@ -332,7 +332,6 @@ export const s = {
     maintainShell:
       '前提：你的 agent 必须能执行 shell 命令。它靠 kb-lite 命令行干活，管理凭据不会写进这份文件。',
 
-    howToAsk: '怎么跟 AI 说',
     targetAgents: '通用目录',
     targetClaude: 'Claude Code',
 
@@ -347,17 +346,15 @@ export const s = {
 
     whenStale:
       '服务地址或访问密码变了之后，这里会显示“有更新”。知识库增删改名不用管，说明书里不写库列表。',
-    staleHint: '有目标落后了：服务地址或访问密码改过。点那一行右边的按钮装一次。',
+    // 卡片上方那一行。以前它在卡片下方，滚过三张才看得见。
+    needInstall: '有 SKILL 需要安装或更新。',
     // Claude Code 会盯着目录（官方文档明确写了 live change detection），
     // 但它在会话启动时才知道有哪些顶层目录。所以第一次装要提一句。
     reloadHint:
       'Claude Code 会自己发现目录里的改动；如果那个目录是这次才建的，它可能要先运行 /reload-skills。其他 AI 工具不一定，保险起见重开一次会话。',
 
-    promptReadHint: '把这句话发给 AI，它就会来查这个知识库',
     promptRead: '用 kb-lite 去我的知识库里查一下……',
-    promptAuthoringHint: '把这句话发给另一个 AI，让它把文件整理成能进知识库的样子',
     promptAuthoring: '用 kb-lite-authoring 把这些文件整理进知识库“<知识库名称>”',
-    promptMaintainHint: '把这句话发给能跑命令的 agent，它会先拉清单再动手',
     promptMaintain: '用 kb-lite-maintain 把 D:\\notes 加进知识库，名字你先建议，再问我要不要用它',
 
     // 不装 SKILL 的人：给 AI 一段能直接看懂的话，里面带着说明书地址。
